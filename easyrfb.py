@@ -25,12 +25,14 @@
 #
 # To set another logging than sys.stdout use: .logging(...).
 # To set another twisted application use:     .application(...).
-# To not call twisted twisted.internet.reactor.run() use .start() instead
+# To not call twisted twisted.internet.reactor.run() use .run() instead
 #
 # $Log$
-# Revision 1.1  2010/10/01 15:13:19  tino
-# added
+# Revision 1.2  2010/10/11 20:51:44  tino
+# Current
 #
+# Revision 1.1  2010-10-01 15:13:19  tino
+# added
 
 import rfb
 import sys
@@ -75,7 +77,8 @@ class FunnelRfbFactory(rfb.RFBFactory):
 # Easy and simple as it ought to be!
 # With reasonable defaults, ready to use.
 class client(object):
-    def __init__(self, host='127.0.0.1', port=5900, password=None, shared=1):
+    def __init__(self, appname='generic RFB client', host='127.0.0.1', port=5900, password=None, shared=1):
+	self.appname = appname
 	self.control = False
 	self.started = False
 	self.app = None
@@ -95,9 +98,8 @@ class client(object):
 		self.log = sys.stdout
 	if self.log:
 		twisted.python.log.startLogging(self.log)
-		
-	self.vnc.setServiceParent(twisted.application.service.Application("rfb image writer"))
-	print "starting service"
+	self.vnc.setServiceParent(twisted.application.service.Application(self.appname))
+	print "starting service:",self.appname
 	self.vnc.startService()
 	self.started = True
 	return self
