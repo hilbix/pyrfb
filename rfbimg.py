@@ -17,7 +17,10 @@
 # Needs python-imaging (PIL)
 #
 # $Log$
-# Revision 1.2  2010/10/11 20:51:44  tino
+# Revision 1.3  2010/10/12 08:22:13  tino
+# better
+#
+# Revision 1.2  2010-10-11 20:51:44  tino
 # Current
 #
 # Revision 1.1  2010-10-01 15:13:19  tino
@@ -34,16 +37,15 @@ from PIL import Image
 class rfbImg(easyrfb.client):
 
     count = 0		# Count the number of pixels changed so far
-    dirt = False	# Need to call self.flush()
-    again = None	# vnc object store for framebufferUpdateRequest
+    tick = False
 
     def __init__(self, argv, appname):
 	easyrfb.client.__init__(self, appname)
 
 	# Start the timer
-	self.tick = True
+        self.tick = True
 	self._timer = twisted.internet.task.LoopingCall(self.timer);
-	self._timer.start(1.5, now=False)
+	self._timer.start(0.5, now=False)
 
 	# Remember the args
 
@@ -63,30 +65,17 @@ class rfbImg(easyrfb.client):
 	if len(argv)>4:
 		self.quality = int(argv[4])
 
-    next = None		# one tick delay store for self.again
     def timer(self):
+	"""Called each 1.5 seconds when reactor is idle"""
+
 	self.tick = True
 
-	"""Called each 1.5 seconds when reactor is idle"""
 	if self.dirt:
 		self.flush()
 
-	if self.next:
-        	self.next.framebufferUpdateRequest(incremental=1)
-		self.next = None
-
-	if self.again:
-		self.next = self.again
-		self.again = None
-
     # Called when the image must be written to disk
     def flush(self):
-	# Some arbitrary delay.
-	# If output hasn't changed a lot
-	# (less than 6% of the screen has changed)
-	# then leave it for the timer to delay the update.
-	if self.loop and ( ( not self.tick ) or ( self.width * self.height > self.count * 50 )):
-		# Consider a screen line of progress even when idle
+	if self.loop and (not self.tick or self.width * self.height > self.count * 50):
 		self.count += self.width
 		self.dirt = True
 		return
@@ -94,9 +83,9 @@ class rfbImg(easyrfb.client):
 	# Flush the image to disk
 	# The target is overwritten atomically by rename()
 
+	self.tick = False
 	self.dirt = False
 	self.count = 0
-	self.tick = 0
 
 	tmp = os.path.splitext(self.name)
 	tmp = tmp[0]+".tmp"+tmp[1]
@@ -138,15 +127,15 @@ class rfbImg(easyrfb.client):
 	self.count += width*height
 
     def beginUpdate(self, vnc):
-	self.again = None
+	self.dirt = False
 
     def commitUpdate(self, vnc, rectangles=None):
-	self.again = vnc
 	print "commit %d %s" % ( self.count, repr(rectangles) )
 	self.flush()
+        vnc.framebufferUpdateRequest(incremental=1)
 
     def getVNC(self):
-	self.count += self.width * self.height / 100
+	self.tick = True
 	return self.myVNC
 
 from twisted.protocols.basic import LineReceiver
@@ -180,6 +169,7 @@ class createControl(twisted.internet.protocol.Factory):
 
 if __name__=='__main__':
 	img = rfbImg(sys.argv,"RFB image writer")
-	createControl(".sock", img)
+	if img.loop:
+		createControl(".sock", img)
 	img.run()
 
