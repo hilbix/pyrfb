@@ -17,7 +17,10 @@
 # Needs python-imaging (PIL)
 #
 # $Log$
-# Revision 1.3  2010/10/12 08:22:13  tino
+# Revision 1.4  2010/10/23 20:17:15  tino
+# Commands
+#
+# Revision 1.3  2010-10-12 08:22:13  tino
 # better
 #
 # Revision 1.2  2010-10-11 20:51:44  tino
@@ -30,6 +33,7 @@ import easyrfb
 
 import sys
 import os
+import re
 
 import twisted
 from PIL import Image
@@ -71,12 +75,12 @@ class rfbImg(easyrfb.client):
 	self.tick = True
 
 	if self.dirt:
+		self.count += self.width
 		self.flush()
 
     # Called when the image must be written to disk
     def flush(self):
 	if self.loop and (not self.tick or self.width * self.height > self.count * 50):
-		self.count += self.width
 		self.dirt = True
 		return
 
@@ -87,21 +91,24 @@ class rfbImg(easyrfb.client):
 	self.dirt = False
 	self.count = 0
 
-	tmp = os.path.splitext(self.name)
-	tmp = tmp[0]+".tmp"+tmp[1]
-	if self.quality!=None:
-		self.img.convert("RGB").save(tmp, self.type, quality=self.quality)
-	elif self.type!=None:
-		self.img.convert("RGB").save(tmp, self.type)
-	else:
-		self.img.convert("RGB").save(tmp)
-	os.rename(tmp,self.name)
-
-	print "out %s" % ( self.name )
+	self.write(self.name,self.type,self.quality)
 
 	# If one-shot then we are ready
 	if not self.loop:
 		self.halt()
+
+    def write(self,name,type=None,quality=None):
+	tmp = os.path.splitext(name)
+	tmp = tmp[0]+".tmp"+tmp[1]
+	if quality!=None:
+		self.img.convert("RGB").save(tmp, type, quality=quality)
+	elif type!=None:
+		self.img.convert("RGB").save(tmp, type)
+	else:
+		self.img.convert("RGB").save(tmp)
+	os.rename(tmp,name)
+
+	print "out %s" % ( name )
 
     def connectionMade(self, vnc):
 	print "connection made"
@@ -116,7 +123,7 @@ class rfbImg(easyrfb.client):
 	self.img = Image.new('RGBX',(self.width,self.height),None)
 
     def updateRectangle(self, vnc, x, y, width, height, data):
-	print "%s %s %s %s" % (x, y, width, height)
+	#print "%s %s %s %s" % (x, y, width, height)
 	img = Image.frombuffer("RGBX",(width,height),data,"raw","RGBX",0,1)
 	if x==0 and y==0 and width==self.width and height==self.height:
 		# Optimization on complete screen refresh
@@ -130,30 +137,65 @@ class rfbImg(easyrfb.client):
 	self.dirt = False
 
     def commitUpdate(self, vnc, rectangles=None):
-	print "commit %d %s" % ( self.count, repr(rectangles) )
+	print "commit %d %s" % ( self.count, len(rectangles) )
 	self.flush()
         vnc.framebufferUpdateRequest(incremental=1)
 
-    def getVNC(self):
+    def pointer(self,x,y,click=None):
 	self.tick = True
-	return self.myVNC
+	if click == None:
+		click = 0
+	else:
+		click = 1<<(click)
+	self.myVNC.pointerEvent(x, y, click)
+
+    def key(self,k):
+	self.tick = True
+	self.count += width*height
+	self.myVNC.keyEvent(k,1)
+	self.myVNC.keyEvent(k,0)
 
 from twisted.protocols.basic import LineReceiver
+import traceback
 class controlProtocol(LineReceiver):
 
 	delimiter='\n'
 
+	valid_filename = re.compile('^[-_a-zA-Z0-9]*$')
+
 	def lineReceived(self, line):
+		self.img = self.factory.img
 		args = line.split(" ")
-		if args[0]=='mouse' and len(args)>2:
-			x = int(args[1])
-			y = int(args[2])
-			click = 0
-			if len(args)>3: click=1<<int(args[3])
-			self.factory.img.getVNC().pointerEvent(x,y,click)
-			print "mouse",x,y,click
+		ok = False
+		try:
+			ok = getattr(self,'cmd_'+args[0])(*args[1:])
+		except Exception,e:
+			print traceback.format_exc()
+		if ok:
+			self.transport.write("ok\n")
+			print "ok",line
 		else:
-			print "UNKNOWN:",line
+			self.transport.write("ko\n")
+			print "ko",line
+
+	def cmd_mouse(self,x,y,click=None):
+		x = int(x)
+		y = int(y)
+		if click!=None:
+			click = int(click)
+		self.img.pointer(x,y,click)
+		return True
+
+	def cmd_learn(self,to):
+		if not self.valid_filename.match(to):
+			return False
+		self.img.img.convert('RGBA').save('learn/'+to+'.png')
+		return True
+
+	def cmd_key(self,str):
+		for k in str:
+			self.img.key(ord(k))
+		return True
 
 from twisted.internet import reactor
 class createControl(twisted.internet.protocol.Factory):
