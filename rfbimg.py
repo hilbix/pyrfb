@@ -17,7 +17,10 @@
 # Needs python-imaging (PIL)
 #
 # $Log$
-# Revision 1.4  2010/10/23 20:17:15  tino
+# Revision 1.5  2010/11/16 07:46:37  tino
+# Key codes
+#
+# Revision 1.4  2010-10-23 20:17:15  tino
 # Commands
 #
 # Revision 1.3  2010-10-12 08:22:13  tino
@@ -151,7 +154,7 @@ class rfbImg(easyrfb.client):
 
     def key(self,k):
 	self.tick = True
-	self.count += width*height
+	self.count += self.width*self.height
 	self.myVNC.keyEvent(k,1)
 	self.myVNC.keyEvent(k,0)
 
@@ -192,9 +195,13 @@ class controlProtocol(LineReceiver):
 		self.img.img.convert('RGBA').save('learn/'+to+'.png')
 		return True
 
-	def cmd_key(self,str):
-		for k in str:
+	def cmd_key(self,*args):
+		for k in " ".join(args):
 			self.img.key(ord(k))
+		return True
+
+	def cmd_code(self,code):
+		self.img.key(int(code))
 		return True
 
 from twisted.internet import reactor
