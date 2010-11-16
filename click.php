@@ -1,4 +1,15 @@
 <?
+# $Header$
+#
+# Simple PHP wrapper to forward commands to rfbimg.py socket.
+# THIS IS INHERENTLY INSECURE IF EXPOSED TO THE WORLD.
+# So protect it with BasicAuth and HTTPS, you have been warned.
+#
+# $Log$
+# Revision 1.2  2010/11/16 08:08:51  tino
+# README added
+#
+
 header("Content-type: text/plain");
 
 $fd = fsockopen("unix://.sock");

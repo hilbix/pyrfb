@@ -1,0 +1,29 @@
+$Header$
+
+Create a PHP web directory:
+	mkdir /var/www/vnc
+
+Link all neccessary things there:
+	for a in .sock ajax.js click.php learn run.html test.jpg
+	do
+		ln -s "`realpath "$a"`" /var/www/vnc
+	done
+
+Start:
+	Xvnc4 :0 -desktop "`hostname -f`" -localhost -nolisten tcp -rfbwait 30000 -nopn -SecurityTypes None -geometry 1000x1100 :0
+
+Start:
+	./rfbimg.py 1 test.jpg JPEG 18
+
+Open run.html in your browser:
+	echo http://`hostname -f`/vnc/run.html
+	firefox http://www.example.com/vnc/run.html
+
+If you want to do more:
+	Look into rfbmove.py
+
+-Tino <webmaster@scylla-charybdis.com>
+$Log$
+Revision 1.1  2010/11/16 08:08:51  tino
+README added
+
