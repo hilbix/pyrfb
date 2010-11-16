@@ -1,0 +1,86 @@
+<html><head>
+<script type="text/javascript" src="ajax.js"></script>
+<script>
+var nr=0;
+var timer=0;
+function dump(x)
+{
+var s="";
+for (var n in x) { var v=x[n]; if (typeof(v)=="function") continue; s+=n+"="+x[n]+"\n"; }
+alert(s);
+}
+function mousexy(e)
+{
+if (!e) var e = window.event;
+if (e.pageX || e.pageY)
+  return [ e.pageX, e.pageY ];
+if (e.clientX || e.clientY)
+  return [ e.clientX + document.body.scrollLeft + document.documentElement.scrollLeft,
+	   e.clientY + document.body.scrollTop  + document.documentElement.scrollTop
+         ];
+return [ 0,0 ]
+}
+function elxy(o,e)
+{
+var xy = mousexy(e);
+return [ xy[0]-o.offsetLeft, xy[1]-o.offsetTop ];
+}
+function dorefresh(s)
+{
+nr++;
+$$$("cnt",nr+" "+s);
+$("show").src = "test.jpg?"+new Date().getTime();
+timer+=500;
+if (timer>300000)
+  timer = 300000;
+var last=nr;
+setTimeout(function(){if (last==nr) dorefresh("")},timer);
+}
+function req(r)
+{
+timer=0;
+ajax.get("click.php?decache="+new Date().getTime()+"&"+r,dorefresh);
+nr++;
+$$$("cnt",nr+" "+r);
+}
+
+function clicki(ev)
+{
+xy = elxy(this,ev);
+req("x="+xy[0]+"&y="+xy[1]);
+}
+function send(id,t)
+{
+if (!t) t="t";
+req(t+"="+escape($(id).value));
+return false;
+}
+function code(c)
+{
+req("c="+escape(c));
+}
+function init()
+{
+$("show").onclick = clicki;
+dorefresh("");
+}
+</script>
+<style>
+body	{ background:black; color:white; margin:0 }
+div	{ vertical-align:top; float:left }
+img	{ vertical-align:top }
+span	{ vertical-align:top }
+</style>
+</head><body onload="init()">
+<div><img id="show" src="test.jpg"/></div>
+<div>&nbsp;</div>
+<div>
+<span id="cnt"></span><br/>
+<p><input id="learn"></input><input onclick="send('learn','l')" type="submit" value="Learn"><br/>
+<a href="learn/">learn</a>
+<p><textarea id="inp1"></textarea><br><input onclick="send('inp1')" type="submit" value="Send">
+<p><textarea id="inp2"></textarea><br><input onclick="send('inp2')" type="submit" value="Send"> <input onclick="code(0xff08)" type="submit" value="BS">
+<p><textarea id="inp3"></textarea><br><input onclick="send('inp3')" type="submit" value="Send"> <input onclick="code(0xff0d)" type="submit" value="CR">
+<p><textarea id="inp4"></textarea><br><input onclick="send('inp4')" type="submit" value="Send">
+</div>
+</body></html>
