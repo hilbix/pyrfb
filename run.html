@@ -1,14 +1,37 @@
 <html><head>
 <script type="text/javascript" src="ajax.js"></script>
 <script>
-var nr=0;
-var timer=0;
 function dump(x)
 {
 var s="";
 for (var n in x) { var v=x[n]; if (typeof(v)=="function") continue; s+=n+"="+x[n]+"\n"; }
 alert(s);
 }
+function stamp()
+{
+return new Date().getTime();
+}
+var runcnt = 0;
+var waiti = 0;
+function timer(e)
+{
+runcnt++;
+//$$$("run",runcnt);
+if (waiti)
+  {
+    if (!--waiti)
+      dorefresh();
+  }
+nextrefresh();
+}
+
+var nr=0;
+function out(s)
+{
+$$$("cnt",nr);
+$$$("txt",s);
+}
+
 function mousexy(e)
 {
 if (!e) var e = window.event;
@@ -25,25 +48,112 @@ function elxy(o,e)
 var xy = mousexy(e);
 return [ xy[0]-o.offsetLeft, xy[1]-o.offsetTop ];
 }
-function dorefresh(s)
+
+function hide(s)
 {
+$(s).style.display="none";
+}
+function show(s)
+{
+$(s).style.display="inline";
+}
+
+var shown;
+function disp2()
+{
+hide("show0");
+hide("show1");
+hide("show2");
+show("show"+shown);
+}
+
+function disp(n)
+{
+shown=n;
+window.setTimeout(disp2,10);
+}
+
+var newi=0;
+var loadn=0;
+function loadi()
+{
+waiti=0;
+$("show"+loadn).style.opacity=1;
+if (shown<2)
+  disp(loadn);
+loadn=1-loadn;
+$$$("refcnt", newi+"x");
+}
+function greyi()
+{
+$("show"+(1-loadn)).style.opacity=0.5;
+}
+
+var sleeps = 0;
+var sleeper = 0;
+var pendi = false;
+var maxsleep = 0;
+function nextrefresh()
+{
+if (sleeps<0)
+  sleeps = sleeper;
+if (!--sleeps)
+  pendi = true;
+if (pendi && !waiti)
+  dorefresh();
+}
+function dorefresh()
+{
+$$$("refcnt", ++newi+"*");
+$("show"+loadn).src = "test.jpg?"+stamp();
+waiti=100;
+pendi=false;
+sleeper++;
+if (maxsleep && sleeper>maxsleep)
+  sleeper = maxsleep;
+sleeps=0;
+nextrefresh();
+}
+function quick()
+{
+pendi=true;
+maxsleep = maxsleep ? 0 : 5;
+}
+
+var reqrun=false;
+var reqs=[];
+function reqdone(r)
+{
+
+out("done: "+r);
+reqrun = false;
+sleeps=0;
+sleeper=0;
+dorefresh();
+reqnext();
+}
+function reqnext()
+{
+if (reqrun)
+  return;
+try {
+var r = reqs.shift();
+} catch (e) {
+  return;
+}
+if (r===undefined)
+  return;
+reqrun = true;
+greyi();
+ajax.get("click.php?decache="+stamp()+"&"+r,function(e){reqdone(r)});
 nr++;
-$$$("cnt",nr+" "+s);
-$("show").src = "test.jpg?"+new Date().getTime();
-timer+=500;
-if (timer>300000)
-  timer = 300000;
-var last=nr;
-setTimeout(function(){if (last==nr) dorefresh("")},timer);
+out("do: "+r);
 }
 function req(r)
 {
-timer=0;
-ajax.get("click.php?decache="+new Date().getTime()+"&"+r,dorefresh);
-nr++;
-$$$("cnt",nr+" "+r);
+reqs.push(r);
+reqnext();
 }
-
 function clicki(ev)
 {
 xy = elxy(this,ev);
@@ -59,28 +169,94 @@ function code(c)
 {
 req("c="+escape(c));
 }
+function ovr()
+{
+if (this.height<40)
+  return;
+
+var c = this.cloneNode(true);
+c.id = "show2";
+c.style.width = "";
+c.style.display="none";
+
+// This is a hack as replaceChild has a bad visual impact
+shown = 1-loadn;
+disp2();
+
+var s = $("shower");
+s.replaceChild(c,s.lastChild);
+
+shown = 2;
+disp2();
+
+this.style.opacity=0.5;
+}
+function novr()
+{
+this.style.opacity=1;
+disp(1-loadn);
+}
 function init()
 {
-$("show").onclick = clicki;
-dorefresh("");
+$("show0").onclick = clicki;
+$("show1").onclick = clicki;
+$("show0").onload = loadi;
+$("show1").onload = loadi;
+disp(0);
+window.setInterval(timer,500);
+dorefresh();
+out("running");
+var cnt=1;
+for (var i=$("cit").firstChild; i; i=i.nextSibling)
+  if (i.src)
+    {
+      cnt++;
+      i.mycnt = cnt;
+      i.onmouseover = ovr;
+      i.onmouseout  = novr;
+      i.style.width = "100px";
+//      i.style.border= "1px dotted white";
+    }
 }
 </script>
 <style>
 body	{ background:black; color:white; margin:0 }
-div	{ vertical-align:top; float:left }
-img	{ vertical-align:top }
+div	{ position:relative; vertical-align:top; float:left }
 span	{ vertical-align:top }
+.gap	{ padding-left:5px }
+.mark	{ border:1px solid red }
 </style>
 </head><body onload="init()">
-<div><img id="show" src="test.jpg"/></div>
-<div>&nbsp;</div>
-<div>
-<span id="cnt"></span><br/>
+<div id="shower"><img id="show0"/><img id="show1"/><img id="show2"/></div>
+<div class="gap">
+<input onclick="quick()" type="button" value="q"/><span id="run"></span> <span id="refcnt"></span> <span id="cnt"></span><br/><span id="txt"></span>
 <p><input id="learn"></input><input onclick="send('learn','l')" type="submit" value="Learn"><br/>
 <a href="learn/">learn</a>
-<p><textarea id="inp1"></textarea><br><input onclick="send('inp1')" type="submit" value="Send">
-<p><textarea id="inp2"></textarea><br><input onclick="send('inp2')" type="submit" value="Send"> <input onclick="code(0xff08)" type="submit" value="BS">
-<p><textarea id="inp3"></textarea><br><input onclick="send('inp3')" type="submit" value="Send"> <input onclick="code(0xff0d)" type="submit" value="CR">
-<p><textarea id="inp4"></textarea><br><input onclick="send('inp4')" type="submit" value="Send">
+<p><textarea id="inp1"></textarea><br><input onclick="send('inp1')" type="submit" value="Send"/>
+</p><p><textarea id="inp2"></textarea><br><input onclick="send('inp2')" type="submit" value="Send"/> <input onclick="code(0xff08)" type="submit" value="BS"/>
+</p><p><textarea id="inp3"></textarea><br><input onclick="send('inp3')" type="submit" value="Send"/> <input onclick="code(0xff0d)" type="submit" value="CR"/>
+</p><p><textarea id="inp4"></textarea><br><input onclick="send('inp4')" type="submit" value="Send"/>
+</p>
+<table border="0" cellpadding="0" cellspacing="0">
+<tr><td><input onclick="code(49)" type="submit" value="1"/></td><td><input onclick="code(50)" type="submit" value="2"/></td><td><input onclick="code(51)" type="submit" value="3"/></td></tr>
+<tr><td><input onclick="code(52)" type="submit" value="4"/></td><td><input onclick="code(53)" type="submit" value="5"/></td><td><input onclick="code(54)" type="submit" value="6"/></td></tr>
+<tr><td><input onclick="code(55)" type="submit" value="7"/></td><td><input onclick="code(56)" type="submit" value="8"/></td><td><input onclick="code(57)" type="submit" value="9"/></td></tr>
+<tr><td><input onclick="code(46)" type="submit" value="."/></td><td><input onclick="code(48)" type="submit" value="0"/></td><td><input onclick="code(44)" type="submit" value=","/></td></tr>
+</table>
+</div>
+<div id="cit" class="gap" style="max-width:310px">
+<img src="c/c1.jpg"
+/><img src="c/c2.jpg"
+/><img src="c/c3.jpg"
+/><img src="c/c4.jpg"
+/><img src="c/c5.jpg"
+/><img src="c/c6.jpg"
+/><img src="c/c7.jpg"
+/><img src="c/c8.jpg"
+/><img src="c/c9.jpg"
+/><img src="c/ca.jpg"
+/><img src="c/cb.jpg"
+/><img src="c/cc.jpg"
+/>
 </div>
 </body></html>
