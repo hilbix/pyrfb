@@ -17,20 +17,14 @@
 # Needs python-imaging (PIL)
 #
 # $Log$
-# Revision 1.5  2010/11/16 07:46:37  tino
+# Revision 1.6  2011/01/21 16:17:57  tino
+# intermediate version
+#
+# Revision 1.5  2010-11-16 07:46:37  tino
 # Key codes
 #
 # Revision 1.4  2010-10-23 20:17:15  tino
 # Commands
-#
-# Revision 1.3  2010-10-12 08:22:13  tino
-# better
-#
-# Revision 1.2  2010-10-11 20:51:44  tino
-# Current
-#
-# Revision 1.1  2010-10-01 15:13:19  tino
-# added
 
 import easyrfb
 
@@ -142,6 +136,7 @@ class rfbImg(easyrfb.client):
     def commitUpdate(self, vnc, rectangles=None):
 	print "commit %d %s" % ( self.count, len(rectangles) )
 	self.flush()
+	self.check_waiting()
         vnc.framebufferUpdateRequest(incremental=1)
 
     def pointer(self,x,y,click=None):
@@ -157,6 +152,30 @@ class rfbImg(easyrfb.client):
 	self.count += self.width*self.height
 	self.myVNC.keyEvent(k,1)
 	self.myVNC.keyEvent(k,0)
+
+    waiting = []
+    def wait(self,cb,templates):
+	self.waiting.append([cb,templates])
+
+    def check_waiting(self):
+	# It is not safe to modify waiting while looping
+	# But we bail out with "return" as soon as we modify waiting[]
+	for i,w in enumerate(self.waiting):
+		for t in w[1]:
+			print "check %s" % w[1]
+			w[0](t,-1)
+			del self.waiting[i]
+			return
+
+def ln_versioned(from, to, ext):
+	try:
+		os.link(from, to+ext)
+		return
+	except OSError,e:
+		if e.errno!=17:
+			raise
+	i=1
+	
 
 from twisted.protocols.basic import LineReceiver
 import traceback
@@ -192,7 +211,10 @@ class controlProtocol(LineReceiver):
 	def cmd_learn(self,to):
 		if not self.valid_filename.match(to):
 			return False
-		self.img.img.convert('RGBA').save('learn/'+to+'.png')
+		tmp = 'learn.png'
+		os.unlink(tmp)
+		self.img.img.convert('RGBA').save(tmp)
+		ln_versioned(tmp, 'learn/'+to, '.png');
 		return True
 
 	def cmd_key(self,*args):
@@ -203,6 +225,36 @@ class controlProtocol(LineReceiver):
 	def cmd_code(self,code):
 		self.img.key(int(code))
 		return True
+
+	waiting = False
+	exiting = False
+
+	def cmd_exit(self):
+		self.exiting = True
+		if self.waiting:
+			return True
+		self.transport.loseConnection()
+		return True
+
+	def cmd_wait(self,*templates):
+		if not templates:
+			return False
+		self.wait()
+		self.img.wait(self.wait_cb,templates)
+		return True
+
+	def wait_cb(self,template,alpha):
+		print "match",template,alpha
+		self.transport.write("%s %s\n" % ( template, alpha ))
+		self.unwait()
+
+	def wait(self):
+		self.waiting = True
+
+	def unwait(self):
+		self.waiting = False
+		if self.exiting:
+			self.cmd_exit()
 
 from twisted.internet import reactor
 class createControl(twisted.internet.protocol.Factory):
