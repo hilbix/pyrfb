@@ -29,13 +29,13 @@ esac
 
 for script
 do
-	exec="${script#./}"
-	exec="${exec#.}"
+	exec="${exec##*/}"
         case "$exec" in
 	*..*|*/*)	OOPS "$script";;
 	save|-)		echo "$exec"; continue;;
 	esac
-	[ -x ".$exec" ] || OOPS "$script"
+	[ -f "script/LINKS/$exec" ] && read -r exec < "/script/LINKS/$exec"
+	[ -x "script/$exec" ] || OOPS "$script"
 	echo "$exec"
 done >"$out"
 
@@ -45,4 +45,5 @@ do
 	sleep 1
 done
 
-./.cat
+exec ./list
+
