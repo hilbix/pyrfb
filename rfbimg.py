@@ -17,7 +17,10 @@
 # Needs python-imaging (PIL)
 #
 # $Log$
-# Revision 1.7  2011/01/21 16:20:51  tino
+# Revision 1.8  2011/03/16 19:40:47  tino
+# typo fixes
+#
+# Revision 1.7  2011-01-21 16:20:51  tino
 # ln_versioned without binsearch
 #
 # Revision 1.6  2011-01-21 16:17:57  tino
@@ -170,22 +173,22 @@ class rfbImg(easyrfb.client):
 			del self.waiting[i]
 			return
 
-def try_link(from,to):
+def try_link(from_, to):
 	try:
-		os.link(from, to)
+		os.link(from_, to)
 		return True
 	except OSError,e:
 		if e.errno!=17:
 			raise
 		return False
 	
-def ln_versioned(from, to, ext):
-	if try_link(from,to+ext):
+def ln_versioned(from_, to, ext):
+	if try_link(from_,to+ext):
 		return
 	i=0
 	while True:
 		i = i + 1
-		if try_link(from, to+".~"+i+"~"+ext):
+		if try_link(from_, to+".~"+i+"~"+ext):
 			return
 
 from twisted.protocols.basic import LineReceiver
