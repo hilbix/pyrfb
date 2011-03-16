@@ -2,30 +2,34 @@
 # $Header$
 #
 # $Log$
-# Revision 1.1  2011/03/16 11:53:29  tino
-# __() ___()
+# Revision 1.2  2011/03/16 20:18:20  tino
+# Added parameter support
 #
+
+STDWAIT=12
 
 d()
 {
 echo -n " .."
-case "$1" in
+case "$2" in
 save)	j="$c"; return;;
 -)	c=; return;;
 esac
 
-sleep ${2:-12}
+sleep "${1:-$STDWAIT}"
 
-[ -n "$j" ] && cp test.jpg c/c$j.jpg
-[ -z "$1" ] && return
+[ -n "$j" ] && cp test.jpg "c/c$j.jpg"
+[ -z "$2" ] && return
 
 have=:
-echo -n " $1"
-export city
-./".$1" >/dev/null
+echo -n " $2"
+(
+. script/X
+. "script/$2" $3
+) >/dev/null
 
 j=
-case "$1" in
+case "$2" in
 city)	j="$c";;
 bau)	j="b$c";;
 dom)	c=1;;
@@ -52,21 +56,21 @@ read -ru3 city || return
 j=
 c=
 
-d "$city" 1
+d 1 "$city"
 if [ -n "$c" ]
 then
-	d city 5
-	d "$city" 5
-	d city 5
+	d 5 city
+	d 5 "$city"
+	d 5 city
 fi
 
 have=false
-while	read -ru3 cmd
+while	read -ru3 cmd args
 do
-	d "$cmd"
+	d '' "$cmd" "$args"
 done
 
-[ -n "$c" ] && $have && d city
+[ -n "$c" ] && $have && d '' city
 [ -n "$j" ] && d
 }
 

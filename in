@@ -35,7 +35,7 @@ do
 	save|-)		echo "$exec"; continue;;
 	esac
 	[ -f "script/LINKS/$exec" ] && read -r exec < "/script/LINKS/$exec"
-	[ -x "script/$exec" ] || OOPS "$script"
+	[ -x "script/${exec%% *}" ] || OOPS "$exec"
 	echo "$exec"
 done >"$out"
 
