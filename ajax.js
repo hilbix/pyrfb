@@ -6,16 +6,18 @@
 // see file COPYRIGHT.CLL.  USE AT OWN RISK, ABSOLUTELY NO WARRANTY.
 //
 // $Log$
-// Revision 1.1  2010/11/16 07:47:27  tino
+// Revision 1.2  2011/03/16 11:53:29  tino
+// __() ___()
+//
+// Revision 1.1  2010-11-16 07:47:27  tino
 // Web part added
-//
-// Revision 1.1  2008-12-29 19:18:39  tino
-// Added
-//
 
 function $$$(e,s){$(e).innerHTML=s};
 function $$(e){return $(e).innerHTML};
 function $(e){if(typeof e=='string')e=document.getElementById(e);return e};
+var __aps = Array.prototype.slice;
+function __(e){if(typeof e=='string')e=document.createElement(e);if(arguments.length>1)e.appendChild(__.apply(this,__aps.call(arguments,1)));return e};
+function ___(e){if(typeof e=='string')e=document.createTextNode(e);return e};
 
 ajax={};
 ajax.collect=function(a,f){var n=[];for(var i=0;i<a.length;i++){var v=f(a[i]);if(v!=null)n.push(v)}return n};

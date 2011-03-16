@@ -92,7 +92,8 @@ $("show"+(1-loadn)).style.opacity=0.5;
 var sleeps = 0;
 var sleeper = 0;
 var pendi = false;
-var maxsleep = 0;
+var maxsleep = 5;
+var maxrun = 100;
 function nextrefresh()
 {
 if (sleeps<0)
@@ -109,15 +110,21 @@ $("show"+loadn).src = "test.jpg?"+stamp();
 waiti=100;
 pendi=false;
 sleeper++;
-if (maxsleep && sleeper>maxsleep)
-  sleeper = maxsleep;
+if (maxrun && maxsleep && sleeper>maxsleep)
+  {
+    if (!--maxrun)
+      $("qrun").value = "q";
+    sleeper = maxsleep;
+  }
 sleeps=0;
 nextrefresh();
 }
 function quick()
 {
 pendi=true;
-maxsleep = maxsleep ? 0 : 5;
+maxsleep = maxsleep && maxrun ? 0 : 5;
+$("qrun").value = maxsleep ? "r" : "q";
+maxrun = 100;
 }
 
 var reqrun=false;
@@ -159,6 +166,11 @@ function clicki(ev)
 xy = elxy(this,ev);
 req("x="+xy[0]+"&y="+xy[1]);
 }
+function movei(ev)
+{
+xy = elxy(this,ev);
+$$$("pos","x="+xy[0]+" y="+xy[1]);
+}
 function send(id,t)
 {
 if (!t) t="t";
@@ -198,10 +210,13 @@ disp(1-loadn);
 }
 function init()
 {
-$("show0").onclick = clicki;
-$("show1").onclick = clicki;
-$("show0").onload = loadi;
-$("show1").onload = loadi;
+for (var a=2; --a>=0; )
+  {
+    var o=$("show"+a);
+    o.onclick = clicki;
+    o.onload  = loadi;
+    o.onmousemove  = movei;
+  }
 disp(0);
 window.setInterval(timer,500);
 dorefresh();
@@ -229,7 +244,9 @@ span	{ vertical-align:top }
 </head><body onload="init()">
 <div id="shower"><img id="show0"/><img id="show1"/><img id="show2"/></div>
 <div class="gap">
-<input onclick="quick()" type="button" value="q"/><span id="run"></span> <span id="refcnt"></span> <span id="cnt"></span><br/><span id="txt"></span>
+<input id="qrun" onclick="quick()" type="button" value="r"/><span id="run"></span> <span id="refcnt"></span> <span id="cnt"></span>
+<br/><span id="txt"></span>
+<br/><span id="pos"></span>
 <p><input id="learn"></input><input onclick="send('learn','l')" type="submit" value="Learn"><br/>
 <a href="learn/">learn</a>
 <p><textarea id="inp1"></textarea><br><input onclick="send('inp1')" type="submit" value="Send"/>
@@ -257,6 +274,20 @@ span	{ vertical-align:top }
 /><img src="c/ca.jpg"
 /><img src="c/cb.jpg"
 /><img src="c/cc.jpg"
-/>
+/><img src="c/cd.jpg"
+/><img src="c/ce.jpg"
+/><img src="c/cf.jpg"
+/><img src="c/cb1.jpg"
+/><img src="c/cb2.jpg"
+/><img src="c/cb3.jpg"
+/><img src="c/cb4.jpg"
+/><img src="c/cb5.jpg"
+/><img src="c/cb6.jpg"
+/><img src="c/cb7.jpg"
+/><img src="c/cb8.jpg"
+/><img src="c/cb9.jpg"
+/><img src="c/cba.jpg"
+/><img src="c/cbb.jpg"
+/><img src="c/cbc.jpg"
 </div>
 </body></html>
