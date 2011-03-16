@@ -1,0 +1,48 @@
+#!/bin/bash
+
+out="todo/todo$$"
+
+OOPS()
+{
+echo "OOPS $*" >&2
+rm -f "$out"
+exit 1
+}
+
+mins="$1"
+case "$mins" in
+[0-9]|[0-9]*[0-9])	shift || OOPS missing arg;;
+*)			mins="0";;
+esac
+
+case "$mins" in
+*:*)	hours="${mins%%:*}"
+	mins="${mins##*:}"
+	let mins=hours*60+mins
+	;;
+esac
+
+case "$mins" in
+0)	;;
+*)	let ++mins || OOPS "$mins";;
+esac
+
+for script
+do
+	exec="${script#./}"
+	exec="${exec#.}"
+        case "$exec" in
+	*..*|*/*)	OOPS "$script";;
+	save|-)		echo "$exec"; continue;;
+	esac
+	[ -x ".$exec" ] || OOPS "$script"
+	echo "$exec"
+done >"$out"
+
+while	then="`date -d "+$mins min" +%Y%m%d-%H%M%S`"
+	! mvatom "$out" "todo/$then"
+do
+	sleep 1
+done
+
+./.cat
