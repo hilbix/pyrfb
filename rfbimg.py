@@ -17,7 +17,10 @@
 # Needs python-imaging (PIL)
 #
 # $Log$
-# Revision 1.9  2011/03/17 00:17:15  tino
+# Revision 1.10  2011/03/17 11:37:27  tino
+# Better counting: Count the biggest batch seen until update is pushed
+#
+# Revision 1.9  2011-03-17 00:17:15  tino
 # Update now only done in timer
 #
 # Revision 1.8  2011-03-16 19:40:47  tino
@@ -49,6 +52,8 @@ class rfbImg(easyrfb.client):
     count = 0		# Count the number of pixels changed so far
     fuzz = 0		# Additional dirt added by timer to flush from time to time
     force = 0		# Force update in given count of timers
+    changed = 0		# Changed pixel count in batch
+    delta = 0		# Max delta seen so far before update
 
     def __init__(self, argv, appname):
 	easyrfb.client.__init__(self, appname)
@@ -95,6 +100,7 @@ class rfbImg(easyrfb.client):
 
 	self.count = 0
 	self.fuzz = 0
+	self.delta = 0
 
 	self.write(self.name,self.type,self.quality)
 
@@ -136,14 +142,19 @@ class rfbImg(easyrfb.client):
 		# If not looping this apparently updates the mouse cursor
 		self.img.paste(img,(x,y))
 
-	self.count += width*height
+	self.changed += width*height
 	self.rect = [ x,y,width,height ]
 
     def beginUpdate(self, vnc):
-	pass
+	self.changed = 0
 
     def commitUpdate(self, vnc, rectangles=None):
 	print "commit %d %s %s" % ( self.count, len(rectangles), self.rect )
+
+	# Increment by the biggest batch seen so far
+	if self.changed > self.delta:
+		self.delta = self.changed
+	self.count += self.delta
 
 	# If one-shot then we are ready
 	if not self.loop:
@@ -176,7 +187,7 @@ class rfbImg(easyrfb.client):
 	# But we bail out with "return" as soon as we modify waiting[]
 	for i,w in enumerate(self.waiting):
 		for t in w[1]:
-			print "check %s" % w[1]
+			print "check %s" % t
 			w[0](t,-1)
 			del self.waiting[i]
 			return
