@@ -17,7 +17,10 @@
 # Needs python-imaging (PIL)
 #
 # $Log$
-# Revision 1.8  2011/03/16 19:40:47  tino
+# Revision 1.9  2011/03/17 00:17:15  tino
+# Update now only done in timer
+#
+# Revision 1.8  2011-03-16 19:40:47  tino
 # typo fixes
 #
 # Revision 1.7  2011-01-21 16:20:51  tino
@@ -39,18 +42,18 @@ import os
 import re
 
 import twisted
-from PIL import Image
+from PIL import Image,ImageChops
 
 class rfbImg(easyrfb.client):
 
     count = 0		# Count the number of pixels changed so far
-    tick = False
+    fuzz = 0		# Additional dirt added by timer to flush from time to time
+    force = 0		# Force update in given count of timers
 
     def __init__(self, argv, appname):
 	easyrfb.client.__init__(self, appname)
 
 	# Start the timer
-        self.tick = True
 	self._timer = twisted.internet.task.LoopingCall(self.timer);
 	self._timer.start(0.5, now=False)
 
@@ -73,32 +76,27 @@ class rfbImg(easyrfb.client):
 		self.quality = int(argv[4])
 
     def timer(self):
-	"""Called each 1.5 seconds when reactor is idle"""
+	"""Called each 0.5 seconds when reactor is idle"""
 
-	self.tick = True
-
-	if self.dirt:
-		self.count += self.width
-		self.flush()
+	if self.count>0:
+		self.fuzz += self.width
+		if self.force==1 or self.width * self.height < self.count * 50 + self.fuzz:
+			self.flush()
+	if self.force:
+		self.count += 1
+		self.force -= 1
 
     # Called when the image must be written to disk
     def flush(self):
-	if self.loop and (not self.tick or self.width * self.height > self.count * 50):
-		self.dirt = True
-		return
+	"""
+	Flush the image to disk
+	The target is overwritten atomically by rename()
+	"""
 
-	# Flush the image to disk
-	# The target is overwritten atomically by rename()
-
-	self.tick = False
-	self.dirt = False
 	self.count = 0
+	self.fuzz = 0
 
 	self.write(self.name,self.type,self.quality)
-
-	# If one-shot then we are ready
-	if not self.loop:
-		self.halt()
 
     def write(self,name,type=None,quality=None):
 	tmp = os.path.splitext(name)
@@ -132,21 +130,31 @@ class rfbImg(easyrfb.client):
 		# Optimization on complete screen refresh
 		self.img = img
 	elif self.mouse:
+		# Skip update if nothing changed
+		#if ImageChops.difference(img,self.img.crop((x,y,x+width-1,y+height-1))).getbbox() is None:	return
+		#print ImageChops.difference(img,self.img.crop((x,y,x+width-1,y+height-1))).getbbox()
 		# If not looping this apparently updates the mouse cursor
 		self.img.paste(img,(x,y))
+
 	self.count += width*height
+	self.rect = [ x,y,width,height ]
 
     def beginUpdate(self, vnc):
-	self.dirt = False
+	pass
 
     def commitUpdate(self, vnc, rectangles=None):
-	print "commit %d %s" % ( self.count, len(rectangles) )
-	self.flush()
+	print "commit %d %s %s" % ( self.count, len(rectangles), self.rect )
+
+	# If one-shot then we are ready
+	if not self.loop:
+		self.flush()
+		self.halt()
+
 	self.check_waiting()
         vnc.framebufferUpdateRequest(incremental=1)
 
     def pointer(self,x,y,click=None):
-	self.tick = True
+	self.force = 2
 	if click == None:
 		click = 0
 	else:
@@ -154,7 +162,7 @@ class rfbImg(easyrfb.client):
 	self.myVNC.pointerEvent(x, y, click)
 
     def key(self,k):
-	self.tick = True
+	self.force = 2
 	self.count += self.width*self.height
 	self.myVNC.keyEvent(k,1)
 	self.myVNC.keyEvent(k,0)
