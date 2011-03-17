@@ -6,7 +6,10 @@
 // see file COPYRIGHT.CLL.  USE AT OWN RISK, ABSOLUTELY NO WARRANTY.
 //
 // $Log$
-// Revision 1.2  2011/03/16 11:53:29  tino
+// Revision 1.3  2011/03/17 00:15:46  tino
+// HEAD and If-Modified-Since
+//
+// Revision 1.2  2011-03-16 11:53:29  tino
 // __() ___()
 //
 // Revision 1.1  2010-11-16 07:47:27  tino
@@ -21,9 +24,11 @@ function ___(e){if(typeof e=='string')e=document.createTextNode(e);return e};
 
 ajax={};
 ajax.collect=function(a,f){var n=[];for(var i=0;i<a.length;i++){var v=f(a[i]);if(v!=null)n.push(v)}return n};
-ajax.x=function(){try{return new ActiveXObject('Msxml2.XMLHTTP')}catch(e){try{return new ActiveXObject('Microsoft.XMLHTTP')}catch(e){return new XMLHttpRequest()}}};
-ajax.send=function(u,f,m,a){var x=ajax.x();x.open(m,u,true);x.onreadystatechange=function(){if(x.readyState==4)f(x.responseText)};if(m=='POST')x.setRequestHeader('Content-type','application/x-www-form-urlencoded');x.send(a)};
+ajax.x=function(){try{return new XMLHttpRequest()}catch(e){try{return new ActiveXObject('Msxml2.XMLHTTP')}catch(e){return new ActiveXObject('Microsoft.XMLHTTP')}}};
+ajax.send=function(u,f,m,a,h){var x=ajax.x();x.open(m,u,true);x.onreadystatechange=function(){if(x.readyState==4)f(x.responseText,x,x.status==0?200:x.status,x.getResponseHeader("Last-Modified"))};if(m=='POST')x.setRequestHeader('Content-type','application/x-www-form-urlencoded');if(h)h(x);x.send(a)};
 ajax.get=function(url,func){ajax.send(url,func,'GET')};
+ajax.update=function(u,f,lm){ajax.send(u,f,'GET',null,lm?function(x){x.setRequestHeader("If-Modified-Since",lm)}:lm)};
+ajax.head=function(u,f,lm){ajax.send(u,f,'HEAD',null,lm?function(x){x.setRequestHeader("If-Modified-Since",lm)}:lm)};
 //ajax.serialize=function(f){var g=function(n){return f.getElementsByTagName(n)};var nv=function(e){if(e.name)return encodeURIComponent(e.name)+'='+encodeURIComponent(e.value);else return ''};var i=ajax.collect(g('input'),function(i){if((i.type!='radio'&&i.type!='checkbox')||i.checked)return nv(i)});var s=ajax.collect(g('select'),nv);var t=ajax.collect(g('textarea'),nv);return i.concat(s).concat(t).join('&');};
 //ajax.gets=function(url){var x=ajax.x();x.open('GET',url,false);x.send(null);return x.responseText};
 //ajax.post=function(url,func,args){ajax.send(url,func,'POST',args)};
