@@ -12,7 +12,7 @@ exit 1
 mins="$1"
 case "$mins" in
 [0-9]|[0-9]*[0-9])	shift || OOPS missing arg;;
-*)			mins="0";;
+*)			mins=0;;
 esac
 
 case "$mins" in
@@ -24,18 +24,18 @@ esac
 
 case "$mins" in
 0)	;;
-*)	let ++mins || OOPS "$mins";;
+*)	let ++mins || OOPS "nonnumeric $mins";;
 esac
 
 for script
 do
-	exec="${exec##*/}"
+	exec="${script##*/}"
         case "$exec" in
 	*..*|*/*)	OOPS "$script";;
 	save|-)		echo "$exec"; continue;;
 	esac
-	[ -f "script/LINKS/$exec" ] && read -r exec < "/script/LINKS/$exec"
-	[ -x "script/${exec%% *}" ] || OOPS "$exec"
+	[ -s "script/LINKS/$exec" ] && read -r exec < "/script/LINKS/$exec"
+	[ -s "script/${exec%% *}" ] || OOPS "unknown $exec"
 	echo "$exec"
 done >"$out"
 
