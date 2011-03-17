@@ -36,9 +36,9 @@ do
 	*..*|*/*)	OOPS "$script";;
 	save|-)		echo "$exec"; continue;;
 	esac
-	[ -s "script/LINKS/$exec" ] && read -r exec < "/script/LINKS/$exec"
-	[ -s "script/${exec%% *}" ] || OOPS "unknown $exec"
-	echo "$exec"
+	[ -s "script/LINKS/$exec" ] && read -r exec < "script/LINKS/$exec"
+	[ -s "script/${exec%%:*}" ] || OOPS "unknown $exec"
+	echo "${exec//:/ }"
 done >"$out"
 
 while	then="`date -d "+$mins min" +%Y%m%d-%H%M%S`"
