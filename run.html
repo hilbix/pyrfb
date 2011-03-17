@@ -103,11 +103,26 @@ if (!--sleeps)
 if (pendi && !waiti)
   dorefresh();
 }
-function dorefresh()
+var lm, lmc;
+function checkrefresh(e,x,s,l)
 {
-$$$("refcnt", ++newi+"*");
-$("show"+loadn).src = "test.jpg?"+stamp();
-waiti=100;
+if(!l)
+  {
+    lmc++;
+    $$$("lms",s+": "+lm+" @ "+lmc);
+    waiti = 0;
+  }
+else
+  {
+    lmc=0;
+    $$$("lms",s+": "+l);
+    lm=l;
+
+    $$$("refcnt", ++newi+"*");
+    $("show"+loadn).src = "test.jpg?"+stamp();
+
+    waiti=100;
+  }
 pendi=false;
 sleeper++;
 if (maxrun && maxsleep && sleeper>maxsleep)
@@ -118,6 +133,11 @@ if (maxrun && maxsleep && sleeper>maxsleep)
   }
 sleeps=0;
 nextrefresh();
+}
+function dorefresh()
+{
+waiti = 100;
+ajax.head("test.jpg",checkrefresh,lm);
 }
 function quick()
 {
@@ -239,11 +259,13 @@ body	{ background:black; color:white; margin:0 }
 div	{ position:relative; vertical-align:top; float:left }
 span	{ vertical-align:top }
 .gap	{ padding-left:5px }
+.mw200	{ max-width:200px }
+.mw310	{ max-width:310px }
 .mark	{ border:1px solid red }
 </style>
 </head><body onload="init()">
 <div id="shower"><img id="show0"/><img id="show1"/><img id="show2"/></div>
-<div class="gap">
+<div class="gap mw200">
 <input id="qrun" onclick="quick()" type="button" value="r"/><span id="run"></span> <span id="refcnt"></span> <span id="cnt"></span>
 <br/><span id="txt"></span>
 <br/><span id="pos"></span>
@@ -260,8 +282,9 @@ span	{ vertical-align:top }
 <tr><td><input onclick="code(55)" type="submit" value="7"/></td><td><input onclick="code(56)" type="submit" value="8"/></td><td><input onclick="code(57)" type="submit" value="9"/></td></tr>
 <tr><td><input onclick="code(46)" type="submit" value="."/></td><td><input onclick="code(48)" type="submit" value="0"/></td><td><input onclick="code(44)" type="submit" value=","/></td></tr>
 </table>
+<br/><span id="lms"></span>
 </div>
-<div id="cit" class="gap" style="max-width:310px">
+<div id="cit" class="gap mw310">
 <img src="c/c1.jpg"
 /><img src="c/c2.jpg"
 /><img src="c/c3.jpg"
