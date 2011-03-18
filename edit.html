@@ -1,0 +1,104 @@
+<html><head>
+<script type="text/javascript" src="ajax.js"></script>
+<script type="text/javascript" src="json2.js"></script>
+<script>
+function dump(x)
+{
+var s="";
+for (var n in x) { var v=x[n]; if (typeof(v)=="function") continue; s+=n+"="+x[n]+"\n"; }
+alert(s);
+}
+function stamp()
+{
+return new Date().getTime();
+}
+function exe(r,cb)
+{
+ajax.get("exec.php?decache="+stamp()+"&r="+r,function(e){cb(e)});
+}
+function clear(e)
+{
+e=$(e);
+while (e.firstChild)
+  e.removeChild(e.firstChild);
+}
+function newit()
+{
+edit = { name:'(unknown)', gra:'', rects:[] };
+ed();
+}
+function loaded(d)
+{
+}
+function presentit(e)
+{
+$("show").src = 
+}
+function parse(t)
+{
+}
+function pullit(e,cb)
+{
+ajax.get('e/'+e.name,function(d,x,s){if(s!=200)return;e.loadcache=parse(d);cb(e)});
+}
+var showel;
+function showit(e)
+{
+showel = e;
+if (e.loadcache)
+  presentit(e);
+else
+  pullit(e,showit);
+}
+function loadit(e)
+{
+edit = { name:e.tag };
+ajax.get('e/'+e.tag);
+exe('load&p='+escape(e.tag),loaded)
+}
+function click(o,fn)
+{
+  o = __(o);
+  o.onclick = loadit;
+  return o;
+}
+function dir(l)
+{
+l=l.split("\n");
+var e=__("a",___("New"));
+e.href = '#';
+e.onclick = newit;
+var e=__('ul','li',___('[ ',e,' ]'));
+for (var i=0; i<l.length; i++)
+  {
+    if (l[i]=="")
+      continue;
+    var o = __("li",___(l[i]));
+    o.tag = l[i];
+    o.onclick = loadit;
+    o.onmouseover = showit;
+    o.loadcache = null;
+    e.appendChild(o);
+  }
+clear("list");
+$("list").appendChild(e);
+}
+function init()
+{
+exe("dir",dir);
+}
+</script>
+<style>
+body	{ background:black; color:white; margin:0 }
+div	{ position:relative; vertical-align:top; float:left }
+span	{ vertical-align:top }
+.gap	{ padding-left:5px }
+.mark	{ border:1px solid red }
+</style>
+</head><body onload="init()">
+<div id="img"><img id="show"/></div>
+<div class="gap">
+<span>Edit</span>
+<div id="list"></div>
+</div>
+</body></html>
