@@ -49,15 +49,6 @@ var xy = mousexy(e);
 return [ xy[0]-o.offsetLeft, xy[1]-o.offsetTop ];
 }
 
-function hide(s)
-{
-$(s).style.display="none";
-}
-function show(s)
-{
-$(s).style.display="inline";
-}
-
 var shown;
 function disp2()
 {
@@ -183,8 +174,13 @@ reqnext();
 }
 function clicki(ev)
 {
-xy = elxy(this,ev);
-req("x="+xy[0]+"&y="+xy[1]);
+var mb = document.getElementsByName("mb");
+var b=0;
+for (var i=mb.length; --i>=0; )
+  if (mb[i].checked)
+    b |= parseInt(mb[i].value);
+var xy = elxy(this,ev);
+req("x="+xy[0]+"&y="+xy[1]+"&b="+b);
 }
 function movei(ev)
 {
@@ -209,7 +205,7 @@ if (this.height<40)
 var c = this.cloneNode(true);
 c.id = "show2";
 c.style.width = "";
-c.style.display="none";
+hide(c);
 
 // This is a hack as replaceChild has a bad visual impact
 shown = 1-loadn;
@@ -266,11 +262,14 @@ span	{ vertical-align:top }
 </head><body onload="init()">
 <div id="shower"><img id="show0"/><img id="show1"/><img id="show2"/></div>
 <div class="gap mw200">
+<input name="mb" type="checkbox" value="1" checked="checked"/><input name="mb" type="checkbox" value="2"/><input name="mb" type="checkbox" value="4"/>
+drag:
+<input name="mb" type="checkbox" value="65536"/>
+<br/>
 <input id="qrun" onclick="quick()" type="button" value="r"/><span id="run"></span> <span id="refcnt"></span> <span id="cnt"></span>
 <br/><span id="txt"></span>
 <br/><span id="pos"></span>
-<p><input id="learn"></input><input onclick="send('learn','l')" type="submit" value="Learn"><br/>
-<a href="learn/">learn</a>
+<p><input id="learn"></input><input onclick="send('learn','l')" type="submit" value="Learn"> <a href="learn/">learn</a> <a href="edit.html">edit</a>
 <p><textarea id="inp1"></textarea><br><input onclick="send('inp1')" type="submit" value="Send"/>
 </p><p><textarea id="inp2"></textarea><br><input onclick="send('inp2')" type="submit" value="Send"/> <input onclick="code(0xff08)" type="submit" value="BS"/>
 </p><p><textarea id="inp3"></textarea><br><input onclick="send('inp3')" type="submit" value="Send"/> <input onclick="code(0xff0d)" type="submit" value="CR"/>
