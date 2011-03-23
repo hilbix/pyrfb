@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python2.6
 #
 # $Header$
 #
@@ -15,22 +15,17 @@
 #	quality is unset, can be JPEG-quality (like 15) in percent
 #
 # Needs python-imaging (PIL)
+# Needs json (Python 2.6, should run under Python 2.5 with json.py added)
 #
 # $Log$
-# Revision 1.10  2011/03/17 11:37:27  tino
+# Revision 1.11  2011/03/23 09:57:31  tino
+# Tempates work now, but not so satisfyingly that I think I am ready
+#
+# Revision 1.10  2011-03-17 11:37:27  tino
 # Better counting: Count the biggest batch seen until update is pushed
 #
 # Revision 1.9  2011-03-17 00:17:15  tino
 # Update now only done in timer
-#
-# Revision 1.8  2011-03-16 19:40:47  tino
-# typo fixes
-#
-# Revision 1.7  2011-01-21 16:20:51  tino
-# ln_versioned without binsearch
-#
-# Revision 1.6  2011-01-21 16:17:57  tino
-# intermediate version
 #
 # Revision 1.5  2010-11-16 07:46:37  tino
 # Key codes
@@ -39,13 +34,20 @@
 # Commands
 
 import easyrfb
+import json
 
 import sys
 import os
+import io
 import re
 
 import twisted
 from PIL import Image,ImageChops
+
+LEARNDIR='learn/'
+IMGEXT='.png'
+TEMPLATEDIR='e/'
+TEMPLATEEXT='.tpl'
 
 class rfbImg(easyrfb.client):
 
@@ -108,11 +110,11 @@ class rfbImg(easyrfb.client):
 	tmp = os.path.splitext(name)
 	tmp = tmp[0]+".tmp"+tmp[1]
 	if quality!=None:
-		self.img.convert("RGB").save(tmp, type, quality=quality)
+		self.img.convert('RGB').save(tmp, type, quality=quality)
 	elif type!=None:
-		self.img.convert("RGB").save(tmp, type)
+		self.img.convert('RGB').save(tmp, type)
 	else:
-		self.img.convert("RGB").save(tmp)
+		self.img.convert('RGB').save(tmp)
 	os.rename(tmp,name)
 
 	print "out %s" % ( name )
@@ -131,7 +133,7 @@ class rfbImg(easyrfb.client):
 
     def updateRectangle(self, vnc, x, y, width, height, data):
 	#print "%s %s %s %s" % (x, y, width, height)
-	img = Image.frombuffer("RGBX",(width,height),data,"raw","RGBX",0,1)
+	img = Image.frombuffer('RGBX',(width,height),data,'raw','RGBX',0,1)
 	if x==0 and y==0 and width==self.width and height==self.height:
 		# Optimization on complete screen refresh
 		self.img = img
@@ -168,8 +170,6 @@ class rfbImg(easyrfb.client):
 	self.force = 2
 	if click == None:
 		click = 0
-	else:
-		click = 1<<(click)
 	self.myVNC.pointerEvent(x, y, click)
 
     def key(self,k):
@@ -179,17 +179,71 @@ class rfbImg(easyrfb.client):
 	self.myVNC.keyEvent(k,0)
 
     waiting = []
-    def wait(self,cb,templates):
-	self.waiting.append([cb,templates])
+    def wait(self,waiter):
+	self.waiting.append(waiter)
+
+    def check_template(self,template):
+	for r in template['r']:
+		# IC.difference apparently does not work on RGBX, so we have to convert to RGB first
+		bb = ImageChops.difference(r['img'], self.img.crop(r['rect']).convert('RGB')).getbbox()
+		if not (bb is None):
+			# We have a difference
+#			print "diff",template['name'],r['name'],bb
+#			r['img'].save('_want.png')
+#			self.img.crop(r['rect']).convert('RGB').save('_is.png')
+			return False
+	# All rects match, we have a match
+#	print "match",template['name']
+	return True
+
+    def load_templates(self,templates):
+	tpls = []
+	for l in templates:
+		f = l
+		inv = f[0]!='!'
+		if not inv:
+			inv = l[1]=='!'
+			f = l[inv and 2 or 1:]
+
+		t = json.load(io.open(TEMPLATEDIR+f+TEMPLATEEXT))
+		n = t['img']
+		i = Image.open(LEARNDIR+n).convert('RGB')
+		rects = []
+		for r in t['r']:
+			rect = (r[1],r[2],r[1]+r[3]-1,r[2]+r[4]-1)
+			rects.append({ 'r':r, 'name':n, 'img':i.crop(rect), 'rect':rect })
+		tpls.append({ 'name':l, 't':t, 'i':i, 'r':rects, 'cond':inv })
+	return tpls
+
+    def check_waiter(self,waiter):
+	""" check a single waiter (templates) """
+	try:
+		tpls = waiter['templates']
+	except KeyError:
+		tpls = self.load_templates(waiter['t'])
+		waiter['templates'] = tpls
+
+	for t in tpls:
+		# Check all the templates
+		if self.check_template(t)==t['cond']:
+			waiter['match'] = t
+			return True
+	return False
 
     def check_waiting(self):
-	# It is not safe to modify waiting while looping
-	# But we bail out with "return" as soon as we modify waiting[]
 	for i,w in enumerate(self.waiting):
-		for t in w[1]:
-			print "check %s" % t
-			w[0](t,-1)
+		if self.check_waiter(w):
+			# We found something
+			# Remove from list and notify the waiting task
 			del self.waiting[i]
+			w['cb'](w)
+			# We must return here, else i gets out of sync
+			return
+		w['retries'] -= 1
+		if w['retries']<0:
+			del self.waiting[i]
+			w['match']=None
+			w['cb'](w)
 			return
 
 def try_link(from_, to):
@@ -207,7 +261,16 @@ def ln_versioned(from_, to, ext):
 	i=0
 	while True:
 		i = i + 1
-		if try_link(from_, to+".~"+i+"~"+ext):
+		if try_link(from_, to+".~"+str(i)+"~"+ext):
+			return
+
+def rename_away(to,ext):
+	i=0
+	while True:
+		i = i + 1
+		n = to+".~"+str(i)+"~"+ext
+		if not os.path.exists(n):
+			os.rename(to+ext, n)
 			return
 
 from twisted.protocols.basic import LineReceiver
@@ -217,6 +280,10 @@ class controlProtocol(LineReceiver):
 	delimiter='\n'
 
 	valid_filename = re.compile('^[-_a-zA-Z0-9]*$')
+
+	waiting = False
+	exiting = False
+	bye = False
 
 	def lineReceived(self, line):
 		self.img = self.factory.img
@@ -233,6 +300,9 @@ class controlProtocol(LineReceiver):
 			self.transport.write("ko\n")
 			print "ko",line
 
+		if self.bye:
+			self.transport.loseConnection()
+
 	def cmd_mouse(self,x,y,click=None):
 		x = int(x)
 		y = int(y)
@@ -245,9 +315,15 @@ class controlProtocol(LineReceiver):
 		if not self.valid_filename.match(to):
 			return False
 		tmp = 'learn.png'
-		os.unlink(tmp)
+		try:
+			os.unlink(tmp)
+		except Exception,e:
+			pass
 		self.img.img.convert('RGBA').save(tmp)
-		ln_versioned(tmp, 'learn/'+to, '.png');
+		out = LEARNDIR+to
+		if os.path.exists(out+IMGEXT):
+			rename_away(out, IMGEXT)
+		os.rename(tmp, out+IMGEXT)
 		return True
 
 	def cmd_key(self,*args):
@@ -259,35 +335,34 @@ class controlProtocol(LineReceiver):
 		self.img.key(int(code))
 		return True
 
-	waiting = False
-	exiting = False
-
 	def cmd_exit(self):
 		self.exiting = True
-		if self.waiting:
-			return True
-		self.transport.loseConnection()
+		self.bye = not self.waiting
 		return True
+
+	def cmd_check(self,*templates):
+		return len(templates) and self.img.check_waiter({'t':templates})
 
 	def cmd_wait(self,*templates):
-		if not templates:
+		if len(templates)<2 or self.waiting:
 			return False
-		self.wait()
-		self.img.wait(self.wait_cb,templates)
+		timeout = int(templates[0])
+		self.waiting = True
+#		self.transport.pauseProducing()
+		self.img.wait({'cb':self.wait_cb,'t':templates[1:],'retries':timeout})
 		return True
 
-	def wait_cb(self,template,alpha):
-		print "match",template,alpha
-		self.transport.write("%s %s\n" % ( template, alpha ))
-		self.unwait()
-
-	def wait(self):
-		self.waiting = True
-
-	def unwait(self):
+	def wait_cb(self,waiter):
+		if waiter['match']:
+			print "match",waiter['match']
+			self.transport.write("found %s\n" % ( waiter['match']['name'] ))
+		else:
+			print "timeout",waiter['match']
+			self.transport.write("timeout\n")
+#		self.transport.resumeProducing()
 		self.waiting = False
 		if self.exiting:
-			self.cmd_exit()
+			self.transport.loseConnection()
 
 from twisted.internet import reactor
 class createControl(twisted.internet.protocol.Factory):
