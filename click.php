@@ -6,11 +6,15 @@
 # So protect it with BasicAuth and HTTPS, you have been warned.
 #
 # $Log$
-# Revision 1.2  2010/11/16 08:08:51  tino
-# README added
+# Revision 1.3  2011/03/23 10:01:03  tino
+# Mouse button select
 #
+# Revision 1.2  2010-11-16 08:08:51  tino
+# README added
 
 header("Content-type: text/plain");
+header("Pragma: no-cache");
+header("Expires: -1");
 
 $fd = fsockopen("unix://.sock");
 socket_set_blocking($fd,0);
@@ -33,12 +37,20 @@ elseif ($_GET["t"]!="")
   }
 elseif ($_GET["x"])
   {
-    $s = "mouse ".$_GET["x"]." ".$_GET["y"];
-    $o = "$s\n$s 0\n$s";
+    $s = sprintf("mouse %d %d", $_GET["x"], $_GET["y"]);
+    if (isset($_GET["b"]))
+      {
+        $b = $_GET["b"];
+        if ($b&65536)
+          $o = sprintf("%s %d", $s, $b&65535);
+        else
+          $o = sprintf("%s\n%s %d\n%s", $s, $s, $b, $s);
+      }
   }
 elseif ($_GET["l"])
   {
-    $s = "learn ".$_GET["l"];
+    $a = explode("\n",$_GET["l"]);
+    $s = "learn ".$a[0];
   }
 if ($o=="") $o = $s;
 fwrite($fd,"$o\n");
