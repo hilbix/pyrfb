@@ -18,7 +18,10 @@
 # Needs json (Python 2.6, should run under Python 2.5 with json.py added)
 #
 # $Log$
-# Revision 1.11  2011/03/23 09:57:31  tino
+# Revision 1.12  2011/03/29 21:00:51  tino
+# cmd_next and non-pixel-perfect matching
+#
+# Revision 1.11  2011-03-23 09:57:31  tino
 # Tempates work now, but not so satisfyingly that I think I am ready
 #
 # Revision 1.10  2011-03-17 11:37:27  tino
@@ -42,12 +45,22 @@ import io
 import re
 
 import twisted
-from PIL import Image,ImageChops
+from PIL import Image,ImageChops,ImageStat
 
 LEARNDIR='learn/'
 IMGEXT='.png'
 TEMPLATEDIR='e/'
 TEMPLATEEXT='.tpl'
+
+cachedimages = {}
+def cacheimage(path):
+	try:
+		if cachedimages[path][0]==os.stat(path).st_mtime:
+			return cachedimages[path][1]
+	except KeyError:
+		pass
+	cachedimages[path] = (os.stat(path).st_mtime,Image.open(path).convert('RGB'))
+	return cachedimages[path][1]
 
 class rfbImg(easyrfb.client):
 
@@ -62,7 +75,7 @@ class rfbImg(easyrfb.client):
 
 	# Start the timer
 	self._timer = twisted.internet.task.LoopingCall(self.timer);
-	self._timer.start(0.5, now=False)
+	self._timer.start(0.1, now=False)
 
 	# Remember the args
 
@@ -83,15 +96,17 @@ class rfbImg(easyrfb.client):
 		self.quality = int(argv[4])
 
     def timer(self):
-	"""Called each 0.5 seconds when reactor is idle"""
+	"""Called each 0.1 seconds when reactor is idle"""
 
 	if self.count>0:
-		self.fuzz += self.width
+		self.fuzz += self.width/10
 		if self.force==1 or self.width * self.height < self.count * 50 + self.fuzz:
 			self.flush()
 	if self.force:
 		self.count += 1
 		self.force -= 1
+
+	self.autonext(False)
 
     # Called when the image must be written to disk
     def flush(self):
@@ -163,7 +178,7 @@ class rfbImg(easyrfb.client):
 		self.flush()
 		self.halt()
 
-	self.check_waiting()
+	self.autonext(True)
         vnc.framebufferUpdateRequest(incremental=1)
 
     def pointer(self,x,y,click=None):
@@ -178,22 +193,42 @@ class rfbImg(easyrfb.client):
 	self.myVNC.keyEvent(k,1)
 	self.myVNC.keyEvent(k,0)
 
+    delaynext = False
+    def autonext(self, force):
+	if not force and not self.delaynext:
+		self.delaynext = self.waiting or self.nexting
+		return
+
+	self.delaynext = False
+	self.check_waiting()
+	self.notify()
+
+    nexting = []
+    def next(self, cb):
+	self.nexting.append(cb)
+
+    def notify(self):
+	tmp = self.nexting
+	self.nexting = []
+	for cb in tmp:
+		cb()
+
     waiting = []
     def wait(self,waiter):
 	self.waiting.append(waiter)
 
-    def check_template(self,template):
+    def check_template(self,template,debug=False):
 	for r in template['r']:
 		# IC.difference apparently does not work on RGBX, so we have to convert to RGB first
-		bb = ImageChops.difference(r['img'], self.img.crop(r['rect']).convert('RGB')).getbbox()
-		if not (bb is None):
+		bb = ImageChops.difference(r['img'], self.img.crop(r['rect']).convert('RGB'))
+		st = ImageStat.Stat(bb)
+		delta = reduce(lambda x,y:x+y, st.sum2)/(bb.size[0]*bb.size[1])
+		if delta>r['max']:
 			# We have a difference
-#			print "diff",template['name'],r['name'],bb
-#			r['img'].save('_want.png')
-#			self.img.crop(r['rect']).convert('RGB').save('_is.png')
+			if debug:	bb.save('_debug.png')
+			if debug:	print "diff",template['name'],bb.getbbox(),delta
 			return False
 	# All rects match, we have a match
-#	print "match",template['name']
 	return True
 
     def load_templates(self,templates):
@@ -202,30 +237,31 @@ class rfbImg(easyrfb.client):
 		f = l
 		inv = f[0]!='!'
 		if not inv:
-			inv = l[1]=='!'
+			inv = l[2]=='!' and l[3]=='!'
 			f = l[inv and 2 or 1:]
 
 		t = json.load(io.open(TEMPLATEDIR+f+TEMPLATEEXT))
 		n = t['img']
-		i = Image.open(LEARNDIR+n).convert('RGB')
+		i = cacheimage(LEARNDIR+n)
 		rects = []
 		for r in t['r']:
 			rect = (r[1],r[2],r[1]+r[3]-1,r[2]+r[4]-1)
-			rects.append({ 'r':r, 'name':n, 'img':i.crop(rect), 'rect':rect })
+			rects.append({ 'r':r, 'name':n, 'img':i.crop(rect), 'rect':rect, 'max':r[0] })
 		tpls.append({ 'name':l, 't':t, 'i':i, 'r':rects, 'cond':inv })
 	return tpls
 
-    def check_waiter(self,waiter):
+    def check_waiter(self,waiter,debug=False):
 	""" check a single waiter (templates) """
 	try:
 		tpls = waiter['templates']
 	except KeyError:
 		tpls = self.load_templates(waiter['t'])
+		print "templates loaded",waiter['t']
 		waiter['templates'] = tpls
 
 	for t in tpls:
 		# Check all the templates
-		if self.check_template(t)==t['cond']:
+		if self.check_template(t,debug)==t['cond']:
 			waiter['match'] = t
 			return True
 	return False
@@ -281,8 +317,6 @@ class controlProtocol(LineReceiver):
 
 	valid_filename = re.compile('^[-_a-zA-Z0-9]*$')
 
-	waiting = False
-	exiting = False
 	bye = False
 
 	def lineReceived(self, line):
@@ -290,6 +324,7 @@ class controlProtocol(LineReceiver):
 		args = line.split(" ")
 		ok = False
 		try:
+			print "cmd",args[0],args
 			ok = getattr(self,'cmd_'+args[0])(*args[1:])
 		except Exception,e:
 			print traceback.format_exc()
@@ -331,38 +366,54 @@ class controlProtocol(LineReceiver):
 			self.img.key(ord(k))
 		return True
 
-	def cmd_code(self,code):
-		self.img.key(int(code))
+	def cmd_code(self,*args):
+		for k in args:
+			self.img.key(int(k,0))
 		return True
 
 	def cmd_exit(self):
-		self.exiting = True
-		self.bye = not self.waiting
+		self.bye = True
+		return True
+
+	def cmd_next(self):
+		self.pause()
+		self.img.next(self.resume)
 		return True
 
 	def cmd_check(self,*templates):
-		return len(templates) and self.img.check_waiter({'t':templates})
+		w = {'t':templates}
+		if len(templates) and self.img.check_waiter(w, True):
+			print "match",w['match']
+			self.transport.write("found %s\n" % w['match']['name'])
+			return True
+		return False
 
 	def cmd_wait(self,*templates):
-		if len(templates)<2 or self.waiting:
+		if len(templates)<2:
 			return False
 		timeout = int(templates[0])
-		self.waiting = True
-#		self.transport.pauseProducing()
+		self.pause()
 		self.img.wait({'cb':self.wait_cb,'t':templates[1:],'retries':timeout})
 		return True
 
 	def wait_cb(self,waiter):
 		if waiter['match']:
 			print "match",waiter['match']
-			self.transport.write("found %s\n" % ( waiter['match']['name'] ))
+			self.transport.write("found %s\n" % waiter['match']['name'])
 		else:
-			print "timeout",waiter['match']
+			print "timeout"
 			self.transport.write("timeout\n")
-#		self.transport.resumeProducing()
-		self.waiting = False
-		if self.exiting:
-			self.transport.loseConnection()
+		self.resume()
+
+	def resume(self):
+		try:
+			self.transport.resumeProducing()
+		except:
+			# may have gone away in the meantime
+			print "gone away"
+
+	def pause(self):
+		self.transport.pauseProducing()
 
 from twisted.internet import reactor
 class createControl(twisted.internet.protocol.Factory):
