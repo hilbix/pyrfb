@@ -2,7 +2,10 @@
 # $Header$
 #
 # $Log$
-# Revision 1.4  2011/03/29 21:02:35  tino
+# Revision 1.5  2011/03/30 21:30:06  tino
+# moved common functions here and fix for snapshotting
+#
+# Revision 1.4  2011-03-29 21:02:35  tino
 # Generic version independent of scripts
 #
 # Revision 1.3  2011-03-23 09:59:06  tino
@@ -16,10 +19,46 @@ set_exit()
 atexit="$*"
 }
 
+die()
+{
+send "learn OOPS"
+echo "ERROR: $*" >&2
+date >&2
+exit 1
+}
+
+assert()
+{
+"$@" || die "cannot $*"
+}
+
+IN()
+{
+./in "$@"
+}
+
 exe()
 {
 . script/X
 . "script/$script"
+}
+
+send()
+{
+sendresult="`./sendsock.py "$@"`"
+}
+
+key()
+{
+for k
+do
+        case "$k" in
+        _*)     echo "code ${k#_}";;
+        *)      echo "key $k";;
+        esac
+done |
+send - ||
+die "cannot send key sequence: $*"
 }
 
 d()
@@ -35,6 +74,7 @@ exe $2
 
 if [ -n "$snapshot" ]
 then
+	send flush
 	cp test.jpg "c/$snapshot.jpg"
 	echo -n " $snapshot.jpg"
 fi
