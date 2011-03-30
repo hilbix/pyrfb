@@ -69,16 +69,33 @@ if (!kbprocessing)
 if (!e)
   e = window.event;
 
+x=0;
+y=0;
+d=0;
 switch (e.keyCode)
   {
     default:
-//      $$$("out",dump(e));
+      $$$("out",e.keyCode);
       return;
 
-    case 37: x=-1; y=0; break;
-    case 38: x=0; y=-1; break;
-    case 39: x=1; y=0; break;
-    case 40: x=0; y=1; break;
+    case 37: x=-1; break;
+    case 38: y=-1; break;
+    case 39: x=1; break;
+    case 40: y=1; break;
+
+    case 81: d=1; break;
+    case 87: d=10; break;
+    case 69: d=100; break;
+    case 82: d=1000; break;
+    case 84: d=10000; break;
+    case 90: d=100000; break;
+
+    case 65: d=-1; break;
+    case 83: d=-10; break;
+    case 68: d=-100; break;
+    case 70: d=-1000; break;
+    case 71: d=-10000; break;
+    case 72: d=-100000; break;
   }
 e.cancelBubble = true;
 if (e.stopPropagation)
@@ -91,16 +108,18 @@ if (!e.ctrlKey)
 var r = edit.r[current];
 if (e.shiftKey)
   {
-    r[3] += x;
-    r[4] += y;
+    r[3] = Math.max(0,r[3]+x);
+    r[4] = Math.max(0,r[4]+y);
   }
 else
   {
-    r[1] += x;
-    r[2] += y;
+    r[1] = Math.max(0,r[1]+x);
+    r[2] = Math.max(0,r[2]+y);
   }
+r[0] = Math.max(0,r[0]+d);
 dirt();
 fixregion(current,regiondiv,regiontxt);
+return false;
 }
 function modder(mod)
 {
@@ -144,7 +163,7 @@ function regions()
 if (!edit.r)
   edit.r = [];
 var x=[], y=[];
-for (var i=edit.r.length; --i>=0; )
+for (var i=0; i<edit.r.length; i++)
   {
 
     var e = __("div");
@@ -168,7 +187,8 @@ for (var i=edit.r.length; --i>=0; )
       }
     fixregion(i,e,t);
     x.push(e);
-    y.push(__("li",t));
+    a = _a_('#',null,___("X"));
+    y.push(__("li",___("[ ",a," ] ",t)));
   }
 clear("regions",__("div",x));
 clear("regionlist",__("ul",y));
@@ -273,7 +293,7 @@ return t;
 }
 function pullit(e,cb)
 {
-ajax.get('e/'+e.tag,function(d,x,s){if(s!=200)return;e.loadcache=parse(d);cb(e)});
+ajax.get('e/'+e.tag+"?decache="+stamp(),function(d,x,s){if(s!=200)return;e.loadcache=parse(d);cb(e)});
 }
 function _showit(e)
 {
