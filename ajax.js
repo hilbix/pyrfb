@@ -6,7 +6,10 @@
 // see file COPYRIGHT.CLL.  USE AT OWN RISK, ABSOLUTELY NO WARRANTY.
 //
 // $Log$
-// Revision 1.4  2011/03/23 09:58:01  tino
+// Revision 1.5  2011/03/30 21:29:12  tino
+// _a_
+//
+// Revision 1.4  2011-03-23 09:58:01  tino
 // improved everything
 //
 // Revision 1.3  2011-03-17 00:15:46  tino
@@ -19,8 +22,10 @@ function $$$(e,s){$(e).innerHTML=s};
 function $$(e){return $(e).innerHTML};
 function $(e){if(typeof e=='string')e=document.getElementById(e);return e};
 var __aps = Array.prototype.slice;
-function __(e){if(typeof e=='string')e=document.createElement(e);if(arguments.length>1){var x=__.apply(this,__aps.call(arguments,1));if(!(x instanceof Array))x=[x];for(var i=0; i<x.length; i++)e.appendChild(x[i])};return e};
+function Ary(){var a=[];for(var i=0;i<arguments.length;i+=2)a=a.concat(__aps.call(arguments[i],arguments[i+1]?arguments[i+1]:0));return a}
+function __(e){if(typeof e=='string')e=document.createElement(e);if(arguments.length>1){var x=__.apply(this,Ary(arguments,1));if(!(x instanceof Array))x=[x];for(var i=0; i<x.length; i++)e.appendChild(x[i])};return e};
 function ___(e){var x=[];for(var i=0;i<arguments.length;i++){var e=arguments[i];if(typeof e=='string')e=document.createTextNode(e);x.push(e);}if(x.length==1)return x[0];return x};
+function _a_(href,onclick){var a=__.apply(this,Ary(['a'],0,arguments,2));a.href=href;a.onclick=onclick;return a}
 
 ajax={};
 ajax.collect=function(a,f){var n=[];for(var i=0;i<a.length;i++){var v=f(a[i]);if(v!=null)n.push(v)}return n};
