@@ -18,7 +18,10 @@
 # Needs json (Python 2.6, should run under Python 2.5 with json.py added)
 #
 # $Log$
-# Revision 1.12  2011/03/29 21:00:51  tino
+# Revision 1.13  2011/03/30 21:30:57  tino
+# searching and cmd_flush
+#
+# Revision 1.12  2011-03-29 21:00:51  tino
 # cmd_next and non-pixel-perfect matching
 #
 # Revision 1.11  2011-03-23 09:57:31  tino
@@ -154,8 +157,8 @@ class rfbImg(easyrfb.client):
 		self.img = img
 	elif self.mouse:
 		# Skip update if nothing changed
-		#if ImageChops.difference(img,self.img.crop((x,y,x+width-1,y+height-1))).getbbox() is None:	return
-		#print ImageChops.difference(img,self.img.crop((x,y,x+width-1,y+height-1))).getbbox()
+		#if ImageChops.difference(img,self.img.crop((x,y,x+width,y+height))).getbbox() is None:	return
+		#print ImageChops.difference(img,self.img.crop((x,y,x+width,y+height))).getbbox()
 		# If not looping this apparently updates the mouse cursor
 		self.img.paste(img,(x,y))
 
@@ -199,9 +202,10 @@ class rfbImg(easyrfb.client):
 		self.delaynext = self.waiting or self.nexting
 		return
 
-	self.delaynext = False
 	self.check_waiting()
 	self.notify()
+
+	self.delaynext = self.waiting or self.nexting
 
     nexting = []
     def next(self, cb):
@@ -217,37 +221,101 @@ class rfbImg(easyrfb.client):
     def wait(self,waiter):
 	self.waiting.append(waiter)
 
-    def check_template(self,template,debug=False):
+    def check_rect(self,template,r,rect,debug,trace):
+	# IC.difference apparently does not work on RGBX, so we have to convert to RGB first
+	bb = ImageChops.difference(r['img'], self.img.crop(rect).convert('RGB'))
+	st = ImageStat.Stat(bb)
+	delta = reduce(lambda x,y:x+y, st.sum2)		# /(bb.size[0]*bb.size[1])
+	if delta<=r['max']:
+		if trace:
+			print "same",template['name'],rect,delta
+		return True
+
+	# We have a difference
+	if debug:
+		bb.save('_debug.png')
+		print "diff",template['name'],rect,delta,bb.getbbox()
+	return False
+
+    def check_rects(self,template,dx,dy,debug,trace):
 	for r in template['r']:
-		# IC.difference apparently does not work on RGBX, so we have to convert to RGB first
-		bb = ImageChops.difference(r['img'], self.img.crop(r['rect']).convert('RGB'))
-		st = ImageStat.Stat(bb)
-		delta = reduce(lambda x,y:x+y, st.sum2)/(bb.size[0]*bb.size[1])
-		if delta>r['max']:
-			# We have a difference
-			if debug:	bb.save('_debug.png')
-			if debug:	print "diff",template['name'],bb.getbbox(),delta
+		rect = r['rect']
+		if not self.check_rect(template,r,(rect[0]+dx,rect[1]+dy,rect[2]+dx,rect[3]+dy),debug,trace):
 			return False
+		debug = trace
 	# All rects match, we have a match
 	return True
+
+    def check_template(self,template,debug=False):
+	# Always check the center
+	if self.check_rects(template,0,0,debug,debug):
+		template['dx']=0
+		template['dy']=0
+		return True
+
+	# Then check the displacements
+	for s in template['search']:
+		dx = s[0]
+		dy = s[1]
+		x = y = 0
+		print "search",template['name'],s
+		for i in range(s[2]):
+			x += dx
+			y += dy
+			if self.check_rects(template,x,y,False,debug):
+				if debug:
+					print "found",template['name'],"offset",x,y
+				template['dx'] = x
+				template['dy'] = y
+				return True
+	return False
 
     def load_templates(self,templates):
 	tpls = []
 	for l in templates:
 		f = l
+		# template	check if template matches
+		# !template	check if template does not match
+		# DO NOT USE FILENAMES STARTING WITH !
+		# !!template	check if !template does not match
+		# !!!template	check if !template matches
+		# !!!!template	check if !!template matches (and so on)
 		inv = f[0]!='!'
 		if not inv:
 			inv = l[2]=='!' and l[3]=='!'
 			f = l[inv and 2 or 1:]
 
-		t = json.load(io.open(TEMPLATEDIR+f+TEMPLATEEXT))
-		n = t['img']
-		i = cacheimage(LEARNDIR+n)
-		rects = []
-		for r in t['r']:
-			rect = (r[1],r[2],r[1]+r[3]-1,r[2]+r[4]-1)
-			rects.append({ 'r':r, 'name':n, 'img':i.crop(rect), 'rect':rect, 'max':r[0] })
-		tpls.append({ 'name':l, 't':t, 'i':i, 'r':rects, 'cond':inv })
+		try:
+			t = json.load(io.open(TEMPLATEDIR+f+TEMPLATEEXT))
+			n = t['img']
+			i = cacheimage(LEARNDIR+n)
+			rects = []
+			search = []
+			for r in t['r']:
+				if r[3]==0 or r[4]==0:
+					# special rectangle specifying search range
+					# if a 0-width or 0-height rectangle is found
+					# search along it's line.
+					# If it is right/below the middle of the screen
+					# search inverse (from right/bottom to left/top)
+					# else normal
+					if r[3]==0:
+						search.append((0, r[2]*2 > i.size[1]-r[4] and -1 or 1, r[4]))
+					else:
+						search.append((r[1]*2 > i.size[0]-r[3] and -1 or 1, 0, r[3]))
+					continue
+	
+				rect = (r[1],r[2],r[1]+r[3],r[2]+r[4])
+				pixels = r[3]*r[4]
+				spec = { 'r':r, 'name':n, 'img':i.crop(rect), 'rect':rect, 'max':r[0], 'pixels':r[3]*r[4] }
+				# poor man's sort, keep the smallest rect to the top
+				if rects and pixels <= rects[0]['pixels']:
+					rects.insert(0,spec)
+				else:
+					rects.append(spec)
+			tpls.append({ 'name':l, 't':t, 'i':i, 'r':rects, 'cond':inv, 'search':search })
+		except Exception,e:
+			print traceback.format_exc()
 	return tpls
 
     def check_waiter(self,waiter,debug=False):
@@ -258,6 +326,10 @@ class rfbImg(easyrfb.client):
 		tpls = self.load_templates(waiter['t'])
 		print "templates loaded",waiter['t']
 		waiter['templates'] = tpls
+
+	if not tpls:
+		waiter['match'] = None
+		return True
 
 	for t in tpls:
 		# Check all the templates
@@ -380,11 +452,14 @@ class controlProtocol(LineReceiver):
 		self.img.next(self.resume)
 		return True
 
+	def cmd_flush(self):
+		self.img.flush()
+		return True
+
 	def cmd_check(self,*templates):
 		w = {'t':templates}
 		if len(templates) and self.img.check_waiter(w, True):
-			print "match",w['match']
-			self.transport.write("found %s\n" % w['match']['name'])
+			self.print_wait(w)
 			return True
 		return False
 
@@ -396,13 +471,20 @@ class controlProtocol(LineReceiver):
 		self.img.wait({'cb':self.wait_cb,'t':templates[1:],'retries':timeout})
 		return True
 
-	def wait_cb(self,waiter):
+	def print_wait(self,waiter):
 		if waiter['match']:
-			print "match",waiter['match']
-			self.transport.write("found %s\n" % waiter['match']['name'])
+			w = waiter['match']
+			print "match",w
+			if w['cond']:
+				self.transport.write("found %s %s %s\n" % (w['name'], w['dx'], w['dy']))
+			else:
+				self.transport.write("spare %s\n" % (w['name']))
 		else:
 			print "timeout"
 			self.transport.write("timeout\n")
+
+	def wait_cb(self,waiter):
+		self.print_wait(waiter)
 		self.resume()
 
 	def resume(self):
