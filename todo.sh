@@ -2,7 +2,10 @@
 # $Header$
 #
 # $Log$
-# Revision 1.5  2011/03/30 21:30:06  tino
+# Revision 1.6  2011/04/24 22:37:43  tino
+# direct commands on the input, no more ./in needed
+#
+# Revision 1.5  2011-03-30 21:30:06  tino
 # moved common functions here and fix for snapshotting
 #
 # Revision 1.4  2011-03-29 21:02:35  tino
@@ -63,6 +66,12 @@ die "cannot send key sequence: $*"
 
 d()
 {
+if	$needrestart
+then
+	needrestart=false
+	d restart
+fi
+
 [ -z "$1" ] && return
 echo -n " .."
 
@@ -91,21 +100,45 @@ done
 [ -n "$atexit" ] && d $atexit
 }
 
-d restart
+d2()
+{
+scr="$1"
+shift
+[ -f "script/$scr" ] || return 1
+d "$scr" "$*"
+return 0
+}
+
+d1()
+{
+for cc
+do
+	[ -s "script/LINKS/$cc" ] && read -r cc < "script/LINKS/$cc"
+	cc="${cc//:/ }"
+	d2 $cc || return
+done
+}
+
+needrestart=:
 
 tim=1
 while
-	if	read -rt$tim cmd args
+	if	read -rt$tim cmd
 	then
 		[ -n "$cmd" ] || exit
+		tim=1
 		case "$cmd" in
 		\!*)	cmd="${cmd:1}"
-			set -x;;
+			set -x
+			;;
+		[0-9]*)	./in $cmd
+			continue
+			;;
+		todo/[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]-[0-9][0-9][0-9][0-9][0-9][0-9])	rm -vf "$cmd"; continue;;
 		esac
-		d "$cmd" "$args"
+		d1 $cmd
 		set +x
 		echo
-		tim=1
 		continue
 	fi
 
