@@ -1,6 +1,8 @@
 #!/bin/bash
 
-for a in e/*.tpl
+[ -n "$*" ] || set -- e/*.tpl
+
+for a
 do
 	b="${a#*/}"
 	b="${b%.tpl}"
