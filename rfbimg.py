@@ -18,7 +18,10 @@
 # Needs json (Python 2.6, should run under Python 2.5 with json.py added)
 #
 # $Log$
-# Revision 1.13  2011/03/30 21:30:57  tino
+# Revision 1.14  2011/04/24 22:36:09  tino
+# unnamed screenshot created by date
+#
+# Revision 1.13  2011-03-30 21:30:57  tino
 # searching and cmd_flush
 #
 # Revision 1.12  2011-03-29 21:00:51  tino
@@ -47,6 +50,8 @@ import os
 import io
 import re
 
+import time
+
 import twisted
 from PIL import Image,ImageChops,ImageStat
 
@@ -54,6 +59,10 @@ LEARNDIR='learn/'
 IMGEXT='.png'
 TEMPLATEDIR='e/'
 TEMPLATEEXT='.tpl'
+
+def timestamp():
+	t = time.gmtime()
+	return "%04d%02d%02d-%02d%02d%02d" % ( t.tm_year, t.tm_mon, t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec)
 
 cachedimages = {}
 def cacheimage(path):
@@ -421,6 +430,8 @@ class controlProtocol(LineReceiver):
 	def cmd_learn(self,to):
 		if not self.valid_filename.match(to):
 			return False
+		if to=='':
+			to = 'screen-'+timestamp()
 		tmp = 'learn.png'
 		try:
 			os.unlink(tmp)
