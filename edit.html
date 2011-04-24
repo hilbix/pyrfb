@@ -187,11 +187,22 @@ for (var i=0; i<edit.r.length; i++)
       }
     fixregion(i,e,t);
     x.push(e);
-    a = _a_('#',null,___("X"));
+    a = _a_('#',mkdelregion(i),___("X"));
     y.push(__("li",___("[ ",a," ] ",t)));
   }
 clear("regions",__("div",x));
 clear("regionlist",__("ul",y));
+}
+function mkdelregion(i)
+{
+  return function(){delregion(i)}
+}
+function delregion(r)
+{
+edit.r.splice(r,1)
+dirt();
+regions();
+return false;
 }
 function ed(e)
 {
