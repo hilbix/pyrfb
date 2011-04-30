@@ -2,7 +2,10 @@
 # $Header$
 #
 # $Log$
-# Revision 1.6  2011/04/24 22:37:43  tino
+# Revision 1.7  2011/04/30 22:12:58  tino
+# ls command added, initial timeout is 3 seconds to be able to do something (rm)
+#
+# Revision 1.6  2011-04-24 22:37:43  tino
 # direct commands on the input, no more ./in needed
 #
 # Revision 1.5  2011-03-30 21:30:06  tino
@@ -121,7 +124,7 @@ done
 
 needrestart=:
 
-tim=1
+tim=3
 while
 	if	read -rt$tim cmd
 	then
@@ -135,6 +138,7 @@ while
 			continue
 			;;
 		todo/[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]-[0-9][0-9][0-9][0-9][0-9][0-9])	rm -vf "$cmd"; continue;;
+		ls)	./list; continue;;
 		esac
 		d1 $cmd
 		set +x
