@@ -4,6 +4,8 @@
 <script>
 JSON.encode=JSON.stringify;
 
+var decache;
+
 function dump(x)
 {
 try {
@@ -284,7 +286,7 @@ if (e.src!=dispsrc || i!=dispi)
   {
     e.onload = dispok;
     e.style.opacity = 0.5;
-    e.src="learn/"+i;
+    e.src="learn/"+i+'?decache='+decache;
   }
 dispi = i;
 dispsrc = e.src;
@@ -304,7 +306,7 @@ return t;
 }
 function pullit(e,cb)
 {
-ajax.get('e/'+e.tag+"?decache="+stamp(),function(d,x,s){if(s!=200)return;e.loadcache=parse(d);cb(e)});
+ajax.get('e/'+e.tag+"?decache="+decache,function(d,x,s){if(s!=200)return;e.loadcache=parse(d);cb(e)});
 }
 function _showit(e)
 {
@@ -406,6 +408,7 @@ exe("learn",learns);
 }
 function refreshall()
 {
+decache=stamp();
 start("reloading");
 refreshdir();
 refreshimgs();
