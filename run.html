@@ -77,7 +77,8 @@ $$$("refcnt", newi+"x");
 }
 function greyi()
 {
-$("show"+(1-loadn)).style.opacity=0.5;
+if (!$("uihelper").checked)
+  $("show"+(1-loadn)).style.opacity=0.5;
 }
 
 var sleeps = 0;
@@ -265,6 +266,7 @@ span	{ vertical-align:top }
 <input name="mb" type="checkbox" value="1" checked="checked"/><input name="mb" type="checkbox" value="2"/><input name="mb" type="checkbox" value="4"/>
 drag:
 <input name="mb" type="checkbox" value="65536"/>
+&gt;&gt; <input id="uihelper" type="checkbox" value="1"/>
 <br/>
 <input id="qrun" onclick="quick()" type="button" value="r"/><span id="run"></span> <span id="refcnt"></span> <span id="cnt"></span>
 <br/><span id="txt"></span>
