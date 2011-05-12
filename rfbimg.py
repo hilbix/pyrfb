@@ -18,7 +18,10 @@
 # Needs json (Python 2.6, should run under Python 2.5 with json.py added)
 #
 # $Log$
-# Revision 1.14  2011/04/24 22:36:09  tino
+# Revision 1.15  2011/05/12 12:03:13  tino
+# reduced debugging, better way to see what's going on
+#
+# Revision 1.14  2011-04-24 22:36:09  tino
 # unnamed screenshot created by date
 #
 # Revision 1.13  2011-03-30 21:30:57  tino
@@ -178,7 +181,7 @@ class rfbImg(easyrfb.client):
 	self.changed = 0
 
     def commitUpdate(self, vnc, rectangles=None):
-	print "commit %d %s %s" % ( self.count, len(rectangles), self.rect )
+#	print "commit %d %s %s" % ( self.count, len(rectangles), self.rect )
 
 	# Increment by the biggest batch seen so far
 	if self.changed > self.delta:
