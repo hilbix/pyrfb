@@ -2,7 +2,10 @@
 # $Header$
 #
 # $Log$
-# Revision 1.7  2011/04/30 22:12:58  tino
+# Revision 1.8  2011/05/12 12:00:32  tino
+# current
+#
+# Revision 1.7  2011-04-30 22:12:58  tino
 # ls command added, initial timeout is 3 seconds to be able to do something (rm)
 #
 # Revision 1.6  2011-04-24 22:37:43  tino
@@ -124,7 +127,8 @@ done
 
 needrestart=:
 
-tim=3
+tim=5
+./list
 while
 	if	read -rt$tim cmd
 	then
@@ -134,6 +138,7 @@ while
 		\!*)	cmd="${cmd:1}"
 			set -x
 			;;
+		[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]-[0-9][0-9][0-9][0-9][0-9][0-9])	rm -vf "todo/$cmd"; continue;;
 		[0-9]*)	./in $cmd
 			continue
 			;;
@@ -157,7 +162,7 @@ do
 	case "$next" in
 	'')		continue;;
 	[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]-[0-9][0-9][0-9][0-9][0-9][0-9])	;;
-	*)		echo -n " OOPS"; continue;;
+	*)		echo -n " OOPS"; mvatom -vappd todo.murx "$next"; continue;;
 	esac
 
 #	[ ".$next" = ".$last" ] || [ -z "$last" ] || echo
