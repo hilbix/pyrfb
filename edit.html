@@ -80,6 +80,8 @@ switch (e.keyCode)
       $$$("out",e.keyCode);
       return;
 
+    case 8: abortit(); return;
+
     case 37: x=-1; break;
     case 38: y=-1; break;
     case 39: x=1; break;
@@ -284,8 +286,8 @@ function dispimg(i)
 var e=$("show");
 if (e.src!=dispsrc || i!=dispi)
   {
-    e.onload = dispok;
     e.style.opacity = 0.5;
+    e.onload = dispok;
     e.src="learn/"+i+'?decache='+decache;
   }
 dispi = i;
@@ -389,6 +391,7 @@ for (var i=0; i<l.length; i++)
     x.push(__('option',___(l[i])));
 var e = __('select',x);
 e.onchange = selimg;
+e.onkeyup = selimg;
 var was="";
 try {
   was = currentsel();
