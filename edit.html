@@ -24,23 +24,25 @@ return x;
 var blink=false;
 var kbprocessing=true;
 var regiondiv, regiontxt;
+var blinker=0;
 function timer()
 {
 if (!blink || !kbprocessing || !regiondiv)
   return;
-if (regiondiv.style.background=="transparent")
+switch (++blinker)
   {
+  case 1:
     regiondiv.style.opacity = 0.5;
     regiondiv.style.background = "red";
-  }
-else if (regiondiv.style.background=="red")
-  {
+    break;
+  case 2:
     regiondiv.style.background = "blue";
-  }
-else
-  {
+    break;
+  default:
     regiondiv.style.opacity = 1;
     regiondiv.style.background = "transparent";
+    blinker = 0;
+    break;
   }
 }
 var text;
