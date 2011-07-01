@@ -18,7 +18,10 @@
 # Needs json (Python 2.6, should run under Python 2.5 with json.py added)
 #
 # $Log$
-# Revision 1.15  2011/05/12 12:03:13  tino
+# Revision 1.16  2011/07/01 14:00:45  tino
+# Update delay .3s and dirty force after 3s
+#
+# Revision 1.15  2011-05-12 12:03:13  tino
 # reduced debugging, better way to see what's going on
 #
 # Revision 1.14  2011-04-24 22:36:09  tino
@@ -84,6 +87,10 @@ class rfbImg(easyrfb.client):
     force = 0		# Force update in given count of timers
     changed = 0		# Changed pixel count in batch
     delta = 0		# Max delta seen so far before update
+    dirt = 0		# Dirty counter, if too high then force flush
+    sleep = 0		# Sleep counter, delay update if recently flushed
+    SLEEP_TIME = 3	# 0.3 seconds
+    DIRT_LEVEL = 40	# 4.0 seconds
 
     def __init__(self, argv, appname):
 	easyrfb.client.__init__(self, appname)
@@ -99,6 +106,8 @@ class rfbImg(easyrfb.client):
 	self.name = "rfbimg.jpg"
 	self.type = None
 	self.quality = None
+	self.dirt = 0
+	self.sleep = 0
 
 	if len(argv)>1:
 		self.loop = int(argv[1])==1
@@ -114,8 +123,10 @@ class rfbImg(easyrfb.client):
 	"""Called each 0.1 seconds when reactor is idle"""
 
 	if self.count>0:
+		self.dirt += 1
+		self.sleep -= 1
 		self.fuzz += self.width/10
-		if self.force==1 or self.width * self.height < self.count * 50 + self.fuzz:
+		if self.sleep<0 and ( self.dirt>self.DIRT_LEVEL or self.force==1 or self.width * self.height < self.count * 50 + self.fuzz ):
 			self.flush()
 	if self.force:
 		self.count += 1
@@ -130,9 +141,11 @@ class rfbImg(easyrfb.client):
 	The target is overwritten atomically by rename()
 	"""
 
+	self.sleep = self.SLEEP_TIME
 	self.count = 0
 	self.fuzz = 0
 	self.delta = 0
+	self.dirt = 0
 
 	self.write(self.name,self.type,self.quality)
 
