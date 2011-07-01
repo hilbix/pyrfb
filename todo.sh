@@ -2,7 +2,10 @@
 # $Header$
 #
 # $Log$
-# Revision 1.8  2011/05/12 12:00:32  tino
+# Revision 1.9  2011/07/01 13:59:40  tino
+# current
+#
+# Revision 1.8  2011-05-12 12:00:32  tino
 # current
 #
 # Revision 1.7  2011-04-30 22:12:58  tino
@@ -137,17 +140,17 @@ while
 		case "$cmd" in
 		\!*)	cmd="${cmd:1}"
 			set -x
+			d1 $cmd
+			set +x
+			echo
 			;;
-		[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]-[0-9][0-9][0-9][0-9][0-9][0-9])	rm -vf "todo/$cmd"; continue;;
-		[0-9]*)	./in $cmd
-			continue
-			;;
-		todo/[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]-[0-9][0-9][0-9][0-9][0-9][0-9])	rm -vf "$cmd"; continue;;
-		ls)	./list; continue;;
+		[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]-[0-9][0-9][0-9][0-9][0-9][0-9])	rm -vf "todo/$cmd"; tim=10;;
+		todo/[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]-[0-9][0-9][0-9][0-9][0-9][0-9])	rm -vf "$cmd"; tim=10;;
+		ls)	./list;;
+
+		[0-9]*)	./in $cmd;;
+		*)	./in 0 $cmd;;
 		esac
-		d1 $cmd
-		set +x
-		echo
 		continue
 	fi
 
@@ -173,5 +176,7 @@ do
 	run 3<"todo/$next"
 	echo -n " "
 	rm -vf "todo/$next"
+
+	tim=1
 done
 

@@ -7,7 +7,7 @@ dirlist todo
 
 run()
 {
-now=""
+now="."
 while	[ -z "$now" ] || [ ".$now" != ".$was" ] && ! keypressed && echo && echo "RETRY" && echo
 do
 	was="$now"
