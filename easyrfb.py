@@ -5,6 +5,9 @@
 # Easy wrapper around RFB library.
 # Hides all those ugly twisted stuff from you.
 #
+# This Works is placed under the terms of the Copyright Less License,
+# see file COPYRIGHT.CLL.  USE AT OWN RISK, ABSOLUTELY NO WARRANTY.
+#
 # Prepare:
 #	hg clone https://python-vnc-viewer.googlecode.com/hg/ python-vnc-viewer
 #	ln -s python-vnc-viewer/pyDes.py python-vnc-viewer/rfb.py .
@@ -28,11 +31,11 @@
 # To not call twisted twisted.internet.reactor.run() use .run() instead
 #
 # $Log$
-# Revision 1.2  2010/10/11 20:51:44  tino
-# Current
+# Revision 1.3  2011/08/07 18:24:36  tino
+# CLL
 #
-# Revision 1.1  2010-10-01 15:13:19  tino
-# added
+# Revision 1.2  2010-10-11 20:51:44  tino
+# Current
 
 import rfb
 import sys

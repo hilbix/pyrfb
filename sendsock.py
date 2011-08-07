@@ -4,8 +4,14 @@
 #
 # Send cmd to socket
 #
+# This Works is placed under the terms of the Copyright Less License,
+# see file COPYRIGHT.CLL.  USE AT OWN RISK, ABSOLUTELY NO WARRANTY.
+#
 # $Log$
-# Revision 1.2  2011/03/29 21:01:16  tino
+# Revision 1.3  2011/08/07 18:24:36  tino
+# CLL
+#
+# Revision 1.2  2011-03-29 21:01:16  tino
 # Working version with stdin support
 #
 # Revision 1.1  2011-01-21 16:23:02  tino

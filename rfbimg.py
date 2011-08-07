@@ -4,6 +4,9 @@
 #
 # Save RFB framebuffer to a file
 #
+# This Works is placed under the terms of the Copyright Less License,
+# see file COPYRIGHT.CLL.  USE AT OWN RISK, ABSOLUTELY NO WARRANTY.
+#
 # Usage:
 #	python rfbimg.py [0|1|2 [filename [type [quality]]]]
 # where:
@@ -18,7 +21,10 @@
 # Needs json (Python 2.6, should run under Python 2.5 with json.py added)
 #
 # $Log$
-# Revision 1.16  2011/07/01 14:00:45  tino
+# Revision 1.17  2011/08/07 18:24:36  tino
+# CLL
+#
+# Revision 1.16  2011-07-01 14:00:45  tino
 # Update delay .3s and dirty force after 3s
 #
 # Revision 1.15  2011-05-12 12:03:13  tino

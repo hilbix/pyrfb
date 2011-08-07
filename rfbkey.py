@@ -4,13 +4,18 @@
 #
 # Send keyboard input
 #
+# This Works is placed under the terms of the Copyright Less License,
+# see file COPYRIGHT.CLL.  USE AT OWN RISK, ABSOLUTELY NO WARRANTY.
+#
 # Usage:
 #	python rfbkey.py "string" "string" ...
 #
 # $Log$
-# Revision 1.1  2011/03/16 11:53:29  tino
-# __() ___()
+# Revision 1.2  2011/08/07 18:24:36  tino
+# CLL
 #
+# Revision 1.1  2011-03-16 11:53:29  tino
+# __() ___()
 
 import easyrfb
 

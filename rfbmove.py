@@ -4,6 +4,9 @@
 #
 # Move mouse on RFB
 #
+# This Works is placed under the terms of the Copyright Less License,
+# see file COPYRIGHT.CLL.  USE AT OWN RISK, ABSOLUTELY NO WARRANTY.
+#
 # Usage:
 #	python rfbimg.py x y 0|1|2|3
 # where:
@@ -12,9 +15,11 @@
 #	0 to 3 is the mouse button to click
 #
 # $Log$
-# Revision 1.1  2010/11/16 07:56:52  tino
-# Added example of simple mouse move
+# Revision 1.2  2011/08/07 18:24:36  tino
+# CLL
 #
+# Revision 1.1  2010-11-16 07:56:52  tino
+# Added example of simple mouse move
 
 import easyrfb
 
