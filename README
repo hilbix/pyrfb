@@ -1,19 +1,26 @@
 $Header$
 
+You need Python 2.6!
+
+Change into a secure directory and copy everything there.  Then do:
+	mkdir learn c e
+	chmod 1777 e
+
 Create a PHP web directory:
 	mkdir /var/www/vnc
 
 Link all neccessary things there:
-	for a in .sock ajax.js click.php learn run.html test.jpg
+	for a in .sock *.js *.php learn *.html test.jpg
 	do
-		ln -s "`realpath "$a"`" /var/www/vnc
+		ln -s "`realpath "$a"`" /var/www/vnc/
 	done
 
-Start:
+Start a local VNC server:
 	Xvnc4 :0 -desktop "`hostname -f`" -localhost -nolisten tcp -rfbwait 30000 -nopn -SecurityTypes None -geometry 1000x1100 :0
 
-Start:
-	./rfbimg.py 1 test.jpg JPEG 18
+Start image grabber, this currently is hardwired to 127.0.0.1:5900:
+	nice -99 ./rfbimg.py 1 test.jpg JPEG 18
+	# If this does not work look into easyrfb.py to see what it needs
 
 Open run.html in your browser:
 	echo http://`hostname -f`/vnc/run.html
@@ -22,8 +29,14 @@ Open run.html in your browser:
 If you want to do more:
 	Look into rfbmove.py
 
+License:
+	All work without Copyright is CLL, if not otherwise stated.
+	CLL is PD disallowing Copyrights.  See COPYRIGHT.CLL
+
 -Tino <webmaster@scylla-charybdis.com>
 $Log$
-Revision 1.1  2010/11/16 08:08:51  tino
-README added
+Revision 1.2  2011/08/07 18:33:43  tino
+some more notes added
 
+Revision 1.1  2010-11-16 08:08:51  tino
+README added
