@@ -1,8 +1,11 @@
 #!/bin/bash
+#
+# This Works is placed under the terms of the Copyright Less License,
+# see file COPYRIGHT.CLL.  USE AT OWN RISK, ABSOLUTELY NO WARRANTY.
 
 cd "`dirname "$0"`" || exit
 
-out="todo/todo$$"
+out="tmp/todo$$"
 
 OOPS()
 {
@@ -17,36 +20,22 @@ case "$mins" in
 *)			mins=0;;
 esac
 
-case "$mins" in
-*:*)	hours="${mins%%:*}"
-	mins="${mins##*:}"
-	let mins=hours*60+mins
-	;;
-esac
-
-case "$mins" in
-0)	;;
-*)	let ++mins || OOPS "nonnumeric $mins";;
-esac
-
 for script
 do
 	exec="${script##*/}"
         case "$exec" in
+	[0-9]|[0-9]*[0-9])	;;
 	*..*|*/*)	OOPS "$script";;
 	save|-)		echo "$exec"; continue;;
+	*)		[ -s "script/LINKS/$exec" ] && read -r exec < "script/LINKS/$exec"
+			exec="${exec//:/ }"
+			[ -s "script/${exec%% *}" ] || OOPS "unknown $exec"
+			;;
 	esac
-	[ -s "script/LINKS/$exec" ] && read -r exec < "script/LINKS/$exec"
-	exec="${exec//:/ }"
-	[ -s "script/${exec%% *}" ] || OOPS "unknown $exec"
 	echo "$exec"
-done >"$out"
+done > "$out"
 
-while	then="`date -d "+$mins min" +%Y%m%d-%H%M%S`"
-	! mvatom "$out" "todo/$then"
-do
-	sleep 1
-done
+./in.inc "$mins" "$out" || OOPS failed
 
 exec ./list
 
