@@ -5,8 +5,14 @@
 # THIS IS INHERENTLY INSECURE IF EXPOSED TO THE WORLD.
 # So protect it with BasicAuth and HTTPS, you have been warned.
 #
+# This Works is placed under the terms of the Copyright Less License,
+# see file COPYRIGHT.CLL.  USE AT OWN RISK, ABSOLUTELY NO WARRANTY.
+#
 # $Log$
-# Revision 1.4  2011/04/24 22:36:31  tino
+# Revision 1.5  2011/08/07 18:32:51  tino
+# CLL
+#
+# Revision 1.4  2011-04-24 22:36:31  tino
 # saner run (less warnings)
 #
 # Revision 1.3  2011-03-23 10:01:03  tino

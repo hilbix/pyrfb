@@ -3,8 +3,14 @@
 #
 # Simple edit wrapper.
 #
+# This Works is placed under the terms of the Copyright Less License,
+# see file COPYRIGHT.CLL.  USE AT OWN RISK, ABSOLUTELY NO WARRANTY.
+#
 # $Log$
-# Revision 1.2  2011/03/23 09:57:31  tino
+# Revision 1.3  2011/08/07 18:32:51  tino
+# CLL
+#
+# Revision 1.2  2011-03-23 09:57:31  tino
 # Tempates work now, but not so satisfyingly that I think I am ready
 #
 # Revision 1.1  2011-03-16 19:41:38  tino
