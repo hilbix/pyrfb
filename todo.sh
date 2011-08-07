@@ -1,8 +1,14 @@
 #!/bin/bash
 # $Header$
 #
+# This Works is placed under the terms of the Copyright Less License,
+# see file COPYRIGHT.CLL.  USE AT OWN RISK, ABSOLUTELY NO WARRANTY.
+#
 # $Log$
-# Revision 1.9  2011/07/01 13:59:40  tino
+# Revision 1.10  2011/08/07 18:32:05  tino
+# current and CLL
+#
+# Revision 1.9  2011-07-01 13:59:40  tino
 # current
 #
 # Revision 1.8  2011-05-12 12:00:32  tino
@@ -92,7 +98,7 @@ exe $2
 
 if [ -n "$snapshot" ]
 then
-	send flush
+	send next flush
 	cp test.jpg "c/$snapshot.jpg"
 	echo -n " $snapshot.jpg"
 fi
@@ -103,7 +109,14 @@ run()
 atexit=""
 while	read -ru3 cmd args
 do
-	d "$cmd" "$args"
+	case "$cmd" in
+	[0-9]|[0-9]*[0-9])	[ -z "$args" ] || cmd="$cmd:$args"
+				out="tmp/todo$$"
+				cat <&3 >"$out"
+				./in.inc "$cmd" "$out" || rm -vf "$out"
+				;;
+	*)			d "$cmd" "$args";;
+	esac
 done
 
 [ -n "$atexit" ] && d $atexit
