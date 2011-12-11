@@ -29,6 +29,7 @@ true
 while	! keypressed
 do
 	run
+	echo WARN waiting > /tmp/poststat.ok.10000.service.easyrfb
 	echo "WAITING"
 	while	[ ".$now" = ".$was" ] && ! keypressed 5000 && echo -n .
 	do

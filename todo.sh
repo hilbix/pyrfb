@@ -5,7 +5,10 @@
 # see file COPYRIGHT.CLL.  USE AT OWN RISK, ABSOLUTELY NO WARRANTY.
 #
 # $Log$
-# Revision 1.10  2011/08/07 18:32:05  tino
+# Revision 1.11  2011/12/11 17:24:40  tino
+# current scripts
+#
+# Revision 1.10  2011-08-07 18:32:05  tino
 # current and CLL
 #
 # Revision 1.9  2011-07-01 13:59:40  tino
@@ -161,6 +164,8 @@ while
 		todo/[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]-[0-9][0-9][0-9][0-9][0-9][0-9])	rm -vf "$cmd"; tim=10;;
 		ls)	./list;;
 
+		hold)	mvatom -d todo.hold todo/*;;
+
 		[0-9]*)	./in $cmd;;
 		*)	./in 0 $cmd;;
 		esac
@@ -169,6 +174,8 @@ while
 
 	now="$(date +%Y%m%d-%H%M%S)"
 	next="$(dirlist todo | sort | head -1)"
+
+	echo OK $now > /tmp/poststat.ok.10000.service.easyrfb
 
 	echo -n "$now $next "
 

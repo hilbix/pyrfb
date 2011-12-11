@@ -37,5 +37,16 @@ do
 	let secs++
 done
 
+dump()
+{
+while read -r a
+do
+	echo -n " -- $a"
+done < "$1"
+echo
+}
+
+echo "`date +%Y%m%d-%H%M%S` $then`dump "todo/$then"`" >> log/IN.log
+
 exit 0
 
