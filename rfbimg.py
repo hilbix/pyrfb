@@ -21,7 +21,10 @@
 # Needs json (Python 2.6, should run under Python 2.5 with json.py added)
 #
 # $Log$
-# Revision 1.17  2011/08/07 18:24:36  tino
+# Revision 1.18  2012/03/08 09:08:21  tino
+# current version, many improvements and detail changes
+#
+# Revision 1.17  2011-08-07 18:24:36  tino
 # CLL
 #
 # Revision 1.16  2011-07-01 14:00:45  tino
@@ -305,6 +308,8 @@ class rfbImg(easyrfb.client):
 	tpls = []
 	for l in templates:
 		f = l
+		if f=="": continue
+
 		# template	check if template matches
 		# !template	check if template does not match
 		# DO NOT USE FILENAMES STARTING WITH !
@@ -347,6 +352,7 @@ class rfbImg(easyrfb.client):
 			tpls.append({ 'name':l, 't':t, 'i':i, 'r':rects, 'cond':inv, 'search':search })
 		except Exception,e:
 			print traceback.format_exc()
+			return None
 	return tpls
 
     def check_waiter(self,waiter,debug=False):
@@ -491,10 +497,7 @@ class controlProtocol(LineReceiver):
 
 	def cmd_check(self,*templates):
 		w = {'t':templates}
-		if len(templates) and self.img.check_waiter(w, True):
-			self.print_wait(w)
-			return True
-		return False
+		return len(templates) and self.img.check_waiter(w, True) and self.print_wait(w)
 
 	def cmd_wait(self,*templates):
 		if len(templates)<2:
@@ -512,9 +515,11 @@ class controlProtocol(LineReceiver):
 				self.transport.write("found %s %s %s\n" % (w['name'], w['dx'], w['dy']))
 			else:
 				self.transport.write("spare %s\n" % (w['name']))
+			return True
 		else:
 			print "timeout"
 			self.transport.write("timeout\n")
+			return False
 
 	def wait_cb(self,waiter):
 		self.print_wait(waiter)

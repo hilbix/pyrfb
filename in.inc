@@ -32,7 +32,7 @@ esac
 
 secs=0
 while	then="`date -d "+$mins min +$secs sec" +%Y%m%d-%H%M%S`" || OOPS invalid date
-	! mvatom "$2" "todo/$then"
+	! mvatom "$2" "todo$3/$then"
 do
 	let secs++
 done
@@ -46,7 +46,7 @@ done < "$1"
 echo
 }
 
-echo "`date +%Y%m%d-%H%M%S` $then`dump "todo/$then"`" >> log/IN.log
+echo "`date +%Y%m%d-%H%M%S` $then`dump "todo$3/$then"`" >> log/"IN$3.log"
 
 exit 0
 

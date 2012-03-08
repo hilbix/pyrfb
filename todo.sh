@@ -5,7 +5,10 @@
 # see file COPYRIGHT.CLL.  USE AT OWN RISK, ABSOLUTELY NO WARRANTY.
 #
 # $Log$
-# Revision 1.11  2011/12/11 17:24:40  tino
+# Revision 1.12  2012/03/08 09:08:21  tino
+# current version, many improvements and detail changes
+#
+# Revision 1.11  2011-12-11 17:24:40  tino
 # current scripts
 #
 # Revision 1.10  2011-08-07 18:32:05  tino
@@ -67,6 +70,9 @@ exe()
 send()
 {
 sendresult="`./sendsock.py "$@"`"
+sendret="$?"
+#echo sendret=$sendret
+return $sendret
 }
 
 key()
@@ -183,7 +189,7 @@ do
 	tim=12
 
 	case "$next" in
-	'')		continue;;
+	'')		next="$(dirlist todo2 | sort | head -1)"; [ -z "$next" ] || mvatom -d todo "todo2/$next"; continue;;
 	[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]-[0-9][0-9][0-9][0-9][0-9][0-9])	;;
 	*)		echo -n " OOPS"; mvatom -vappd todo.murx "$next"; continue;;
 	esac

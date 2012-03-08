@@ -26,24 +26,24 @@ return x;
 }
 var blink=false;
 var kbprocessing=true;
-var regiondiv, regiontxt;
+var currentregion;
 var blinker=0;
 function timer()
 {
-if (!blink || !kbprocessing || !regiondiv)
+if (!blink || !kbprocessing || !currentregion)
   return;
 switch (++blinker)
   {
   case 1:
-    regiondiv.style.opacity = 0.5;
-    regiondiv.style.background = "red";
+    currentregion.regiondiv.style.opacity = 0.5;
+    currentregion.regiondiv.style.background = "red";
     break;
   case 2:
-    regiondiv.style.background = "blue";
+    currentregion.regiondiv.style.background = "blue";
     break;
   default:
-    regiondiv.style.opacity = 1;
-    regiondiv.style.background = "transparent";
+    currentregion.regiondiv.style.opacity = 1;
+    currentregion.regiondiv.style.background = "transparent";
     blinker = 0;
     break;
   }
@@ -69,6 +69,16 @@ function done(s)
 {
 out(text + "<br>"+s);
 }
+function evok(e)
+{
+  if (e)
+    {
+      e.cancelBubble = true;
+      if (e.stopPropagation)
+        e.stopPropagation();
+    }
+  return false;
+}
 function keyboard(e)
 {
 if (!kbprocessing)
@@ -85,7 +95,10 @@ switch (e.keyCode)
       $$$("out",e.keyCode);
       return;
 
-    case 8: abortit(); return;
+    case 109: orderregion(-1); return evok(e);
+    case 107: orderregion(+1); return evok(e);
+
+    case 8: abortit(); return evok(e);
 
     case 37: x=-1; break;
     case 38: y=-1; break;
@@ -112,9 +125,6 @@ switch (e.keyCode)
     case 75: d=-10000000; break;
     case 76: d=-100000000; break;
   }
-e.cancelBubble = true;
-if (e.stopPropagation)
-  e.stopPropagation();
 if (!e.ctrlKey)
   {
     x *= 16;
@@ -133,8 +143,8 @@ else
   }
 r[0] = Math.max(0,r[0]+d);
 dirt();
-fixregion(current,regiondiv,regiontxt);
-return false;
+fixregion(currentregion);
+return evok(e);
 }
 function modder(mod)
 {
@@ -159,8 +169,10 @@ function selregion()
 current = this.regionnr;
 regions();
 }
-function fixregion(i,e,t)
+function fixregion(t)
 {
+  var i = t.regionnr;
+  var e = t.regiondiv;
   var r = edit.r[i];
 
   e.style.left = r[1]+'px';
@@ -175,6 +187,7 @@ var current;
 var colors=['000000','ff0000','00ff00','0000ff'];
 function regions()
 {
+currentregion = null;
 if (!edit.r)
   edit.r = [];
 var x=[], y=[];
@@ -190,8 +203,7 @@ for (var i=0; i<edit.r.length; i++)
 
     if (i==current)
       {
-	regiondiv = e;
-	regiontxt = t;
+	currentregion = t;
 	t.style.color = "red";
       }
     else
@@ -200,7 +212,7 @@ for (var i=0; i<edit.r.length; i++)
         t.onmouseover = hilight;
         t.onmouseout = lolight;
       }
-    fixregion(i,e,t);
+    fixregion(t);
     x.push(e);
     a = _a_('#',mkdelregion(i),___("X"));
     y.push(__("li",___("[ ",a," ] ",t)));
@@ -210,14 +222,14 @@ clear("regionlist",__("ul",y));
 }
 function mkdelregion(i)
 {
-  return function(){delregion(i)}
+  return function(e){return delregion(i,e)}
 }
-function delregion(r)
+function delregion(r,e)
 {
 edit.r.splice(r,1)
 dirt();
 regions();
-return false;
+return evok(e);
 }
 function ed(e)
 {

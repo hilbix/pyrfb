@@ -9,7 +9,6 @@ for a
 do
 	b="${a#*/}"
 	b="${b%.tpl}"
-	./sendsock.py "check $b" >/dev/null &&
-	echo -n " $b"
+	./sendsock.py "check $b" >/dev/null && echo -n " $b"
 done
 echo
