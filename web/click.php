@@ -1,6 +1,4 @@
-<?
-# $Header$
-#
+<?php
 # Simple PHP wrapper to forward commands to rfbimg.py socket.
 # THIS IS INHERENTLY INSECURE IF EXPOSED TO THE WORLD.
 # So protect it with BasicAuth and HTTPS, you have been warned.
@@ -8,24 +6,21 @@
 # This Works is placed under the terms of the Copyright Less License,
 # see file COPYRIGHT.CLL.  USE AT OWN RISK, ABSOLUTELY NO WARRANTY.
 #
-# $Log$
-# Revision 1.5  2011/08/07 18:32:51  tino
-# CLL
+# send charcode:	c=charcode
+# send text:		t=lines-of-text
+# move mouse:		x=xcoord&y=ycoord
+# mouse click:		x=xcoord&y=ycoord&b=mousebuttons
+# mouse drag:		x=xcoord&y=ycoord&b=$[mousebuttons+65536]
+# learn (save) image:	l=name
 #
-# Revision 1.4  2011-04-24 22:36:31  tino
-# saner run (less warnings)
-#
-# Revision 1.3  2011-03-23 10:01:03  tino
-# Mouse button select
-#
-# Revision 1.2  2010-11-16 08:08:51  tino
-# README added
+# mousebuttons are a bitmask of pressed buttons
+# if name is empty on learn, a default name (screen-TIMESTAMP) us used
 
 header("Content-type: text/plain");
 header("Pragma: no-cache");
 header("Expires: -1");
 
-$fd = fsockopen("unix://.sock");
+$fd = fsockopen("unix://../.sock");
 socket_set_blocking($fd,0);
 $o="";
 $s="";
@@ -67,4 +62,3 @@ fflush($fd);
 fclose($fd);
 echo $s;
 flush();
-?>

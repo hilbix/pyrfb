@@ -1,6 +1,4 @@
-#!/usr/bin/env python2.6
-#
-# $Header$
+#!/usr/bin/env python2.7
 #
 # Save RFB framebuffer to a file
 #
@@ -11,7 +9,7 @@
 #	python rfbimg.py [0|1|2 [filename [type [quality]]]]
 # where:
 #	0==oneshot (default)
-#	1==loop mode
+#	1==loop mode (creates .sock for automation)
 #	2==oneshot, try to ignore mouse
 #	filename is rfbimg.jpg by default
 #	type is autodetect, can be "JPEG" or "BMP" etc.
@@ -19,48 +17,10 @@
 #
 # Needs python-imaging (PIL)
 # Needs json (Python 2.6, should run under Python 2.5 with json.py added)
-#
-# $Log$
-# Revision 1.18  2012/03/08 09:08:21  tino
-# current version, many improvements and detail changes
-#
-# Revision 1.17  2011-08-07 18:24:36  tino
-# CLL
-#
-# Revision 1.16  2011-07-01 14:00:45  tino
-# Update delay .3s and dirty force after 3s
-#
-# Revision 1.15  2011-05-12 12:03:13  tino
-# reduced debugging, better way to see what's going on
-#
-# Revision 1.14  2011-04-24 22:36:09  tino
-# unnamed screenshot created by date
-#
-# Revision 1.13  2011-03-30 21:30:57  tino
-# searching and cmd_flush
-#
-# Revision 1.12  2011-03-29 21:00:51  tino
-# cmd_next and non-pixel-perfect matching
-#
-# Revision 1.11  2011-03-23 09:57:31  tino
-# Tempates work now, but not so satisfyingly that I think I am ready
-#
-# Revision 1.10  2011-03-17 11:37:27  tino
-# Better counting: Count the biggest batch seen until update is pushed
-#
-# Revision 1.9  2011-03-17 00:17:15  tino
-# Update now only done in timer
-#
-# Revision 1.5  2010-11-16 07:46:37  tino
-# Key codes
-#
-# Revision 1.4  2010-10-23 20:17:15  tino
-# Commands
 
 import easyrfb
 import json
 
-import sys
 import os
 import io
 import re
@@ -101,8 +61,8 @@ class rfbImg(easyrfb.client):
     SLEEP_TIME = 3	# 0.3 seconds
     DIRT_LEVEL = 40	# 4.0 seconds
 
-    def __init__(self, argv, appname):
-	easyrfb.client.__init__(self, appname)
+    def __init__(self, appname, loop=False, mouse=True, name="rfbimg.jpg", type=None, quality=None):
+	super(self, rfbImg).__init__(self, appname)
 
 	# Start the timer
 	self._timer = twisted.internet.task.LoopingCall(self.timer);
@@ -110,23 +70,13 @@ class rfbImg(easyrfb.client):
 
 	# Remember the args
 
-	self.loop = False
-	self.mouse = True
-	self.name = "rfbimg.jpg"
-	self.type = None
-	self.quality = None
+	self.loop = loop
+	self.mouse = mouse
+	self.name = name
+	self.type = type
+	self.quality = quality
 	self.dirt = 0
 	self.sleep = 0
-
-	if len(argv)>1:
-		self.loop = int(argv[1])==1
-		self.mouse = int(argv[1])<2
-	if len(argv)>2:
-		self.name = argv[2]
-	if len(argv)>3:
-		self.type = argv[3]
-	if len(argv)>4:
-		self.quality = int(argv[4])
 
     def timer(self):
 	"""Called each 0.1 seconds when reactor is idle"""
@@ -156,17 +106,15 @@ class rfbImg(easyrfb.client):
 	self.delta = 0
 	self.dirt = 0
 
-	self.write(self.name,self.type,self.quality)
+	self.write(self.name, self.type, quality=self.quality)
 
-    def write(self,name,type=None,quality=None):
+    def write(self,name, type=None, quality=None):
 	tmp = os.path.splitext(name)
 	tmp = tmp[0]+".tmp"+tmp[1]
-	if quality!=None:
+	if quality is None:
 		self.img.convert('RGB').save(tmp, type, quality=quality)
-	elif type!=None:
-		self.img.convert('RGB').save(tmp, type)
 	else:
-		self.img.convert('RGB').save(tmp)
+		self.img.convert('RGB').save(tmp, type)
 	os.rename(tmp,name)
 
 	print "out %s" % ( name )
@@ -176,7 +124,7 @@ class rfbImg(easyrfb.client):
 	self.myVNC = vnc
 
     def vncConnectionMade(self, vnc):
-	easyrfb.client.vncConnectionMade(self, vnc)
+	super(self, rfbImg).vncConnectionMade(self, vnc)
 
 	self.width = vnc.width
 	self.height = vnc.height
@@ -220,7 +168,7 @@ class rfbImg(easyrfb.client):
 
     def pointer(self,x,y,click=None):
 	self.force = 2
-	if click == None:
+	if click is None:
 		click = 0
 	self.myVNC.pointerEvent(x, y, click)
 
@@ -387,7 +335,7 @@ class rfbImg(easyrfb.client):
 		w['retries'] -= 1
 		if w['retries']<0:
 			del self.waiting[i]
-			w['match']=None
+			w['match'] = None
 			w['cb'](w)
 			return
 
@@ -447,10 +395,10 @@ class controlProtocol(LineReceiver):
 		if self.bye:
 			self.transport.loseConnection()
 
-	def cmd_mouse(self,x,y,click=None):
+	def cmd_mouse(self, x, y, click=None):
 		x = int(x)
 		y = int(y)
-		if click!=None:
+		if click is None:
 			click = int(click)
 		self.img.pointer(x,y,click)
 		return True
@@ -535,6 +483,9 @@ class controlProtocol(LineReceiver):
 	def pause(self):
 		self.transport.pauseProducing()
 
+	def ping(self):
+		self.sendLine("PONG");
+
 from twisted.internet import reactor
 class createControl(twisted.internet.protocol.Factory):
 	protocol = controlProtocol
@@ -547,8 +498,25 @@ class createControl(twisted.internet.protocol.Factory):
 			pass
 		reactor.listenUNIX(sockname,self)
 
+import sys
+
+# Why is option processing always so complex?
+# Why is there no easy and extremely simple to use standard?
+#	python rfbimg.py [0|1|2 [filename [type [quality]]]]
+class parseArgs(object):
+	def __init__(self, args=None):
+
+		if args is None:
+			args = sys.argv
+		self.arg0 = args[0]
+
+class parseRfbArgs(parseArgs):
+	opts = [ 'host:', 'loop=.sock', 'img=rfbimg.jpg', 'type', 'quality#', 'mouse' ];
+
 if __name__=='__main__':
-	img = rfbImg(sys.argv,"RFB image writer")
+	opts = parseRfbArgs()
+        
+	img = rfbImg(sys.argv[1:], "RFB image writer")
 	if img.loop:
 		createControl(".sock", img)
 	img.run()
