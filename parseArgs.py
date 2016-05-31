@@ -9,6 +9,7 @@
 #
 
 import sys
+from __future__ import print_function
 
 # Why is option processing always so complex?
 # Why is there no easy and extremely simple to use standard?
@@ -21,7 +22,7 @@ args = parseArgs(Null, [ argumentdef ], "Usage-text")
 
 class MyArgs(parseArgs):
 	usage = "Usage-Text"
-	opts = [ argumentdef ]
+	args = [ argumentdef ]
 	
 	def parse_TYPE(self, arg, rest, args):
 		if rest is None:
@@ -32,12 +33,14 @@ class MyArgs(parseArgs):
 
 args = MyArgs()
 
-# You then get the arguments dict as:
-	args.get_dict("name1 name2 name3")
-# or as array:
+# Get arguments as array:
 	args.get_list("name1 name2 name3")
+# or as dict:
+	args.get_dict("name1 name2 name3")
+# or as dict with renaming:
+	args.get_dict("name1:nameA name2:nameB name3:nameC")
 
-# adugmentdef is a comma separated list of strings as follows:
+# argumentdef is a comma separated list of strings, as follows:
 
 'name'		binary option, False by default
 'name?'		ternary: None (default), True, False
@@ -52,21 +55,26 @@ Predefined types, replace ',TYPE,':
 '##'		numeric (floating point)
 ':'		'host:port'
 
+Additional variants you can set:
+
+	parseArgs.delim='--'
+	parseArgs.first=['-','--']	# use '' for DD type args
+	parseArgs.assing=['=']
 	"""
-	def __init__(self, args=None):
 
-		if args is None:
-			args = sys.argv
-		self.arg0 = args[0]
+	slef
+	def __init__(self, argv=None, args=None, usage=None):
 
-class parseRfbArgs(parseArgs):
-	opts = [ 'host:', 'loop=.sock', 'img=rfbimg.jpg', 'type', 'quality#', 'mouse' ];
+		if argv is None:
+			argv = sys.argv
+		self.arg0 = argv[0]
 
-if __name__=='__main__':
-	opts = parseRfbArgs()
-        
-	img = rfbImg(sys.argv[1:], "RFB image writer")
-	if img.loop:
-		createControl(".sock", img)
-	img.run()
+		if args is None:  args  = self.args
+		if usage is None: usage = self.usage
+
+		
+
+	def usage(self):
+		print("Usage: {0}", self.arg0)
+		sys.exit(42)
 

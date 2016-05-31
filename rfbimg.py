@@ -20,6 +20,7 @@
 
 import easyrfb
 import json
+import parseArgs
 
 import os
 import io
@@ -498,7 +499,6 @@ class createControl(twisted.internet.protocol.Factory):
 			pass
 		reactor.listenUNIX(sockname,self)
 
-import sys
 
 # Why is option processing always so complex?
 # Why is there no easy and extremely simple to use standard?
@@ -510,13 +510,13 @@ class parseArgs(object):
 			args = sys.argv
 		self.arg0 = args[0]
 
-class parseRfbArgs(parseArgs):
+class parseRfbArgs(parseArgs.parseArgs):
 	opts = [ 'host:', 'loop=.sock', 'img=rfbimg.jpg', 'type', 'quality#', 'mouse' ];
 
 if __name__=='__main__':
 	opts = parseRfbArgs()
         
-	img = rfbImg(sys.argv[1:], "RFB image writer")
+	img = rfbImg("RFB image writer", **opts.get_dict("loop mouse name type quality"))
 	if img.loop:
 		createControl(".sock", img)
 	img.run()
