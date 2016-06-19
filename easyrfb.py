@@ -1,7 +1,5 @@
 #!/usr/bin/env python
 #
-# $Header$
-#
 # Easy wrapper around RFB library.
 # Hides all those ugly twisted stuff from you.
 #
@@ -29,13 +27,6 @@
 # To set another logging than sys.stdout use: .logging(...).
 # To set another twisted application use:     .application(...).
 # To not call twisted twisted.internet.reactor.run() use .run() instead
-#
-# $Log$
-# Revision 1.3  2011/08/07 18:24:36  tino
-# CLL
-#
-# Revision 1.2  2010-10-11 20:51:44  tino
-# Current
 
 import rfb
 import sys
@@ -160,5 +151,11 @@ class client(object):
 	self.stop()
 
 if __name__=='__main__':
-	client().run()
+	# host port password
+	args = {}
+	if len(sys.argv)>1: args["host"    ] = sys.argv[1]
+	if len(sys.argv)>2: args["port"    ] = int(sys.argv[2])
+	if len(sys.argv)>3: args["password"] = sys.argv[3]
+	if len(sys.argv)>4: args["shared"  ] = int(sys.argv[4])
+	client(**args).run()
 

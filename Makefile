@@ -12,3 +12,6 @@ web/c web/e:
 web/learn:
 	mkdir -m 775 web/learn
 
+clean:
+	rm -f *.pyc
+
