@@ -20,7 +20,6 @@
 
 import easyrfb
 import json
-import parseArgs
 
 import os
 import io
@@ -62,8 +61,15 @@ class rfbImg(easyrfb.client):
     SLEEP_TIME = 3	# 0.3 seconds
     DIRT_LEVEL = 40	# 4.0 seconds
 
-    def __init__(self, appname, loop=False, mouse=True, name="rfbimg.jpg", type=None, quality=None):
-	super(self, rfbImg).__init__(self, appname)
+    def __init__(self, appname, loop=None, mouse=None, name=None, type=None, quality=None):
+	super(rfbImg, self).__init__(appname)
+
+	if loop is None:	loop	=     self._preset("RFBIMGLOOP", '0') != '0'
+	if mouse is None:	mouse	=     self._preset("RFBIMGMOUSE", '1') != '0'
+	if name is None:	name	=     self._preset("RFBIMGNAME", 'rfbimg.jpg');
+	if type is None:	type	=     self._preset("RFBIMGTYPE", None);
+	if quality is None:	quality	=     self._preset("RFBIMGQUALITY", None);
+	if quality is not None:	quality = int(quality)
 
 	# Start the timer
 	self._timer = twisted.internet.task.LoopingCall(self.timer);
@@ -125,7 +131,7 @@ class rfbImg(easyrfb.client):
 	self.myVNC = vnc
 
     def vncConnectionMade(self, vnc):
-	super(self, rfbImg).vncConnectionMade(self, vnc)
+	super(rfbImg, self).vncConnectionMade(vnc)
 
 	self.width = vnc.width
 	self.height = vnc.height
@@ -500,23 +506,8 @@ class createControl(twisted.internet.protocol.Factory):
 		reactor.listenUNIX(sockname,self)
 
 
-# Why is option processing always so complex?
-# Why is there no easy and extremely simple to use standard?
-#	python rfbimg.py [0|1|2 [filename [type [quality]]]]
-class parseArgs(object):
-	def __init__(self, args=None):
-
-		if args is None:
-			args = sys.argv
-		self.arg0 = args[0]
-
-class parseRfbArgs(parseArgs.parseArgs):
-	opts = [ 'host:', 'loop=.sock', 'img=rfbimg.jpg', 'type', 'quality#', 'mouse' ];
-
 if __name__=='__main__':
-	opts = parseRfbArgs()
-        
-	img = rfbImg("RFB image writer", **opts.get_dict("loop mouse name type quality"))
+	img = rfbImg("RFB image writer")
 	if img.loop:
 		createControl(".sock", img)
 	img.run()
