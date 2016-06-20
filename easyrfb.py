@@ -28,9 +28,19 @@
 # To set another twisted application use:     .application(...).
 # To not call twisted twisted.internet.reactor.run() use .run() instead
 
-import rfb
+import os
 import sys
 import twisted
+import rfb
+
+def getKeys():
+	"""getKeys() returns an unsorted list of arguments, getKey() knows about"""
+	return [ s[4:] for s in rfb.__dict__ if s.startswith('KEY_') ]
+
+def getKey(s):
+	"""getKey(key) returns truthy Key value if given key is known, false otherwise"""
+	s = 'KEY_'+s
+	return s in rfb.__dict__ and rfb.__dict__[s]
 
 class FunnelRfbProtocol(rfb.RFBClient):
 
@@ -71,13 +81,24 @@ class FunnelRfbFactory(rfb.RFBFactory):
 # Easy and simple as it ought to be!
 # With reasonable defaults, ready to use.
 class client(object):
-    def __init__(self, appname='generic RFB client', host='127.0.0.1', port=5900, password=None, shared=1):
+    def __init__(self, appname='generic RFB client', host=None, port=None, password=None, shared=None):
+
+	if host is None:	host     =     self._preset("EASYRFBHOST", '127.0.0.1')
+	if port is None:	port     = int(self._preset("EASYRFBPORT", '5900'), 0)
+	if password is None:	password =     self._preset("EASYRFBPASS", None)
+	if shared is None:	shared   = int(self._preset("EASYRFBSHARED", '1'), 0)
+
 	self.appname = appname
 	self.control = False
 	self.started = False
 	self.app = None
 	self.log = None
 	self.vnc = twisted.application.internet.TCPClient(host, port, FunnelRfbFactory(self, password, shared))
+
+    def _preset(self, env, default):
+	if env in os.environ and os.environ[env]!='':
+		return os.environ[env]
+	return default
 
     def application(self, app):
 	self.app = app
@@ -88,7 +109,7 @@ class client(object):
 	return self
 
     def start(self):
-	if self.log == None:
+	if self.log is None:
 		self.log = sys.stdout
 	if self.log:
 		twisted.python.log.startLogging(self.log)
