@@ -405,7 +405,7 @@ class controlProtocol(LineReceiver):
 	def cmd_mouse(self, x, y, click=None):
 		x = int(x)
 		y = int(y)
-		if click is None:
+		if click is not None:
 			click = int(click)
 		self.img.pointer(x,y,click)
 		return True
