@@ -28,7 +28,7 @@ import re
 import time
 
 import twisted
-from PIL import Image,ImageChops,ImageStat
+from PIL import Image,ImageChops,ImageStat,ImageDraw
 
 LEARNDIR='learn/'
 IMGEXT='.png'
@@ -63,16 +63,17 @@ class rfbImg(easyrfb.client):
     SLEEP_TIME = 3	# 0.3 seconds
     DIRT_LEVEL = 40	# 4.0 seconds
 
-    def __init__(self, appname, loop=None, mouse=None, name=None, type=None, quality=None):
+    def __init__(self, appname, loop=None, mouse=None, name=None, type=None, quality=None, viz=None):
 	super(rfbImg, self).__init__(appname)
 	self.logging()
 
-	if loop is None:	loop	=     self._preset("RFBIMGLOOP", '0') != '0'
-	if mouse is None:	mouse	=     self._preset("RFBIMGMOUSE", '1') != '0'
-	if name is None:	name	=     self._preset("RFBIMGNAME", 'rfbimg.jpg');
-	if type is None:	type	=     self._preset("RFBIMGTYPE", None);
-	if quality is None:	quality	=     self._preset("RFBIMGQUALITY", None);
+	if loop is None:	loop	= self._preset("RFBIMGLOOP", '0') != '0'
+	if mouse is None:	mouse	= self._preset("RFBIMGMOUSE", '1') != '0'
+	if name is None:	name	= self._preset("RFBIMGNAME", 'rfbimg.jpg');
+	if type is None:	type	= self._preset("RFBIMGTYPE", None);
+	if quality is None:	quality	= self._preset("RFBIMGQUALITY", None);
 	if quality is not None:	quality = int(quality)
+	if viz is None:		viz	= self._preset("RFBIMGVIZ", '0') != '0';
 
 	self.log("init", loop=loop, mouse=mouse, name=name, type=type, qual=quality)
 
@@ -89,6 +90,10 @@ class rfbImg(easyrfb.client):
 	self.quality = quality
 	self.dirt = 0
 	self.sleep = 0
+	self.skips	= 0
+
+	self.viz	= None
+	self.vizualize	= viz
 
     def timer(self):
 	"""Called each 0.1 seconds when reactor is idle"""
@@ -113,25 +118,41 @@ class rfbImg(easyrfb.client):
 	"""
 
 	self.sleep = self.SLEEP_TIME
+
+	self.write(self.name, self.type)
+
 	self.count = 0
 	self.fuzz = 0
 	self.delta = 0
 	self.dirt = 0
-
-	self.write(self.name, self.type)
+	self.skips = 0
 
     def write(self,name, type=None, quality=None):
 	tmp = os.path.splitext(name)
 	tmp = tmp[0]+".tmp"+tmp[1]
+
+	img	= self.img
+	if self.viz:
+		img	= self.img.copy()
+		img.paste(self.viz, (0,0), self.viz)
+
+	if self.vizualize:
+		old		= self.viz
+		self.viz	= Image.new('RGBA',(self.width,self.height),(0,0,0,0))
+		if old:
+			self.viz	= Image.blend(self.viz, old, alpha=.75)
+		self.vizdraw	= ImageDraw.Draw(self.viz)
+
 	if quality is None:
 		quality	= self.quality
 	if quality is None:
-		self.img.convert('RGB').save(tmp, type)
+		img.convert('RGB').save(tmp, type)
 	else:
-		self.img.convert('RGB').save(tmp, type, quality=quality)
+		img.convert('RGB').save(tmp, type, quality=quality)
 	os.rename(tmp,name)
 
-	self.log("out", name=name)
+	img	= None
+	self.log("out", name=name, skips=self.skips, count=self.count, fuzz=self.fuzz, delta=self.delta, dirt=self.dirt)
 
     def connectionMade(self, vnc):
 	self.log("connection made")
@@ -151,21 +172,31 @@ class rfbImg(easyrfb.client):
 	if x==0 and y==0 and width==self.width and height==self.height:
 		# Optimization on complete screen refresh
 		self.img = img
-	elif self.mouse:
-		# Skip update if nothing changed
-		#if ImageChops.difference(img,self.img.crop((x,y,x+width,y+height))).getbbox() is None:	return
-		#print ImageChops.difference(img,self.img.crop((x,y,x+width,y+height))).getbbox()
-		# If not looping this apparently updates the mouse cursor
+	elif self.loop or self.mouse:
+		# Skip counting update if nothing changed
+		st = ImageStat.Stat(ImageChops.difference(img,self.img.crop((x,y,x+width,y+height))))
 		self.img.paste(img,(x,y))
 
-	self.changed += width*height
-	self.rect = [ x,y,width,height ]
+		#print ImageChops.difference(img,self.img.crop((x,y,x+width,y+height))).getbbox()
+		# If not looping this apparently updates the mouse cursor
+		delta = reduce(lambda x,y:x+y, st.sum2)
+		if delta<100*width*height:
+			self.skips += 1
+			if self.viz:
+				self.vizdraw.rectangle((x,y,x+width,y+height),outline=(0,0,255,255))
+			return
+
+		if self.viz:
+			self.vizdraw.rectangle((x,y,x+width,y+height),outline=(255,0,0,255))
+
+	self.changed	+= width*height
+#	self.rect = [ x,y,width,height ]
 
     def beginUpdate(self, vnc):
 	self.changed = 0
 
     def commitUpdate(self, vnc, rectangles=None):
-#	print "commit %d %s %s" % ( self.count, len(rectangles), self.rect )
+	#print "commit %d %s %s" % ( self.count, len(rectangles), self.rect )
 
 	# Increment by the biggest batch seen so far
 	if self.changed > self.delta:
