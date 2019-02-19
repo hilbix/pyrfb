@@ -15,3 +15,6 @@ web/learn:
 clean:
 	rm -f *.pyc
 
+debian:
+	sudo apt-get install python-twisted python-pil
+
