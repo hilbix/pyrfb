@@ -1,22 +1,33 @@
-#!/usr/bin/env python2.7
+#!/usr/bin/env python
 #
 # Save RFB framebuffer to a file
+# or run in a loop and also send commands to VNC through socket
+#
+# Needs python-imaging (PIL)
+# Needs json
+# Tested for python 2.7
 #
 # This Works is placed under the terms of the Copyright Less License,
 # see file COPYRIGHT.CLL.  USE AT OWN RISK, ABSOLUTELY NO WARRANTY.
 #
 # Usage:
-#	python rfbimg.py [0|1|2 [filename [type [quality]]]]
+#	SETTING=VALUE SETTING=VALUE python rfbimg.py
 # where:
-#	0==oneshot (default)
-#	1==loop mode (creates .sock for automation)
-#	2==oneshot, try to ignore mouse
-#	filename is rfbimg.jpg by default
-#	type is autodetect, can be "JPEG" or "BMP" etc.
-#	quality is unset, can be JPEG-quality (like 15) in percent
-#
-# Needs python-imaging (PIL)
-# Needs json (Python 2.6, should run under Python 2.5 with json.py added)
+#	RFBIMGLOOP=0	oneshot (default)
+#	RFBIMGLOOP=1	loop mode, creates RFBIMGSOCK for automation
+#	RFBIMGSOCK=	name of the control socket for RFBIMGLOOP=1, default: .sock
+#	RFBIMGMOUSE=0	try not to include mouse in oneshot
+#	RFBIMGMOUSE=1	include mouse in oneshot
+#	RFBIMGNAME=rfbimg.jpg	name of the file written
+#	RFBIMGTYPE=	JPEG, BMP, etc.  Default (empty): autodetect
+#	RFBIMGQUALITY=	image quality in percent.  Default (empty): default quality
+#	RFBIMGVIZ=0	do not vizualize changes (default)
+#	RFBIMGVIZ=1	vizualize changes
+#	EASYRFBHOST=	VNC IP to connect to, default 127.0.0.1
+#	EASYRFBPORT=	VNC port to connect to, default 5900
+#	EASYRFBSHARED=0	do not use shared session
+#	EASYRFBSHARED=1	use shared session (default)
+#	EASYRFBPASS=	VNC password, default: no password (Untested with passwords)
 
 import easyrfb
 import json
@@ -546,7 +557,7 @@ class createControl(twisted.internet.protocol.Factory):
 if __name__=='__main__':
 	img	= rfbImg("RFB image writer")
 	if img.loop:
-		createControl(".sock", img)
+		createControl(img._preset("RFBIMGSOCK", '.sock'), img)
 
 	img.run()
 
