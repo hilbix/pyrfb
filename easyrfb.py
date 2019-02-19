@@ -44,38 +44,37 @@ def getKey(s):
 
 class FunnelRfbProtocol(rfb.RFBClient):
 
-    def connectionMade(self):
-	self.factory.wrap.connectionMade(self)
+	def connectionMade(self):
+		self.factory.wrap.connectionMade(self)
 
-    def vncConnectionMade(self):
-	self.factory.wrap.vncConnectionMade(self)
+	def vncConnectionMade(self):
+		self.factory.wrap.vncConnectionMade(self)
 
-    def beginUpdate(self):
-	self.factory.wrap.beginUpdate(self)
+	def beginUpdate(self):
+		self.factory.wrap.beginUpdate(self)
 
-    def updateRectangle(self, x, y, width, height, data):
-	self.factory.wrap.updateRectangle(self, x, y, width, height, data)
+	def updateRectangle(self, x, y, width, height, data):
+		self.factory.wrap.updateRectangle(self, x, y, width, height, data)
 
-    def commitUpdate(self, rectangles=None):
-	self.factory.wrap.commitUpdate(self, rectangles)
+	def commitUpdate(self, rectangles=None):
+		self.factory.wrap.commitUpdate(self, rectangles)
 
 # This just funnels everything to the wrapper
 class FunnelRfbFactory(rfb.RFBFactory):
-    protocol = FunnelRfbProtocol
+	protocol = FunnelRfbProtocol
 
-    def __init__(self, wrapper, password=None, shared=1):
-	self.wrap = wrapper
-	rfb.RFBFactory.__init__(self, password, shared)
+	def __init__(self, wrapper, password=None, shared=1):
+		self.wrap = wrapper
+		rfb.RFBFactory.__init__(self, password, shared)
 
-    def buildProtocol(self, addr):
-        return rfb.RFBFactory.buildProtocol(self, addr)
+	def buildProtocol(self, addr):
+		return rfb.RFBFactory.buildProtocol(self, addr)
 
-    def clientConnectionLost(self, connector, reason):
-        print "connection lost:", reason
-	self.wrap.clientConnectionLost(self, connector, reason)
+	def clientConnectionLost(self, connector, reason):
+		self.wrap.clientConnectionLost(self, connector, reason)
 
-    def clientConnectionFailed(self, connector, reason):
-	self.wrap.clientConnectionFailed(self, connector, reason)
+	def clientConnectionFailed(self, connector, reason):
+		self.wrap.clientConnectionFailed(self, connector, reason)
 
 # Here we can have everything at one place
 # Easy and simple as it ought to be!
@@ -88,12 +87,12 @@ class client(object):
 	if password is None:	password =     self._preset("EASYRFBPASS", None)
 	if shared is None:	shared   = int(self._preset("EASYRFBSHARED", '1'), 0)
 
-	self.appname = appname
-	self.control = False
-	self.started = False
-	self.app = None
-	self.log = None
-	self.vnc = twisted.application.internet.TCPClient(host, port, FunnelRfbFactory(self, password, shared))
+	self.appname	= appname
+	self.control	= False
+	self.started	= False
+	self.app	= None
+	self.logger	= None
+	self.vnc	= twisted.application.internet.TCPClient(host, port, FunnelRfbFactory(self, password, shared))
 
     def _preset(self, env, default):
 	if env in os.environ and os.environ[env]!='':
@@ -104,17 +103,18 @@ class client(object):
 	self.app = app
 	return self
 
-    def logging(self, log):
-	self.log = log
+    def log(self, *args, **kw):
+	if self.logger:
+		print(" ".join(tuple(str(v) for v in args)+tuple(str(n)+"="+str(v) for n,v in kw.iteritems())))
+
+    def logging(self, log=sys.stdout):
+	self.logger = log
+	twisted.python.log.startLogging(log)
 	return self
 
     def start(self):
-	if self.log is None:
-		self.log = sys.stdout
-	if self.log:
-		twisted.python.log.startLogging(self.log)
 	self.vnc.setServiceParent(twisted.application.service.Application(self.appname))
-	print "starting service:",self.appname
+	self.log("starting service:", self.appname)
 	self.vnc.startService()
 	self.started = True
 	return self
@@ -122,12 +122,12 @@ class client(object):
     def stop(self):
 	if self.started:
 		self.started = False
-		print "stopping service"
+		self.log("stopping service")
 		self.vnc.stopService()
 
     def run(self):
 	self.start()
-	print "starting reactor"
+	self.log("starting reactor")
 	self.control = True
 	twisted.internet.reactor.run()
 
@@ -135,40 +135,40 @@ class client(object):
 	self.stop()
 	if self.control:
 		self.control = False
-		print "stopping reactor"
+		self.log("stopping reactor")
 		twisted.internet.reactor.stop()
 	return self
 
     def clientConnectionFailed(self, factory, connector, reason):
-        print "connection failed:", reason
+        self.log("connection failed:", reason)
 	self.halt()
 
     def clientConnectionLost(self, factory, connector, reason):
-        print "connection lost:", reason
+        self.log("connection lost:", reason)
 	self.halt()
 
     def connectionMade(self, vnc):
-	print "connectionMade"
+	self.log("connectionMade")
 
     def vncConnectionMade(self, vnc):
-        print "Orig. screen:  %dx%d depth=%d bits_per_pixel=%r bytes_per_pixel=%r" % (vnc.width, vnc.height, vnc.depth, vnc.bpp, vnc.bypp)
-        print "Desktop name:  %r" % vnc.name
+        self.log("Orig. screen:  %dx%d depth=%d bits_per_pixel=%r bytes_per_pixel=%r" % (vnc.width, vnc.height, vnc.depth, vnc.bpp, vnc.bypp))
+        self.log("Desktop name: ", vnc.name)
 
         vnc.setEncodings([rfb.RAW_ENCODING])
         vnc.setPixelFormat()
 
-        print "Screen format: %dx%d depth=%d bits_per_pixel=%r bytes_per_pixel=%r" % (vnc.width, vnc.height, vnc.depth, vnc.bpp, vnc.bypp)
+        self.log("Screen format: %dx%d depth=%d bits_per_pixel=%r bytes_per_pixel=%r" % (vnc.width, vnc.height, vnc.depth, vnc.bpp, vnc.bypp))
 
         vnc.framebufferUpdateRequest()
 
     def beginUpdate(self, vnc):
-	print "beginUpdate"
+	self.log("beginUpdate")
 
     def updateRectangle(self, vnc, x, y, width, height, data):
-	print "updateRectangle %s %s %s %s" % (x, y, width, height)
+	self.log("updateRectangle %s %s %s %s" % (x, y, width, height))
 
     def commitUpdate(self, vnc, rectangles=None):
-	print "commitUpdate %s" % ( repr(rectangles) )
+	self.log("commitUpdate", repr(rectangles))
 	self.stop()
 
 if __name__=='__main__':
