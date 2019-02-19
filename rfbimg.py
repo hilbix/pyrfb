@@ -35,6 +35,8 @@ IMGEXT='.png'
 TEMPLATEDIR='e/'
 TEMPLATEEXT='.tpl'
 
+log	= None
+
 def timestamp():
 	t = time.gmtime()
 	return "%04d%02d%02d-%02d%02d%02d" % ( t.tm_year, t.tm_mon, t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec)
@@ -63,6 +65,7 @@ class rfbImg(easyrfb.client):
 
     def __init__(self, appname, loop=None, mouse=None, name=None, type=None, quality=None):
 	super(rfbImg, self).__init__(appname)
+	self.logging()
 
 	if loop is None:	loop	=     self._preset("RFBIMGLOOP", '0') != '0'
 	if mouse is None:	mouse	=     self._preset("RFBIMGMOUSE", '1') != '0'
@@ -70,6 +73,8 @@ class rfbImg(easyrfb.client):
 	if type is None:	type	=     self._preset("RFBIMGTYPE", None);
 	if quality is None:	quality	=     self._preset("RFBIMGQUALITY", None);
 	if quality is not None:	quality = int(quality)
+
+	self.log("init", loop=loop, mouse=mouse, name=name, type=type, qual=quality)
 
 	# Start the timer
 	self._timer = twisted.internet.task.LoopingCall(self.timer);
@@ -113,21 +118,23 @@ class rfbImg(easyrfb.client):
 	self.delta = 0
 	self.dirt = 0
 
-	self.write(self.name, self.type, quality=self.quality)
+	self.write(self.name, self.type)
 
     def write(self,name, type=None, quality=None):
 	tmp = os.path.splitext(name)
 	tmp = tmp[0]+".tmp"+tmp[1]
 	if quality is None:
-		self.img.convert('RGB').save(tmp, type, quality=quality)
-	else:
+		quality	= self.quality
+	if quality is None:
 		self.img.convert('RGB').save(tmp, type)
+	else:
+		self.img.convert('RGB').save(tmp, type, quality=quality)
 	os.rename(tmp,name)
 
-	print "out %s" % ( name )
+	self.log("out", name=name)
 
     def connectionMade(self, vnc):
-	print "connection made"
+	self.log("connection made")
 	self.myVNC = vnc
 
     def vncConnectionMade(self, vnc):
@@ -168,7 +175,8 @@ class rfbImg(easyrfb.client):
 	# If one-shot then we are ready
 	if not self.loop:
 		self.flush()
-		self.halt()
+		self.stop()	# This is asynchronous
+		#self.halt()	# I really have no idea why this is not needed
 
 	self.autonext(True)
         vnc.framebufferUpdateRequest(incremental=1)
@@ -217,13 +225,13 @@ class rfbImg(easyrfb.client):
 	delta = reduce(lambda x,y:x+y, st.sum2)		# /(bb.size[0]*bb.size[1])
 	if delta<=r['max']:
 		if trace:
-			print "same",template['name'],rect,delta
+			self.log("same",template['name'],rect,delta)
 		return True
 
 	# We have a difference
 	if debug:
 		bb.save('_debug.png')
-		print "diff",template['name'],rect,delta,bb.getbbox()
+		self.log("diff",template['name'],rect,delta,bb.getbbox())
 	return False
 
     def check_rects(self,template,dx,dy,debug,trace):
@@ -247,13 +255,13 @@ class rfbImg(easyrfb.client):
 		dx = s[0]
 		dy = s[1]
 		x = y = 0
-		print "search",template['name'],s
+		self.log("search",template['name'],s)
 		for i in range(s[2]):
 			x += dx
 			y += dy
 			if self.check_rects(template,x,y,False,debug):
 				if debug:
-					print "found",template['name'],"offset",x,y
+					self.log("found",template['name'],"offset",x,y)
 				template['dx'] = x
 				template['dy'] = y
 				return True
@@ -306,7 +314,7 @@ class rfbImg(easyrfb.client):
 					rects.append(spec)
 			tpls.append({ 'name':l, 't':t, 'i':i, 'r':rects, 'cond':inv, 'search':search })
 		except Exception,e:
-			print traceback.format_exc()
+			logger.failure("load")
 			return None
 	return tpls
 
@@ -316,7 +324,7 @@ class rfbImg(easyrfb.client):
 		tpls = waiter['templates']
 	except KeyError:
 		tpls = self.load_templates(waiter['t'])
-		print "templates loaded",waiter['t']
+		self.log("templates loaded",waiter['t'])
 		waiter['templates'] = tpls
 
 	if not tpls:
@@ -374,7 +382,6 @@ def rename_away(to,ext):
 			return
 
 from twisted.protocols.basic import LineReceiver
-import traceback
 class controlProtocol(LineReceiver):
 
 	delimiter='\n'
@@ -388,16 +395,16 @@ class controlProtocol(LineReceiver):
 		args = line.split(" ")
 		ok = False
 		try:
-			print "cmd",args[0],args
+			self.log("cmd",args[0],args)
 			ok = getattr(self,'cmd_'+args[0])(*args[1:])
 		except Exception,e:
-			print traceback.format_exc()
+			logger.failure("line")
 		if ok:
 			self.transport.write("ok\n")
-			print "ok",line
+			self.log("ok",line)
 		else:
 			self.transport.write("ko\n")
-			print "ko",line
+			self.log("ko",line)
 
 		if self.bye:
 			self.transport.loseConnection()
@@ -465,14 +472,14 @@ class controlProtocol(LineReceiver):
 	def print_wait(self,waiter):
 		if waiter['match']:
 			w = waiter['match']
-			print "match",w
+			self.log("match",w)
 			if w['cond']:
 				self.transport.write("found %s %s %s\n" % (w['name'], w['dx'], w['dy']))
 			else:
 				self.transport.write("spare %s\n" % (w['name']))
 			return True
 		else:
-			print "timeout"
+			self.log("timeout")
 			self.transport.write("timeout\n")
 			return False
 
@@ -485,7 +492,7 @@ class controlProtocol(LineReceiver):
 			self.transport.resumeProducing()
 		except:
 			# may have gone away in the meantime
-			print "gone away"
+			self.log("gone away")
 
 	def pause(self):
 		self.transport.pauseProducing()
@@ -505,10 +512,10 @@ class createControl(twisted.internet.protocol.Factory):
 			pass
 		reactor.listenUNIX(sockname,self)
 
-
 if __name__=='__main__':
-	img = rfbImg("RFB image writer")
+	img	= rfbImg("RFB image writer")
 	if img.loop:
 		createControl(".sock", img)
+
 	img.run()
 
