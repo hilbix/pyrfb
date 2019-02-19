@@ -124,9 +124,9 @@ pendi=false;
 sleeper++;
 if (maxrun && maxsleep && sleeper>maxsleep)
   {
-    if (!--maxrun)
-      $("qrun").value = "q";
+    maxrun--;
     sleeper = maxsleep;
+    updquick();
   }
 sleeps=0;
 nextrefresh();
@@ -137,12 +137,19 @@ waiti = 100;
 $$$("check","*");
 ajax.head("test.jpg",checkrefresh,lm);
 }
+function updquick()
+{
+if (maxrun && maxsleep)
+  $("qrun").value = maxrun;
+else
+  $("qrun").value = "0";
+}
 function quick()
 {
 pendi=true;
 maxsleep = maxsleep && maxrun ? 0 : defsleep;
-$("qrun").value = maxsleep ? "r" : "q";
 maxrun = defrun;
+updquick()
 }
 
 var reqrun=false;
@@ -243,6 +250,7 @@ for (var a=2; --a>=0; )
 disp(0);
 window.setInterval(timer,500);
 dorefresh();
+updquick();
 out("running");
 var cnt=1;
 for (var i=$("cit").firstChild; i; i=i.nextSibling)
