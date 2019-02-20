@@ -1,0 +1,13 @@
+body	{ background:black; color:white; margin:0 }
+div	{ position:relative; vertical-align:top; float:left }
+span	{ vertical-align:top }
+textarea { width:100% }
+
+.w100	{ width:100% }
+
+.gap	{ padding-left:5px }
+.mw190	{ max-width:190px }
+.mw200	{ max-width:200px }
+.mw310	{ max-width:310px }
+.mark	{ border:1px solid red }
+
