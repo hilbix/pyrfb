@@ -1,18 +1,10 @@
 <html><head>
 <script type="text/javascript" src="ajax.js"></script>
 <script type="text/javascript" src="index.js"></script>
-<style>
-body	{ background:black; color:white; margin:0 }
-div	{ position:relative; vertical-align:top; float:left }
-span	{ vertical-align:top }
-.gap	{ padding-left:5px }
-.mw190	{ max-width:190px }
-.mw200	{ max-width:200px }
-.mw310	{ max-width:310px }
-.mark	{ border:1px solid red }
-</style>
+<link rel="stylesheet" type="text/css" href="index.css"/>
 </head><body onload="init()">
-<div id="shower"><img id="show0"/><img id="show1"/><img id="show2"/></div>
+
+<div id="shower"></div>
 <div class="gap mw190">
 <input name="mb" type="checkbox" value="1" checked="checked"/><input name="mb" type="checkbox" value="2"/><input name="mb" type="checkbox" value="4"/>
 drag:
@@ -22,7 +14,7 @@ drag:
 <input id="qrun" onclick="quick()" type="button" value="r"/><span id="run"></span> <span id="refcnt"></span> <span id="cnt"></span>
 <br/><span id="txt"></span>
 <br/><span id="pos"></span>
-<p><input id="learn"></input><input onclick="send('learn','l')" type="submit" value="Learn"> <a href="learn/">learn</a> <a href="edit.html">edit</a>
+<p><input id="learn" class="w100"></input><input onclick="send('learn','l')" type="submit" value="Learn"> <a id="lref">learn</a> <a href="edit.html">edit</a>
 <p><textarea id="inp1"></textarea><br><input onclick="send('inp1')" type="submit" value="Send"/>
 </p><p><textarea id="inp2"></textarea><br><input onclick="send('inp2')" type="submit" value="Send"/>
 <input onclick="code(0xff08)" type="submit" value="BS"/>
@@ -39,36 +31,7 @@ drag:
 </table>
 <br/><span id="lms"></span><span id="check"></span>
 </div>
-<div id="cit" class="gap mw310">
-<img src="c/1.jpg"
-/><img src="c/2.jpg"
-/><img src="c/3.jpg"
-/><img src="c/4.jpg"
-/><img src="c/5.jpg"
-/><img src="c/6.jpg"
-/><img src="c/7.jpg"
-/><img src="c/8.jpg"
-/><img src="c/9.jpg"
-/><img src="c/a.jpg"
-/><img src="c/b.jpg"
-/><img src="c/c.jpg"
-/><img src="c/d.jpg"
-/><img src="c/e.jpg"
-/><img src="c/f.jpg"
-/><img src="c/b1.jpg"
-/><img src="c/b2.jpg"
-/><img src="c/b3.jpg"
-/><img src="c/b4.jpg"
-/><img src="c/b5.jpg"
-/><img src="c/b6.jpg"
-/><img src="c/b7.jpg"
-/><img src="c/b8.jpg"
-/><img src="c/b9.jpg"
-/><img src="c/ba.jpg"
-/><img src="c/bb.jpg"
-/><img src="c/bc.jpg"
-/><img src="c/bd.jpg"
-/><img src="c/be.jpg"
-/><img src="c/bf.jpg"
-</div>
+
+<div id="cit" class="gap mw310"></div>
+
 </body></html>
