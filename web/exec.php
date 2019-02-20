@@ -8,10 +8,12 @@ header("Content-type: text/plain");
 header("Expires: -1");
 header("Pragma: no-cache");
 
+$targ = int(substr($_SERVER["PATH_INFO"],1));
+
 $r = $_GET['r'];
 if ($r=="dir" || $r=="learn")
   {
-    $d = dir($r=="dir" ? 'e' : 'learn');
+    $d = dir("$targ/".($r=="dir" ? 'e' : 'learn'));
     while (false !== ($e=$d->read()))
       {
         if ($e=='.' || $e=='..') continue;
@@ -25,18 +27,18 @@ elseif ($r=="save")
     $pi = pathinfo($name);
     if ($name!=$pi['filename'] || $name=='')
        die("illegal name f");
-    $name = "e/$name.tpl";
+    $name = "$targ/e/$name.tpl";
     $done = "created";
     if (file_exists($name))
       for ($i=0;; $i++)
         {
           $to = "$name.tpl.~$i~";
           if (!file_exists($to))
-	    {
-	      rename($name,$to);
-   	      $done = "replaced";
-	      break;
-	    }
+            {
+              rename($name,$to);
+              $done = "replaced";
+              break;
+            }
         }
     if (copy('php://input', $name))
       echo $done;
@@ -45,3 +47,4 @@ elseif ($r=="save")
   }
 else
   die("wrong param r");
+
