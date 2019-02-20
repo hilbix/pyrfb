@@ -9,10 +9,13 @@ header("Content-type: text/plain");
 header("Pragma: no-cache");
 header("Expires: -1");
 
-$fd = fsockopen("unix://../.sock");
+$targ = int(substr($_SERVER["PATH_INFO"],1));
+
+$fd = fsockopen("unix://../$targ/sock");
 socket_set_blocking($fd,0);
 fwrite($fd,"ping\n");
 fflush($fd);
 echo fread($fd,4096);
 fclose($fd);
 flush();
+
