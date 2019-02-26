@@ -2,7 +2,7 @@
 <script type="text/javascript" src="ajax.js"></script>
 <script type="text/javascript" src="index.js"></script>
 <link rel="stylesheet" type="text/css" href="index.css"/>
-</head><body onload="init()">
+</head><body>
 
 <div id="shower"></div>
 <div class="gap mw190">
@@ -11,23 +11,23 @@ drag:
 <input name="mb" type="checkbox" value="65536"/>
 &gt;&gt; <input id="uihelper" type="checkbox" value="1"/>
 <br/>
-<input id="qrun" onclick="quick()" type="button" value="r"/><span id="run"></span> <span id="refcnt"></span> <span id="cnt"></span>
+<input id="qrun" runs="quick" type="button" value="r"/><span id="run"></span> <span id="refcnt"></span> <span id="cnt"></span>
 <br/><span id="txt"></span>
 <br/><span id="pos"></span>
-<p><input id="learn" class="w100"></input><input onclick="send('learn','l')" type="submit" value="Learn"> <a id="lref">learn</a> <a href="edit.html">edit</a>
-<p><textarea id="inp1"></textarea><br><input onclick="send('inp1')" type="submit" value="Send"/>
-</p><p><textarea id="inp2"></textarea><br><input onclick="send('inp2')" type="submit" value="Send"/>
-<input onclick="code(0xff08)" type="submit" value="BS"/>
-</p><p><textarea id="inp3"></textarea><br><input onclick="send('inp3')" type="submit" value="Send"/>
-<input onclick="code(0xff0d)" type="submit" value="CR"/>
-</p><p><textarea id="inp4"></textarea><br><input onclick="send('inp4')" type="submit" value="Send"/>
-<input onclick="code(0xff1b)" type="submit" value="ESC"/>
+<p><input id="learn" class="w100"></input><input runs="learn" type="submit" value="Learn"> <a id="lref">learn</a> <a href="edit.html">edit</a>
+<p><textarea id="inp1"></textarea><br><input runs="inp1" type="submit" value="Send"/>
+</p><p><textarea id="inp2"></textarea><br><input runs="inp2" type="submit" value="Send"/>
+<input runs="0xff08" type="submit" value="BS"/>
+</p><p><textarea id="inp3"></textarea><br><input runs="inp3" type="submit" value="Send"/>
+<input runs="0xff0d" type="submit" value="CR"/>
+</p><p><textarea id="inp4"></textarea><br><input runs="inp4" type="submit" value="Send"/>
+<input runs="0xff1b" type="submit" value="ESC"/>
 </p>
 <table border="0" cellpadding="0" cellspacing="0">
-<tr><td><input onclick="code(49)" type="submit" value="1"/></td><td><input onclick="code(50)" type="submit" value="2"/></td><td><input onclick="code(51)" type="submit" value="3"/></td></tr>
-<tr><td><input onclick="code(52)" type="submit" value="4"/></td><td><input onclick="code(53)" type="submit" value="5"/></td><td><input onclick="code(54)" type="submit" value="6"/></td></tr>
-<tr><td><input onclick="code(55)" type="submit" value="7"/></td><td><input onclick="code(56)" type="submit" value="8"/></td><td><input onclick="code(57)" type="submit" value="9"/></td></tr>
-<tr><td><input onclick="code(46)" type="submit" value="."/></td><td><input onclick="code(48)" type="submit" value="0"/></td><td><input onclick="code(44)" type="submit" value=","/></td></tr>
+<tr><td><input runs="49" type="submit" value="1"/></td><td><input runs="50" type="submit" value="2"/></td><td><input runs="51" type="submit" value="3"/></td></tr>
+<tr><td><input runs="52" type="submit" value="4"/></td><td><input runs="53" type="submit" value="5"/></td><td><input runs="54" type="submit" value="6"/></td></tr>
+<tr><td><input runs="55" type="submit" value="7"/></td><td><input runs="56" type="submit" value="8"/></td><td><input runs="57" type="submit" value="9"/></td></tr>
+<tr><td><input runs="46" type="submit" value="."/></td><td><input runs="48" type="submit" value="0"/></td><td><input runs="44" type="submit" value=","/></td></tr>
 </table>
 <br/><span id="lms"></span><span id="check"></span>
 </div>
