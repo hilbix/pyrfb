@@ -54,4 +54,17 @@ if (e.style.display=="none")
   e.style.display = e.olddisplay;
 }
 
+// WTF?
+// Instead of '<body onload="fn()">' you have to call this due to CSP ..
+// Shouldn't there be something more easy in the standard like:
+// document.bodyloaded = fn
+// Note that this is a bad implementation ..
+// For more insanity see https://github.com/jfriend00/docReady/blob/master/docready.js
+function onready(fn)
+{
+  if (document.readyState === "complete")
+    setTimeout(fn,1);
+  else
+    document.addEventListener("DOMContentLoaded", fn, false);
+}
 
