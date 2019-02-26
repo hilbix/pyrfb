@@ -138,10 +138,10 @@ function loadi()
 
 function greyi()
 {
-  if ($("uihelper").checked)
+  if ($('uihelper').checked)
     return;
 
-  var	e = $("show");
+  var	e = $('shower');
 
   if (e.firstChild)
     e.firstChild.style.opacity = 0.5;
@@ -222,7 +222,7 @@ function quick()
   pendi=true;
   maxsleep = maxsleep && maxrun ? 0 : defsleep;
   maxrun = defrun;
-  updquick()
+  updquick();
 }
 
 var reqrun=false;
@@ -324,6 +324,29 @@ function ovr()
   show(this.cloneNode(true));
 }
 
+clickmap =
+{ quick: quick
+, learn: function () { send('learn','l') }
+};
+
+function clickproxy()
+{
+  var r = this.getAttribute('runs');
+
+  if (clickmap[r])
+    return clickmap[r].call(this);
+
+  var i = parseInt(r);
+  if (i>0)
+   return code(i);
+
+  if ($(r))
+    return send(r);
+
+  out('UNKNOWN '+r);
+  return false;
+}
+
 function init()
 {
   window.setInterval(timer,500);
@@ -331,6 +354,12 @@ function init()
   updquick();
 
   $('lref').href = sub('l/');
+
+  for (var e of document.querySelectorAll('[runs]'))
+    {
+      console.log(e);
+      e.onclick	= clickproxy;
+    }
 
   var o = $('cit');
   for (var a=0; a<30; a++)
@@ -348,4 +377,15 @@ function init()
 
   out("running");
 }
+
+onready(init);
+
+/*
+<button name="mod" mod="m" runs='editagain' onclick='editagain()'>Edit</button>
+<button name="mod" mod="e" runs='abortit' onclick='abortit()'>Back</button>
+<button runs="refreshall">reload</button>
+<button name="mod" mod="m" onclick='newit()'>New</button>
+<button name="mod" mod="e" onclick='saveit()'>Save</button>
+<button onclick='newrect()'>New</button>
+*/
 
