@@ -1,0 +1,12 @@
+#!/bin/bash
+
+ID="`basename -- "$0" .sh`"
+ID="${ID##*[^0-9]}"
+
+export EASYRFBPORT=$[5900+ID]
+export RFBIMGLOOP=1
+export RFBIMGVIZ=1
+export RFBIMGNAME=sub/$ID/web/test.jpg
+
+cd "`dirname -- "$0"`" && cd -P .. && exec nice -99 ./rfbimg.py
+
