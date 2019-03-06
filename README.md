@@ -1,26 +1,49 @@
+> It works, but is in it's very early stages.
+>
+> TODOs:
+>
+> - Better experience
+> - More easy install
+> - Integrate noVNC, such that you can use it as you like
+> - A lot of improvements (99% to come over the years)
+
 # PyRFB
 
-Wrappers around `python-vnc-viewer` to be used from shell level
-to dump/control RFB connections.
+Wrappers around `python-vnc-viewer` to create a web based VNC control.
+
+> There is a [JavaScript/WebSocket driven VNC client](https://github.com/novnc/).
+> However this is meant for online connections which allow high bandwidth (100 KB/s and above)
+>
+> This here is meant to control VNC via smallband (<8 KB/s):
+>
+> - download a picture
+> - send command sequences to the VNC (clicks, keypresses, etc.)
+> - download a picture again to see the progress/outcome
 
 Prerequisites:
 
 - Python 2.7 or later
-- Probably some of my tools, see https://github.com/hilbix/src
+- Some of my tools, see https://github.com/hilbix/src
 - Linux (perhaps it works with CygWin)
+- NginX with PHP-FPM
 
 
 ## Usage
 
-```bash
-git clone https://github.com/hilbix/pyrfb.git
-cd pyrfb
-git submodule update --init
-make
-```
-- Export directory `web/` to your web root which is PHP enabled.  
+	git clone https://github.com/hilbix/pyrfb.git
+	cd pyrfb
+	git submodule update --init
+	make
+
+- Export directory `web/` to your web root.
   For example to make it available under `http://127.0.0.1/vnc/` try:  
   `sudo ln --relative -s web /var/www/html/vnc`
+
+- Serve PHP files from the `php/` directory.  
+  If your web root is PHP enables you can do  
+  `ln --relative -s php/* web`
+
+- Be sure to restrict access to the web directory, as else anybody can send commands.
 
 - Start `Xvnc` or similar:
 
@@ -30,18 +53,19 @@ make
 
 	RFBIMGLOOP=1 RFBIMGVIZ=1 RFBIMGQUAL=18 EASYRFBPORT=5900 nice -99 ./rfbimg.py
 
-	  Note that this must run permanently.  See `autostart/` for details.
-
+Note that this must run permanently.  See `autostart/` for details.
 
 
 ## License
+
+Note that some parts have a different license.
+For the most parts, following "license" applies:
 
 This Works is placed under the terms of the Copyright Less License,
 see file COPYRIGHT.CLL.  USE AT OWN RISK, ABSOLUTELY NO WARRANTY.
 
 Read: This is free as in free beer, free speech and freely born baby.
 
-Note that some parts have a different license.
 
 ## FAQ
 
