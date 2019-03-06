@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+<head>
+ <title>Remote</title>
+ <meta charset="utf-8">
+ <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+
+ <meta name="viewport" content="width=device-width, initial-scale=0.3, minimum-scale=0.2, maximum-scale=2.0, user-scalable=yes">
+ <meta name="apple-mobile-web-app-capable" content="no" />
+ <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+ <link rel="apple-touch-startup-image" href="images/screen_320x460.png" />
+ <link rel="apple-touch-icon" href="images/screen_57x57.png">
+ <link rel="apple-touch-icon-precomposed" href="images/screen_57x57.png" />
+
+ <link rel="stylesheet" href="include/base.css" title="plain">
+</head>
+
+<body style="margin: 0px;">
+  <div id="noVNC_screen">
+    <div id="noVNC_status_bar" class="noVNC_status_bar" style="margin-top: 0px;">
+      <table border=0 width="100%"><tr>
+        <td><div id="noVNC_status" style="position: relative; height: auto;"> Loading </div></td>
+        <td width="1%"><div><input type="text" value="" id="textproxy"/></div></td>
+        <td width="1%"><div id="noVNC_buttons">
+            <input type="button" value="Send CtrlAltDel" id="sendCtrlAltDelButton"/>
+        </div></td>
+      </tr></table>
+    </div>
+    <canvas id="noVNC_canvas" width="640px" height="20px"> Canvas not supported. </canvas>
+  </div>
+
+  <script src="include/util.js"></script>
+  <script src="vncs.js"></script>
+</body>
+</html>
