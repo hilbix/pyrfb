@@ -8,12 +8,16 @@ header("Content-type: text/plain");
 header("Expires: -1");
 header("Pragma: no-cache");
 
-$targ = int(substr($_SERVER["PATH_INFO"],1));
+$targ = intval(substr($_SERVER["PATH_INFO"],1));
+$root = $_SERVER["DOCUMENT_ROOT"];
+$script = $_SERVER["SCRIPT_NAME"];	// this must be relative to document root
+$base = "$root/".dirname($script)."/$targ";
+if (!is_dir($base)) die("wrong $targ");
 
 $r = $_GET['r'];
 if ($r=="dir" || $r=="learn")
   {
-    $d = dir("$targ/".($r=="dir" ? 'e' : 'learn'));
+    $d = dir("$base/".($r=="dir" ? 'e' : 'l'));
     while (false !== ($e=$d->read()))
       {
         if ($e=='.' || $e=='..') continue;
@@ -26,8 +30,8 @@ elseif ($r=="save")
     $name = $_GET['f'];
     $pi = pathinfo($name);
     if ($name!=$pi['filename'] || $name=='')
-       die("illegal name f");
-    $name = "$targ/e/$name.tpl";
+      die("wrong name (parameter f)");
+    $name = "$base/e/$name.tpl";
     $done = "created";
     if (file_exists($name))
       for ($i=0;; $i++)
