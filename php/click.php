@@ -20,9 +20,11 @@ header("Content-type: text/plain");
 header("Pragma: no-cache");
 header("Expires: -1");
 
-$targ = int(substr($_SERVER["PATH_INFO"],1));
+$targ = intval(substr($_SERVER["PATH_INFO"],1));
 
-$fd = fsockopen("unix://../$targ/sock");
+$fd = fsockopen("unix://../sub/$targ/sock");
+if (!$fd) die("cannot open $targ");
+
 socket_set_blocking($fd,0);
 $o="";
 $s="";
