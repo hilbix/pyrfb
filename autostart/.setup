@@ -1,0 +1,122 @@
+#!/bin/bash
+#
+# This Works is placed under the terms of the Copyright Less License,
+# see file COPYRIGHT.CLL.  USE AT OWN RISK, ABSOLUTELY NO WARRANTY.
+#
+#U NR
+#U	Setup the given NR of screens.
+#U	Use 0 to remove all.
+#U	This is configuration only, it does not start/stop things.
+
+PREFIX=pyrfb-
+SUFFIX=.sh
+KISS=;
+
+OOPS() { { for a in {10..1}; do caller "$a"; done | while read -r nr fn file; do printf 'DEBUG +%d %q # %q\n' "$nr" "$file" "$fn"; done; printf OOPS:; printf ' %q' "$@"; printf '\n'; } >&2; exit 23; };
+SAFETY() { OOPS safety stop: "$@"; };
+usage() { { printf 'Usage: %q' "$(basename -- "$0")"; sed -n 's/^#U//p' "$0"; } >&2; exit 42; };
+o() { "$@" || OOPS fail $?: "$@"; };
+
+case "$#:$*" in
+0:|1:-h|1:--help)	usage;;
+1:*[^0-9]*)		OOPS argument must be numeric: "$1";;
+1:[0-9]*)		;;
+1:)			OOPS need an nonempty argument;;
+*)			OOPS too many arguments: $#;;
+esac;
+
+: checksoftlink softlink destination: checks that existing softlink points to destination;
+checksoftlink()
+{
+[ -e "$1" ] || [ -L "$1" ] || return;
+[ -L "$1" ] || SAFETY "$1:" must be a softlink;
+[ ".$2" = ".$(readlink -- "$1")" ] || SAFETY "$1:" softlink does not point to "$2";
+};
+
+: rmsoftlink softlink destination: safely removes a known softlink;
+rmsoftlink()
+{
+checksoftlink "$@" || return 0;
+rm -vf "$1";
+};
+
+: assert test-args: bails out when the given test fails;
+assert()
+{
+test "$@" || SAFETY environment looks bad, following test fails: "$@";
+};
+
+: mkdirectory access dir..: create the given directories;
+mkdirectory()
+{
+local perm="$1" a;
+shift || OOPS mkdirectory: missing arguments;
+for dir;
+do
+	[ -d "$dir" ] && continue;
+	o mkdir -vm "$perm" -- "$dir";
+done;
+};
+
+: mksoftlink link target: create softlink "link" pointing to "target";
+mksoftlink()
+{
+checksoftlink "$@" && return;
+
+o ln -vs "$2" "$1";
+};
+
+o cd "$(dirname -- "$0")";
+
+assert -d ../web;
+
+LIST=();
+declare -A KNOWN;
+for a in `seq 1 "$1"`; do b="pyrfb-$a.sh"; LIST+=("$b"); KNOWN["$b"]=:; done;
+
+: perform the removes of no more wanted entries;
+for a in "$PREFIX"*"$SUFFIX";
+do
+	[ -e "$a" ] || continue;
+	[ -z "${KNOWN["$a"]}" ] || continue;
+
+	: be sure we are seeing the correct movie;
+	checksoftlink "$a" .loop;
+
+	: check that our seat number is valid, too;
+	nr="${a%"$SUFFIX"}";
+	nr="${nr#"$PREFIX"}";
+	case "$nr" in
+	(*[^0-9]*)	SAFETY "$a:" whatever this is, the number "$nr" does not look right;;
+	(0*)		SAFETY "$a:" number "$nr" is unsupported;;
+	esac;
+
+	: XXX TODO XXX leave improvement to future;
+	for b in "../sub/$nr"/web/* "../sub/$nr"/* "../sub/$nr"; do rmdir -v "$b"; done;
+
+	: try to remove the associated thingies, but never cause harm;
+	rmsoftlink "../web/$nr" "../sub/$nr/web";
+	rmsoftlink "websock-$nr.sh" .websock;
+
+	: finally really remove the softlink;
+	rmsoftlink "$a" .loop;
+done;
+
+: now create all of the needed seats;
+for a in "${LIST[@]}";
+do
+	nr="${a%"$SUFFIX"}";
+	nr="${nr#"$PREFIX"}";
+
+	: be sure to create the seat at the right place;
+	checksoftlink "$a" .loop && continue;
+
+	mkdirectory  775 ../sub "../sub/$nr" "../sub/$nr/web";
+	mkdirectory  775 "../sub/$nr/web/l" "../sub/$nr/web/s";
+	mkdirectory 1775 "../sub/$nr/web/e" "../sub/$nr/web/o";
+
+	mksoftlink "../web/$nr" "../sub/$nr/web";
+	mksoftlink "websock-$nr.sh" .websock;
+	mksoftlink "$a" .loop;
+done;
+
