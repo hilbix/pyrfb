@@ -26,11 +26,24 @@ function image(url)
   i.run		= undefined;
   i.onload	= function () { this.ok=1;  run(this) }
   i.onerror	= function () { this.err=1; run(this) }
-  i.run		= function (fn) { var l=this.runner; this.runner=(l ? function() { l(); fn() } : fn); run(this) }
+  i.run		= function (fn) { var l=this.runner; this.runner=(l ? function() { l.call(this); fn.call(this) } : fn); run(this) }
   i.src		= sub(url);
 
   return i;
 }
+
+function clone(i)
+{
+  var o = i.cloneNode(true);
+
+  o.onload	= i.onload;
+  o.onerror	= i.onerror;
+  o.run		= i.run;
+  o.err		= i.err;
+  o.ok		= i.ok;
+  return o;
+}
+
 
 //
 // Config
@@ -176,13 +189,13 @@ function checkrefresh(e,x,s,l)
   if(!l || s==304)
     {
       lmc++;
-      $$$("lms",s+": "+lm+" @ "+lmc);
+      $$$("lms",s+"@"+lmc);
       waiti	= 0;
     }
   else
     {
       lmc	= 0;
-      $$$("lms",s+": "+l);
+      $$$("lms",s);
 
       $$$("refcnt", ++newi+"*");
 
@@ -202,10 +215,13 @@ function checkrefresh(e,x,s,l)
   nextrefresh();
 }
 
+var rnr=0;
+
 function dorefresh()
 {
+  rnr++;
   waiti = 100;
-  $$$("check","*");
+  $$$("check",'*'+rnr);
   ajax.head(sub("test.jpg"), checkrefresh, lm);
 }
 
@@ -319,12 +335,14 @@ function ovr()
   if (!this.ok || this.err)
     return;
 
-  this.style.opacity = 0.5;
   was	= shown;
-  show(this.cloneNode(true));
+
+  show(clone(this));
+
+  this.style.opacity = 0.5;
 }
 
-clickmap =
+var clickmap =
 { quick: quick
 , learn: function () { send('learn','l') }
 };
@@ -354,6 +372,7 @@ function init()
   updquick();
 
   $('lref').href = sub('l/');
+  $('edit').href = "edit.html?"+config.targ;
 
   for (var e of document.querySelectorAll('[runs]'))
     {
@@ -364,7 +383,7 @@ function init()
   var o = $('cit');
   for (var a=0; a<30; a++)
     {
-      var i	= image('e/'+a.toString(16)+'.jpg');
+      var i	= image('l/'+a.toString(16)+'.png');
 
 //    i.mycnt	= a;
 //    i.style.border	= "1px dotted white";
@@ -379,13 +398,4 @@ function init()
 }
 
 onready(init);
-
-/*
-<button name="mod" mod="m" runs='editagain' onclick='editagain()'>Edit</button>
-<button name="mod" mod="e" runs='abortit' onclick='abortit()'>Back</button>
-<button runs="refreshall">reload</button>
-<button name="mod" mod="m" onclick='newit()'>New</button>
-<button name="mod" mod="e" onclick='saveit()'>Save</button>
-<button onclick='newrect()'>New</button>
-*/
 
