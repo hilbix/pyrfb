@@ -41,7 +41,7 @@ import time
 import twisted
 from PIL import Image,ImageChops,ImageStat,ImageDraw
 
-LEARNDIR='learn/'
+LEARNDIR='l/'
 IMGEXT='.png'
 TEMPLATEDIR='e/'
 TEMPLATEEXT='.tpl'
@@ -78,13 +78,14 @@ class rfbImg(easyrfb.client):
 	super(rfbImg, self).__init__(appname)
 	self.logging()
 
-	if loop is None:	loop	= self._preset("RFBIMGLOOP", '0') != '0'
-	if mouse is None:	mouse	= self._preset("RFBIMGMOUSE", '1') != '0'
-	if name is None:	name	= self._preset("RFBIMGNAME", 'rfbimg.jpg');
-	if type is None:	type	= self._preset("RFBIMGTYPE", None);
+	if loop is None:	loop	= self._preset("RFBIMGLOOP",    '0') != '0'
+	if mouse is None:	mouse	= self._preset("RFBIMGMOUSE",   '1') != '0'
+	if name is None:	name	= self._preset("RFBIMGNAME",    'rfbimg.jpg');
+	if type is None:	type	= self._preset("RFBIMGTYPE",    None);
 	if quality is None:	quality	= self._preset("RFBIMGQUALITY", None);
+	if viz is None:		viz	= self._preset("RFBIMGVIZ",     '0') != '0';
+
 	if quality is not None:	quality = int(quality)
-	if viz is None:		viz	= self._preset("RFBIMGVIZ", '0') != '0';
 
 	self.log("init", loop=loop, mouse=mouse, name=name, type=type, qual=quality)
 
@@ -356,7 +357,7 @@ class rfbImg(easyrfb.client):
 					rects.append(spec)
 			tpls.append({ 'name':l, 't':t, 'i':i, 'r':rects, 'cond':inv, 'search':search })
 		except Exception,e:
-			logger.failure("load")
+			twisted.python.log.err(None, "load")
 			return None
 	return tpls
 
@@ -432,15 +433,18 @@ class controlProtocol(LineReceiver):
 
 	bye = False
 
+	def log(*args, **kw):
+		print(" ".join(tuple(str(v) for v in args)+tuple(str(n)+"="+str(v) for n,v in kw.iteritems())))
+
 	def lineReceived(self, line):
 		self.img = self.factory.img
 		args = line.split(" ")
 		ok = False
 		try:
 			self.log("cmd",args[0],args)
-			ok = getattr(self,'cmd_'+args[0])(*args[1:])
+			ok = getattr(self,'cmd_'+args[0], self.cmd_none)(*args[1:])
 		except Exception,e:
-			logger.failure("line")
+			twisted.python.log.err(None, "line")
 		if ok:
 			self.transport.write("ok\n")
 			self.log("ok",line)
@@ -450,6 +454,11 @@ class controlProtocol(LineReceiver):
 
 		if self.bye:
 			self.transport.loseConnection()
+
+	def cmd_none(self):
+		self.transport.write("unknown cmd\n")
+		self.log("unknown")
+		return False
 
 	def cmd_mouse(self, x, y, click=None):
 		x = int(x)
@@ -473,6 +482,7 @@ class controlProtocol(LineReceiver):
 		out = LEARNDIR+to
 		if os.path.exists(out+IMGEXT):
 			rename_away(out, IMGEXT)
+		self.log("tmp", tmp, "out", out)
 		os.rename(tmp, out+IMGEXT)
 		return True
 
@@ -539,8 +549,9 @@ class controlProtocol(LineReceiver):
 	def pause(self):
 		self.transport.pauseProducing()
 
-	def ping(self):
-		self.sendLine("PONG");
+	def cmd_ping(self):
+		self.sendLine("pong");
+		return True
 
 from twisted.internet import reactor
 class createControl(twisted.internet.protocol.Factory):
