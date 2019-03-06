@@ -1,0 +1,14 @@
+#!/bin/bash
+#
+# This Works is placed under the terms of the Copyright Less License,
+# see file COPYRIGHT.CLL.  USE AT OWN RISK, ABSOLUTELY NO WARRANTY.
+
+DIR="`dirname -- "$0"`" || exit
+ID="`basename -- "$0" .sh`" || exit
+ID="${ID##*[^0-9]}"
+
+while date && ! read -t1
+do
+	"$DIR/.pyrfb" "$ID"
+done
+
