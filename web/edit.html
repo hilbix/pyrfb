@@ -5,15 +5,15 @@
 <link rel="stylesheet" type="text/css" href="edit.css"/>
 </head><body>
 <div id="main" class="gap w500 left">
-<button name="mod" mod="m" onclick='editagain()'>Edit</button>
-<button name="mod" mod="e" onclick='abortit()'>Back</button>
-<button onclick='refreshall()'>reload</button>
-<button name="mod" mod="m" onclick='newit()'>New</button>
-<button name="mod" mod="e" onclick='saveit()'>Save</button>
+<button name="mod" mod="m" runs="editagain">Edit</button>
+<button name="mod" mod="e" runs="abortit">Back</button>
+<button runs="refreshall">reload</button>
+<button name="mod" mod="m" runs="newit">New</button>
+<button name="mod" mod="e" runs="saveit">Save</button>
 <span id="learns"></span>
 <div name="mod" mod="m" id="list"></div>
 <div name="mod" mod="e">
-<button onclick='newrect()'>New</button>
+<button runs="newrect">New</button>
 Name: <input name="focus" id="filename" type="text" width="20"/>
 </div>
 <div name="mod" mod="e" id="regionlist"></div>
