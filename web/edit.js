@@ -1,7 +1,23 @@
+"use strict;"
+
 // This Works is placed under the terms of the Copyright Less License,
 // see file COPYRIGHT.CLL.  USE AT OWN RISK, ABSOLUTELY NO WARRANTY.
 
 JSON.encode=JSON.stringify;
+
+var n = parseInt(window.location.search.substr(1));
+var config =
+  {
+    targ: ""+n+"",
+    dir: ""+n+"/",
+    exec: "exec.php/"+n,
+  };
+
+function sub(s) { return config.dir+s }
+
+
+
+
 
 var decache;
 
@@ -255,7 +271,7 @@ return new Date().getTime();
 }
 function exe(r,cb)
 {
-ajax.get("exec.php?decache="+stamp()+"&r="+r,function(e){cb(e)});
+ajax.get(config.exec+"?decache="+stamp()+"&r="+r,function(e){cb(e)});
 }
 function clear(e,c)
 {
@@ -293,7 +309,7 @@ if (!edit)
 var n=$('filename').value;
 edit.img = currentsel();
 edit.name = $('filename').value;
-ajax.post("exec.php?r=save&f="+escape(edit.name),saved(edit),JSON.encode(edit));
+ajax.post(config.exec+"?r=save&f="+escape(edit.name),saved(edit),JSON.encode(edit));
 }
 var dispi, dispsrc;
 function dispok(e)
@@ -307,7 +323,7 @@ if (e.src!=dispsrc || i!=dispi)
   {
     e.style.opacity = 0.5;
     e.onload = dispok;
-    e.src="learn/"+i+'?decache='+decache;
+    e.src=sub('l/')+i+'?decache='+decache;
   }
 dispi = i;
 dispsrc = e.src;
@@ -327,7 +343,7 @@ return t;
 }
 function pullit(e,cb)
 {
-ajax.get('e/'+e.tag+"?decache="+decache,function(d,x,s){if(s!=200)return;e.loadcache=parse(d);cb(e)});
+ajax.get(sub('e/')+e.tag+"?decache="+decache,function(d,x,s){if(s!=200)return;e.loadcache=parse(d);cb(e)});
 }
 function _showit(e)
 {
@@ -456,8 +472,35 @@ function lostfocus()
     kbprocessing = true;
 }
 
+var clickmap =
+{ editagain:	editagain
+, abortit:	abortit
+, refreshall:	refreshall
+, newit:	newit
+, saveit:	saveit
+, newrect: 	newrect
+};
+
+function clickproxy()
+{
+  var r = this.getAttribute('runs');
+
+  if (clickmap[r])
+    return clickmap[r].call(this);
+
+  out('UNKNOWN '+r);
+  return false;
+}
+
+
 function init()
 {
+  for (var e of document.querySelectorAll('[runs]'))
+    {
+      console.log(e);
+      e.onclick = clickproxy;
+    }
+
   refreshall();
   modder("m");
 
