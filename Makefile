@@ -3,20 +3,15 @@
 # This Works is placed under the terms of the Copyright Less License,
 # see file COPYRIGHT.CLL.  USE AT OWN RISK, ABSOLUTELY NO WARRANTY.
 
-DIRS=sub/1 sub/2 sub/3
+SCREENS=3	# this is an example
 
 .PHONY: all
-all:	$(DIRS)
-
-$(DIRS):
-	ln -nsf '../$@/web' "web/`basename -- '$@'`"
-	ln -nsf .pyrfb "autostart/pyrfb-`basename -- '$@'`.sh"
-	mkdir -pm 775 sub
-	mkdir -m 775 '$@' '$@/web' '$@/web/l'
-	mkdir -m 1777 '$@/web/c' '$@/web/e'
+all:
+	autostart/.setup $(SCREENS)
 
 clean:
 	rm -f *.pyc
+	autostart/.setup 0
 
 debian:
 	sudo apt-get install python-twisted python-pil
