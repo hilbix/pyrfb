@@ -1,12 +1,19 @@
 #!/bin/bash
+#
+# This Works is placed under the terms of the Copyright Less License,
+# see file COPYRIGHT.CLL.  USE AT OWN RISK, ABSOLUTELY NO WARRANTY.
 
-ID="`basename -- "$0" .sh`"
-ID="${ID##*[^0-9]}"
+ID="$1"
 
-export EASYRFBPORT=$[5900+ID]
-export RFBIMGLOOP=1
-export RFBIMGVIZ=1
-export RFBIMGNAME=sub/$ID/web/test.jpg
+cd "`dirname -- "$0"`" || exit
+cd -P "../sub/$ID/web" || exit
 
-cd "`dirname -- "$0"`" && cd -P .. && exec nice -99 ./rfbimg.py
+#export	    RFBIMGVIZ=1
+export	RFBIMGQUALITY=20
+export	  EASYRFBPORT=$[5900+ID]
+export	   RFBIMGLOOP=1
+export	   RFBIMGNAME=test.jpg
+export	   RFBIMGSOCK=../sock
+
+exec nice -99 ../../../rfbimg.py
 
