@@ -1,18 +1,26 @@
-"use strict;"
+"use strict";
 
 // This Works is placed under the terms of the Copyright Less License,
 // see file COPYRIGHT.CLL.  USE AT OWN RISK, ABSOLUTELY NO WARRANTY.
 
 // These functions should go into a lib
 
+var STOP = [ "STOP" ];
+
+function BUG(x) { var f=function () { alert(x); return false; }; f(); return f }
+
 function dump(x)
 {
   var s="";
   for (var n in x) { var v=x[n]; if (typeof(v)=="function") continue; s+=n+"="+x[n]+"\n"; }
-  alert(s);
+  return s;
 }
 
 function stamp() { return new Date().getTime() }
+function LOG(...a)
+{
+  // console.log(...a)
+}
 
 // run an object if it is ok or error
 function run(o) { var r=o.runner; if (r && (o.err || o.ok)) { o.runner=undefined; r.call(o) } }
@@ -24,8 +32,8 @@ function image(url)
   var i		= document.createElement('img');
 
   i.run		= undefined;
-  i.onload	= function () { this.ok=1;  run(this) }
-  i.onerror	= function () { this.err=1; run(this) }
+  i.onload	= function () { this.ok=1;  run(this); LOG('img loaded', url) }
+  i.onerror	= function () { this.err=1; run(this); LOG('img error', url) }
   i.run		= function (fn) { var l=this.runner; this.runner=(l ? function() { l.call(this); fn.call(this) } : fn); run(this) }
   i.src		= sub(url);
 
@@ -49,38 +57,277 @@ function clone(i)
 // Config
 //
 
-var n = parseInt(window.location.search.substr(1));
-var config =
+if (!document.location.search && document.referrer && document.referrer.startsWith(document.location.href))
+  document.location.replace(document.location.href+'?'+parseInt(document.referrer.substr(document.location.href.length)));
+
+var conf = {}
+
+conf.n		= parseInt(window.location.search.substr(1));
+conf.quick	= 100;		// count
+conf.poll	= 250;		// ms
+conf.maxwait	= 1000000;	// ms
+conf.sleep	= 6;
+conf.targ	= ''+conf.n+'';
+conf.dir	= conf.targ+'/';
+
+function sub(s) { return conf.dir+s }
+
+
+//
+// Base classes
+//
+
+// emit class
+
+var emit =
+{ init:		function ()
   {
-    run: 100,
-    sleep: 6,
-    targ: ""+n+"",
-    dir: ""+n+"/",
-  };
-
-function sub(s) { return config.dir+s }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+    this.emits	= {};
+  }
+, emit:		function (what, ...a)
+  {
+    if (what in this.emits)
+      for (var f of this.emits[what])
+        f(...a);
+    return this;
+  }
+, register:	function (what, cb, ...a)
+  {
+    if (!(what in this.emits))
+      this.emits[what]	= [];
+    var f = function (...b) { if (cb(...a,...b)===STOP) this.emits[what].remove(f) };
+    this.emits[what].push(f);
+    return this;
+  }
+, bound:	function (what, that, cb, ...a)
+  {
+    return this.register(what, cb.bind(that), ...a);
+  }
+};
 
 
+//
+// Initialization and global callbacks
+//
+
+function newinit()
+{
+  emit.init();
+  emit.register('quick', function (v) { $('qrun').value = v });
+  emit.register('done',  function (r) { out('done: '+r) });
+  emit.register('act',   function (r) { greyi(); out('do: '+r) });
+
+  req.init();
+  runs.init();
+  poller.init(conf.poll).quick(conf.quick);
+}
+
+//
+// Backend-Calls
+//
+
+var req =
+{ url:		'click.php/'
+, init:		function ()
+  {
+    this.reqs	= [];
+    this.active	= false;
+    this.cnt	= { req:0 };
+    return this;
+  }
+, send:		function (id,t) { return this.req((t?t:'t')+'='+escape($(id).value)) }
+, code:		function (c)    { return this.req(         'c='+escape(c)) }
+, req:		function (s)    { this.reqs.push(s); return this.next(); }
+, next:		function ()
+  {
+    if (this.active)
+      return this;
+
+    do
+      {
+        if (!this.reqs.length)
+          {
+	    emit.emit('fin');
+            return;
+          }
+        var r = this.reqs.shift();
+      } while (r===void 0);
+
+    this.active	= true;
+    this.cnt.req++;
+    emit.emit('act', r);
+    ajax.get(this.url+'/'+conf.targ+'?decache='+stamp()+'&'+r, e => this.done(r));
+    return this;
+  }
+, done:		function (r)
+  {
+    this.active	= false;
+    emit.emit('done', r);
+    // sleeps = 0; sleeper = 0;
+    return this.next();
+  }
+};
 
 
+//
+// Click handling
+//
 
+var runs =
+{ attribute:	'runs'
+, init:		function (attrib)
+  {
+    if (!attrib) attrib = this.attribute;
+    for (var e of document.querySelectorAll('['+attrib+']'))
+      e.onclick = this.click(e.getAttribute(attrib));
+  }
+, click:	function (str)
+  {
+    var i = 'run_'+str;
+    if (i in this)	return this[i];
+
+    i	= parseInt(str);
+    if (i>0)	return () => { req("c="+escape(c)); return false };
+    if ($(str))	return () => { req.send(str); return false };
+
+    return BUG('bug: undefined functionality: '+r);
+  }
+, run_quick:	function () { poller.quick(poller.state.quick ? 0 : conf.quick) }
+, run_learn:	function () { send('learn', 'l'); return false }
+};
+
+
+//
+// Poller
+//
+// The poller logic was complex,
+// so better to encapsulate,
+// so source explains itself a bit better.
+
+var poller =
+{ init:		function (ms)
+  {
+    this.name	= 'test.jpg';
+    this.cnt	= { run:0, check:0, imgs:0 };
+    this.state	= { nomod:0, noimg:0 };
+    this.set	= {};
+    this.speed(ms);
+    this.reset();
+    this.start();
+    emit.bound('fin', this, this.reset);
+    return this;
+  }
+, speed:	function (ms)
+  {
+    // Set the speed
+    this.set.ms		= ms;
+    this.set.maxwait	= conf.maxwait / ms;
+    return this;
+  }
+, reset:	function ()
+  {
+    // reset the linear waiting
+    // so we immediately do a poll again
+    // (if timer is started)
+    this.state.wait	= 0;
+    this.state.backoff	= 0;
+    return this;
+  }
+, start:	function ()
+  {
+    // start the timer
+    this.state.stopped	= false;
+    if (this.state.started) return;
+    this.tick();
+    return this;
+  }
+, stop:		function ()
+  {
+    // stop the timer
+    if (this.state.started)
+      {
+        window.clearTimeout(this.state.started);
+        this.state.started	= false;
+      }
+    this.state.stopped	= true;
+    return this;
+  }
+, tick:		function ()
+  {
+    // The timer
+    if (this.state.stopped)
+      {
+        this.state.started	= false;
+        return;
+      }
+    this.cnt.run++;
+    this.poll();
+    this.state.started	= window.setTimeout(() => { this.tick() }, this.set.ms);
+  }
+, retry:	function ()
+  {
+    // retry next time it is time to poll
+    this.state.backoff	= 0;
+  }
+, quick:	function (value)
+  {
+    this.state.quick	= value>0 ? value : 0;
+    emit.emit('quick', this.state.quick);
+  }
+, poll:	function ()
+  {
+    LOG('backoff', this.state.backoff);
+    if (this.state.backoff)
+      {
+        this.state.backoff--;
+        return;
+      }
+    $$$("check",++this.cnt.check + '*');
+    ajax.head(sub(this.name), (...a) => this.check(...a), this.state.last_modified);
+
+    if (++this.state.wait > this.set.maxwait)
+      this.state.wait = this.set.maxwait;
+    this.state.backoff = this.state.wait;
+    LOG('wait', this.state.wait);
+  }
+, check:	function (txt, r, stat, l_m)
+  {
+    $$$("check", this.cnt.check + '_');
+    if (stat==304)
+      {
+        // not modified
+        // if we are in quick mode, do the next poll immediately
+        // else at the next backoff interval.
+        if (this.state.quick)
+          this.state.wait	= 0;
+        $$$('lms', stat+'@'+ ++this.state.nomod);
+        return;
+      }
+    if (!l_m)
+      {
+        // error
+        $$$('lms', stat+'?'+ ++this.state.noimg);
+        return;
+      }
+    this.state.last_modified	= l_m;
+    this.state.noimg		= 0;
+    this.state.nomod		= 0;
+
+    $$$('lms', stat);
+    $$$("refcnt", ++this.cnt.imgs+'*');
+    var t = this.name+'?'+stamp();
+    LOG("show", t);
+    show(image(t)).run(() => // no image(sub(t)) here
+      {
+        this.quick(this.state.quick-1);
+        $$$("refcnt", this.cnt.imgs+'x');
+      });
+
+    this.state.backoff++;	// give additional cycle backoff to load pic
+  }
+}
+
+//window.setTimeout(function () { poller.stop() }, 10000);
 
 
 
@@ -93,20 +340,6 @@ function sub(s) { return config.dir+s }
 //
 
 
-var runcnt = 0;
-var waiti = 0;
-
-function timer(e)
-{
-  runcnt++;
-  //$$$("run",runcnt);
-  if (waiti)
-    {
-      if (!--waiti)
-        dorefresh();
-    }
-  nextrefresh();
-}
 
 var nr=0;
 function out(s)
@@ -133,7 +366,6 @@ function elxy(o,e)
   return [ xy[0]-o.offsetLeft, xy[1]-o.offsetTop ];
 }
 
-var newi=0;
 var loadn=0;
 
 // Image is loaded, show it if it is still shown
@@ -142,11 +374,9 @@ function loadi()
   if (this.err)
     return;
 
-  waiti	= 0;
   this.style.opacity	= 1;
   if (this === shown)
     show();
-  $$$("refcnt", newi+"x");
 }
 
 function greyi()
@@ -162,126 +392,9 @@ function greyi()
 
 var sleeps = 0;
 var sleeper = 0;
-var pendi = false;
-var defsleep = config.sleep;
+var defsleep = conf.sleep;
 var maxsleep = defsleep;
-var defrun = config.run;
-var maxrun = defrun;
 
-function nextrefresh()
-{
-  if (sleeps<0)
-    sleeps = sleeper;
-  if (!--sleeps)
-    pendi = true;
-  if (pendi && !waiti)
-    dorefresh();
-}
-
-var lm, lmc;
-
-// req.text, req, req.status, req.IfModifiedSince
-function checkrefresh(e,x,s,l)
-{
-  $$$("check","");
-  if (l)
-    lm = l;
-  if(!l || s==304)
-    {
-      lmc++;
-      $$$("lms",s+"@"+lmc);
-      waiti	= 0;
-    }
-  else
-    {
-      lmc	= 0;
-      $$$("lms",s);
-
-      $$$("refcnt", ++newi+"*");
-
-      show(image("test.jpg?"+stamp()));
-
-      waiti	= 100;
-    }
-  pendi	= false;
-  sleeper++;
-  if (maxrun && maxsleep && sleeper>maxsleep)
-    {
-      maxrun--;
-      sleeper	= maxsleep;
-      updquick();
-    }
-  sleeps	= 0;
-  nextrefresh();
-}
-
-var rnr=0;
-
-function dorefresh()
-{
-  rnr++;
-  waiti = 100;
-  $$$("check",'*'+rnr);
-  ajax.head(sub("test.jpg"), checkrefresh, lm);
-}
-
-function updquick()
-{
-  if (maxrun && maxsleep)
-    $("qrun").value = maxrun;
-  else
-    $("qrun").value = "0";
-}
-
-function quick()
-{
-  pendi=true;
-  maxsleep = maxsleep && maxrun ? 0 : defsleep;
-  maxrun = defrun;
-  updquick();
-}
-
-var reqrun=false;
-var reqs=[];
-
-function reqdone(r)
-{
-  out("done: "+r);
-
-  reqrun	= false;
-  sleeps	= 0;
-  sleeper	= 0;
-
-  dorefresh();
-  reqnext();
-}
-
-function reqnext()
-{
-  var r;
-
-  if (reqrun)
-    return;
-
-  try {
-    r = reqs.shift();
-  } catch (e) {
-    return;
-  }
-
-  if (r===undefined)
-    return reqnext();
-
-  reqrun	= true;
-  greyi();
-
-  ajax.get("click.php/"+config.targ+"?decache="+stamp()+"&"+r, function(e) { reqdone(r) });
-
-  nr++;
-  out("do: "+r);
-}
-
-function req(r) { reqs.push(r); reqnext() }
 
 function clicki(ev)
 {
@@ -291,12 +404,10 @@ function clicki(ev)
     if (mb[i].checked)
       b |= parseInt(mb[i].value);
   var xy = elxy(this,ev);
-  req("x="+xy[0]+"&y="+xy[1]+"&b="+b);
+  req.req("x="+xy[0]+"&y="+xy[1]+"&b="+b);
 }
 
-function movei(ev) { xy = elxy(this,ev); $$$("pos","x="+xy[0]+" y="+xy[1]) }
-function send(id,t) { if (!t) t="t"; req(t+"="+escape($(id).value)); return false }
-function code(c) { req("c="+escape(c)); return false }
+function movei(ev) { var xy = elxy(this,ev); $$$("pos","x="+xy[0]+" y="+xy[1]) }
 
 var shown;
 function show(i)
@@ -312,7 +423,7 @@ function show(i)
 
       shown = i;
       i.run(loadi);
-      return;
+      return i;
     }
 
   var e = $('shower');
@@ -342,43 +453,13 @@ function ovr()
   this.style.opacity = 0.5;
 }
 
-var clickmap =
-{ quick: quick
-, learn: function () { send('learn','l') }
-};
-
-function clickproxy()
-{
-  var r = this.getAttribute('runs');
-
-  if (clickmap[r])
-    return clickmap[r].call(this);
-
-  var i = parseInt(r);
-  if (i>0)
-   return code(i);
-
-  if ($(r))
-    return send(r);
-
-  out('UNKNOWN '+r);
-  return false;
-}
-
 function init()
 {
-  window.setInterval(timer,500);
-  dorefresh();
-  updquick();
+  newinit();
 
   $('lref').href = sub('l/');
-  $('edit').href = "edit.html?"+config.targ;
+  $('edit').href = "edit.html?"+conf.targ;
 
-  for (var e of document.querySelectorAll('[runs]'))
-    {
-      console.log(e);
-      e.onclick	= clickproxy;
-    }
 
   var o = $('cit');
   for (var a=0; a<30; a++)
