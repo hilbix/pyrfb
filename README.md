@@ -7,6 +7,7 @@
 > - Integrate noVNC, such that you can use it as you like
 > - A lot of improvements (99% to come over the years)
 
+
 # PyRFB
 
 Wrappers around `python-vnc-viewer` to create a web based VNC control.
@@ -22,7 +23,7 @@ Wrappers around `python-vnc-viewer` to create a web based VNC control.
 
 Prerequisites:
 
-- Python 2.7 or later
+- Python 2.7 and Python 3.x (transitioning to Python 3 slowly)
 - Some of my tools, see https://github.com/hilbix/src
 - Linux (perhaps it works with CygWin)
 - NginX with PHP-FPM
