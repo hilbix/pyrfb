@@ -191,15 +191,13 @@ class rfbImg(easyrfb.client):
 
 		#print ImageChops.difference(img,self.img.crop((x,y,x+width,y+height))).getbbox()
 		# If not looping this apparently updates the mouse cursor
+		outline=(255,0,0,255)
 		delta = reduce(lambda x,y:x+y, st.sum2)
 		if delta<100*width*height:
 			self.skips += 1
-			if self.viz:
-				self.vizdraw.rectangle((x,y,x+width,y+height),outline=(0,0,255,255))
-			return
-
+			outline=(0,0,255,255)
 		if self.viz:
-			self.vizdraw.rectangle((x,y,x+width,y+height),outline=(255,0,0,255))
+			self.vizdraw.rectangle((x,y,x+width,y+height),outline=outline)
 
 	self.changed	+= width*height
 #	self.rect = [ x,y,width,height ]
@@ -437,7 +435,7 @@ class controlProtocol(LineReceiver):
 		print(" ".join(tuple(str(v) for v in args)+tuple(str(n)+"="+str(v) for n,v in kw.iteritems())))
 
 	def lineReceived(self, line):
-		self.img = self.factory.img
+		self.rfb = self.factory.img
 		args = line.split(" ")
 		ok = False
 		try:
@@ -465,7 +463,7 @@ class controlProtocol(LineReceiver):
 		y = int(y)
 		if click is not None:
 			click = int(click)
-		self.img.pointer(x,y,click)
+		self.rfb.pointer(x,y,click)
 		return True
 
 	def cmd_learn(self,to):
@@ -478,7 +476,7 @@ class controlProtocol(LineReceiver):
 			os.unlink(tmp)
 		except Exception,e:
 			pass
-		self.img.img.convert('RGBA').save(tmp)
+		self.rfb.img.convert('RGBA').save(tmp)
 		out = LEARNDIR+to
 		if os.path.exists(out+IMGEXT):
 			rename_away(out, IMGEXT)
@@ -488,12 +486,12 @@ class controlProtocol(LineReceiver):
 
 	def cmd_key(self,*args):
 		for k in " ".join(args):
-			self.img.key(ord(k))
+			self.rfb.key(ord(k))
 		return True
 
 	def cmd_code(self,*args):
 		for k in args:
-			self.img.key(int(k,0))
+			self.rfb.key(int(k,0))
 		return True
 
 	def cmd_exit(self):
@@ -502,23 +500,23 @@ class controlProtocol(LineReceiver):
 
 	def cmd_next(self):
 		self.pause()
-		self.img.next(self.resume)
+		self.rfb.next(self.resume)
 		return True
 
 	def cmd_flush(self):
-		self.img.flush()
+		self.rfb.flush()
 		return True
 
 	def cmd_check(self,*templates):
 		w = {'t':templates}
-		return len(templates) and self.img.check_waiter(w, True) and self.print_wait(w)
+		return len(templates) and self.rfb.check_waiter(w, True) and self.print_wait(w)
 
 	def cmd_wait(self,*templates):
 		if len(templates)<2:
 			return False
 		timeout = int(templates[0])
 		self.pause()
-		self.img.wait({'cb':self.wait_cb,'t':templates[1:],'retries':timeout})
+		self.rfb.wait({'cb':self.wait_cb,'t':templates[1:],'retries':timeout})
 		return True
 
 	def print_wait(self,waiter):
@@ -557,8 +555,8 @@ from twisted.internet import reactor
 class createControl(twisted.internet.protocol.Factory):
 	protocol = controlProtocol
 
-	def __init__(self, sockname, img):
-		self.img = img
+	def __init__(self, sockname, rfb):
+		self.rfb = rfb
 		try:
 			os.unlink(sockname)
 		except:
@@ -566,9 +564,9 @@ class createControl(twisted.internet.protocol.Factory):
 		reactor.listenUNIX(sockname,self)
 
 if __name__=='__main__':
-	img	= rfbImg("RFB image writer")
-	if img.loop:
-		createControl(img._preset("RFBIMGSOCK", '.sock'), img)
+	rfb	= rfbImg("RFB image writer")
+	if rfb.loop:
+		createControl(rfb._preset("RFBIMGSOCK", '.sock'), rfb)
 
-	img.run()
+	rfb.run()
 
