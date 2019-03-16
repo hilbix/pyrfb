@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 #
 # Send cmd to socket
 # ./sendsock.py socketnr
@@ -12,36 +12,41 @@ import os
 import socket
 
 def unixsocket(name):
-	sock = socket.socket(socket.AF_UNIX)
-	sock.connect(name)
-	return sock
+        sock = socket.socket(socket.AF_UNIX)
+        sock.connect(name)
+        return sock
 
 def get(err):
-	sock.flush()
-	while True:
-		s = sock.readline()
-		if not s and err!=0:
-			print "EOF"
-			sys.exit(err)
-		if s=="ko\n":
-			sys.exit(err)
-		if s=="ok\n" or not s:
-			return
-		print s,
+        sock.flush()
+        while True:
+                s = sock.readline()
+                if not s:
+                        if err:
+                                print('EOF')
+                                sys.exit(err)
+                        return
+                if s=="ko\n":
+                        sys.exit(err)
+                if s=="ok\n":
+                        return
+                sys.stdout.write(s)
 
 sock = None
 def send(s):
-	sock.write("%s\n" % s)
-	get(1)
+        sock.write("%s\n" % s)
+        get(1)
+        sys.stdout.flush()
 
 if __name__=='__main__':
-	sock = unixsocket('sub/'+sys.argv[1]+'/sock').makefile()
-	if len(sys.argv)==2:
-		for arg in sys.stdin.readlines():
-			send(arg.strip())
-	else:
-		for arg in sys.argv[2:]:
-			send(arg)
-	send("exit")
-	get(0)
+        sock = unixsocket('sub/'+sys.argv[1]+'/sock').makefile(mode='rw')
+        if len(sys.argv)==2:
+                while True:
+                        arg	= sys.stdin.readline()	# interactively/unbuffered line by line
+                        if not arg: break
+                        send(arg.strip())
+        else:
+                for arg in sys.argv[2:]:
+                        send(arg)
+        send("exit")
+        get(0)
 
