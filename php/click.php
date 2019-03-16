@@ -30,8 +30,9 @@ $o="";
 $s="";
 if (isset($_GET["c"]))
   {
-    $o = sprintf("code %d", $_GET["c"]);
-    $s = sprintf("code 0x%04x\n", $_GET["c"]);
+    $a = intval($_GET["c"], 0);
+    $o = sprintf("code %d", $a);
+    $s = sprintf("code 0x%04x\n", $a);
   }
 elseif (isset($_GET["t"]))
   {
