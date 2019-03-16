@@ -435,7 +435,7 @@ class controlProtocol(LineReceiver):
 		print(" ".join(tuple(str(v) for v in args)+tuple(str(n)+"="+str(v) for n,v in kw.iteritems())))
 
 	def lineReceived(self, line):
-		self.rfb = self.factory.img
+		self.rfb = self.factory.rfb
 		args = line.split(" ")
 		ok = False
 		try:
