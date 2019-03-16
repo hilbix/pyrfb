@@ -113,9 +113,9 @@ var emit =
 function newinit()
 {
   emit.init();
-  emit.register('quick', function (v) { $('qrun').value = v });
-  emit.register('done',  function (r) { out('done: '+r) });
-  emit.register('act',   function (r) { greyi(); out('do: '+r) });
+  emit.register('quick', function (v)   { $('qrun').value = v });
+  emit.register('done',  function (r,t) { out('done: '+r+' '+t) });
+  emit.register('act',   function (r)   { greyi(); out('do: '+r) });
 
   req.init();
   runs.init();
@@ -156,13 +156,13 @@ var req =
     this.active	= true;
     this.cnt.req++;
     emit.emit('act', r);
-    ajax.get(this.url+'/'+conf.targ+'?decache='+stamp()+'&'+r, e => this.done(r));
+    ajax.get(this.url+'/'+conf.targ+'?decache='+stamp()+'&'+r, t => this.done(r, t));
     return this;
   }
-, done:		function (r)
+, done:		function (...a)
   {
     this.active	= false;
-    emit.emit('done', r);
+    emit.emit('done', ...a);
     // sleeps = 0; sleeper = 0;
     return this.next();
   }
