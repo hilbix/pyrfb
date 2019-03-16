@@ -64,7 +64,7 @@ var conf = {}
 
 conf.n		= parseInt(window.location.search.substr(1));
 conf.quick	= 100;		// count
-conf.poll	= 250;		// ms
+conf.poll	= 200;		// ms
 conf.maxwait	= 1000000;	// ms
 conf.sleep	= 6;
 conf.targ	= ''+conf.n+'';
@@ -147,7 +147,7 @@ var req =
       {
         if (!this.reqs.length)
           {
-	    emit.emit('fin');
+            emit.emit('fin');
             return;
           }
         var r = this.reqs.shift();
@@ -187,7 +187,7 @@ var runs =
     if (i in this)	return this[i];
 
     i	= parseInt(str);
-    if (i>0)	return () => { req("c="+escape(c)); return false };
+    if (i>0)	return () => { req.req("c="+escape(str)); return false };
     if ($(str))	return () => { req.send(str); return false };
 
     return BUG('bug: undefined functionality: '+r);
