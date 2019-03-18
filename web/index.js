@@ -3,9 +3,15 @@
 // This Works is placed under the terms of the Copyright Less License,
 // see file COPYRIGHT.CLL.  USE AT OWN RISK, ABSOLUTELY NO WARRANTY.
 
+// index.html?NR (NR must be numeric)
+// NR/l/ ("learned") are images saved via backend
+// NR/s/ ("state") are state images saved via backend
+// NR/e/ ("edit" web writable) are the edits (JSON templates referencing "learned" files)
+// NR/o/ ("operation" web writable) are processed by the backend (JSON files referencing "edit"s)
+
 // These functions should go into a lib
 
-var STOP = [ "STOP" ];
+function later(fn, ...a) { setTimeout(() => fn(...a)) }
 
 function BUG(x) { var f=function () { alert(x); return false; }; f(); return f }
 
@@ -19,25 +25,46 @@ function dump(x)
 function stamp() { return new Date().getTime() }
 function LOG(...a)
 {
-  // console.log(...a)
+  console.log(...a)
 }
 
-// run an object if it is ok or error
-function run(o) { var r=o.runner; if (r && (o.err || o.ok)) { o.runner=undefined; r.call(o) } }
-function runit(o, r) { o.run = r; run(o) }
+function out(s) { $$$('out',s) }
 
-// create an Image which tracks it's state
-function image(url)
+// IMG: Promise to create an image
+// IMG(img).then(img => { success }, img => { fail }).then(...)
+// imgs can be image, URL(string), function img => URL
+// Why not something like bfred-it/image-promise?  Because it cannot do function ..
+// See also: https://github.com/bfred-it/image-promise/blob/master/index.js
+function IMG(url)
 {
-  var i		= document.createElement('img');
+  var img	= document.createElement('IMG');
 
-  i.run		= undefined;
-  i.onload	= function () { this.ok=1;  run(this); LOG('img loaded', url) }
-  i.onerror	= function () { this.err=1; run(this); LOG('img error', url) }
-  i.run		= function (fn) { var l=this.runner; this.runner=(l ? function() { l.call(this); fn.call(this) } : fn); run(this) }
-  i.src		= sub(url);
+  if (typeof url == 'function')
+    img	= url(img);
+  else if (typeof url == 'string')
+    img.src	= url;
+  else
+    img		= url;
 
-  return i;
+  if (!img || img.tagName !== 'IMG') return Promise.reject();
+
+  var ret = new Promise((res,rej) =>
+    {
+      var ok = () =>
+        {
+          img.removeEventListener('load', ok);
+          img.removeEventListener('error', ok);
+          if (img.naturalWidth) { LOG('img ok',img.src); res(img) } else { LOG('img err', img.src); rej(img) }
+        };
+
+      img.addEventListener('load', ok);
+      img.addEventListener('error', ok);
+      if (img.complete)
+        ok();
+    });
+
+  ret.img	= img;
+  return ret;
 }
 
 function clone(i)
@@ -46,9 +73,6 @@ function clone(i)
 
   o.onload	= i.onload;
   o.onerror	= i.onerror;
-  o.run		= i.run;
-  o.err		= i.err;
-  o.ok		= i.ok;
   return o;
 }
 
@@ -80,7 +104,8 @@ function sub(s) { return conf.dir+s }
 // emit class
 
 var emit =
-{ init:		function ()
+{ STOP:	['STOP']
+, init:		function ()
   {
     this.emits	= {};
   }
@@ -95,7 +120,7 @@ var emit =
   {
     if (!(what in this.emits))
       this.emits[what]	= [];
-    var f = function (...b) { if (cb(...a,...b)===STOP) this.emits[what].remove(f) };
+    var f = (...b) => { if (cb(...a,...b)===this.STOP) this.emits[what].remove(f) };
     this.emits[what].push(f);
     return this;
   }
@@ -112,10 +137,14 @@ var emit =
 
 function newinit()
 {
+  $('lref').href = sub('l/');
+  $('edit').href = "edit.html?"+conf.targ;
+
   emit.init();
-  emit.register('quick', function (v)   { $('qrun').value = v });
+  emit.register('quick', function (v)   { $$$('qrun', v) });
   emit.register('done',  function (r,t) { out('done: '+r+' '+t) });
   emit.register('act',   function (r)   { greyi(); out('do: '+r) });
+  emit.register('wait',  function (w)   { $$$('wait', w) });
 
   req.init();
   runs.init();
@@ -231,6 +260,7 @@ var poller =
     // (if timer is started)
     this.state.wait	= 0;
     this.state.backoff	= 0;
+    emit.emit('wait', this.state.wait, this.state.backoff);
     return this;
   }
 , start:	function ()
@@ -269,17 +299,19 @@ var poller =
     // retry next time it is time to poll
     this.state.backoff	= 0;
   }
-, quick:	function (value)
+, quick:	function (nr)
   {
-    this.state.quick	= value>0 ? value : 0;
+    this.state.quick	= nr>0 ? (this.state.wait=0, nr) : 0;
     emit.emit('quick', this.state.quick);
   }
 , poll:	function ()
   {
-    LOG('backoff', this.state.backoff);
+//    LOG('backoff', this.state.backoff);
     if (this.state.backoff)
       {
-        this.state.backoff--;
+        if (--this.state.backoff > this.state.wait)
+	  this.state.backoff	= this.state.wait;
+        emit.emit('backoff', this.state.backoff);
         return;
       }
     $$$("check",++this.cnt.check + '*');
@@ -288,7 +320,8 @@ var poller =
     if (++this.state.wait > this.set.maxwait)
       this.state.wait = this.set.maxwait;
     this.state.backoff = this.state.wait;
-    LOG('wait', this.state.wait);
+    emit.emit('wait', this.state.wait);
+    emit.emit('backoff', this.state.backoff);
   }
 , check:	function (txt, r, stat, l_m)
   {
@@ -299,7 +332,10 @@ var poller =
         // if we are in quick mode, do the next poll immediately
         // else at the next backoff interval.
         if (this.state.quick)
-          this.state.wait	= 0;
+          {
+            this.state.wait	= 0;
+            // zu unruhig: emit.emit('wait', this.state.wait);
+          }
         $$$('lms', stat+'@'+ ++this.state.nomod);
         return;
       }
@@ -314,16 +350,21 @@ var poller =
     this.state.nomod		= 0;
 
     $$$('lms', stat);
-    $$$("refcnt", ++this.cnt.imgs+'*');
+    $$$('refcnt', ++this.cnt.imgs+'*');
     var t = this.name+'?'+stamp();
-    LOG("show", t);
-    show(image(t)).run(() => // no image(sub(t)) here
+    LOG('load', t);
+    IMG(sub(t)).then(i =>
       {
+        LOG('show', t);
+        show(i);
+        // XXX TODO XXX abort all others
         this.quick(this.state.quick-1);
-        $$$("refcnt", this.cnt.imgs+'x');
-      });
+        $$$('refcnt', this.cnt.imgs+'x');
+      })
+//    .catch(;
 
     this.state.backoff++;	// give additional cycle backoff to load pic
+    emit.emit('backoff', this.state.backoff);
   }
 }
 
@@ -341,13 +382,6 @@ var poller =
 
 
 
-var nr=0;
-function out(s)
-{
-  $$$("cnt",nr);
-  $$$("txt",s);
-}
-
 function mousexy(e)
 {
   if (!e) var e = window.event;
@@ -364,19 +398,6 @@ function elxy(o,e)
 {
   var xy = mousexy(e);
   return [ xy[0]-o.offsetLeft, xy[1]-o.offsetTop ];
-}
-
-var loadn=0;
-
-// Image is loaded, show it if it is still shown
-function loadi()
-{
-  if (this.err)
-    return;
-
-  this.style.opacity	= 1;
-  if (this === shown)
-    show();
 }
 
 function greyi()
@@ -414,6 +435,8 @@ function show(i)
 {
   if (i)
     {
+      shown	= i;
+
       i.style		= "";
       i.style.position	= "absolute";
       i.style.top	= "0px";
@@ -421,8 +444,9 @@ function show(i)
       i.onclick		= clicki;
       i.onmousemove	= movei;
 
-      shown = i;
-      i.run(loadi);
+      IMG(i)
+      .then(img => { if (img === shown) { img.style.opacity = 1; show() } });
+
       return i;
     }
 
@@ -432,50 +456,40 @@ function show(i)
 
   // avoid flicker:
   // never remove probably currently showing image in this round
-  if (e.firstChild != e.lastChild)
-    e.removeChild(e.firstChild);
-
-  if (e.firstChild != shown)
-    e.appendChild(shown);
-}
-
-var was;
-
-function ovr()
-{
-  if (!this.ok || this.err)
+  if (e.lastChild === shown)
     return;
 
-  was	= shown;
+  if (e.firstChild != e.lastChild && e.firstChild !== shown)
+    later(c => e.removeChild(c), e.firstChild);
 
-  show(clone(this));
-
-  this.style.opacity = 0.5;
+  e.appendChild(shown);
 }
 
 function init()
 {
   newinit();
 
-  $('lref').href = sub('l/');
-  $('edit').href = "edit.html?"+conf.targ;
-
-
+  // we should only list significant things
+  // which are recorded by the backend
+  // 'l/' is wrong, this must be 's/'
   var o = $('cit');
   for (var a=0; a<30; a++)
-    {
-      var i	= image('l/'+a.toString(16)+'.png');
+    IMG(i =>
+      {
+//      i.mycnt		= a;
+//      i.style.border	= "1px dotted white";
+        i.style.width	= "100px";
+        o.appendChild(i);
+        return sub('l/'+a.toString(16)+'.png');
+      })
+    .then(i =>
+      {
+        i.onmouseover	= function () { this.style.opacity=0.5; this.was=shown; this.show=clone(this); show(this.show); }
+        i.onmouseout	= function () { this.style.opacity=1; if (shown == this.show) show(this.was); this.was=undefined; this.show=undefined; };
+      })
+    .catch(i => i.err=1);
 
-//    i.mycnt	= a;
-//    i.style.border	= "1px dotted white";
-      i.style.width	= "100px";
-      i.onmouseover	= ovr;
-      i.onmouseout	= function () { this.style.opacity=1; if (shown==this) show(was); }
-
-      o.appendChild(i);
-    }
-
-  out("running");
+  out('running');
 }
 
 onready(init);
