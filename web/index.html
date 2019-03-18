@@ -14,35 +14,31 @@
  <input name="mb" type="checkbox" value="65536"/>
  &gt;&gt; <input id="uihelper" type="checkbox" value="1"/>
 </div>
-<div><input id="qrun" runs="quick" type="button" value="r"/><span id="run"></span> <span id="refcnt"></span> <span id="cnt"></span></div>
-<div id="txt"></div>
+<div><button id="qrun" runs="quick">r</button><span id="refcnt"></span> <span id="wait"></span> <span id="backoff"></span></div>
+<div id="out"></div>
 <div id="pos"></div>
 <div>
  <input id="learn" class="w100"></input>
- <input runs="learn" type="submit" value="Learn">
+ <button runs="learn">Learn</button>
  <a id="lref">learn</a> <a id="edit">edit</a>
 </div><div>
  <textarea id="inp1"></textarea>
- <input runs="inp1" type="submit" value="Send"/>
- <input runs="0xff0a" type="submit" value="Enter"/>
+ <button runs="inp1">Send</button> <button runs="0xff0a">Enter</button>
 </div><div>
  <textarea id="inp2"></textarea>
- <input runs="inp2" type="submit" value="Send"/>
- <input runs="0xff08" type="submit" value="BS"/>
+ <button runs="inp2">Send</button> <button runs="0xff08">BS</button>
 </div><div>
  <textarea id="inp3"></textarea>
- <input runs="inp3" type="submit" value="Send"/>
- <input runs="0xff0d" type="submit" value="CR"/>
+ <button runs="inp3">Send</button> <button runs="0xff0d">CR</button>
 </div><div>
  <textarea id="inp4"></textarea>
- <input runs="inp4" type="submit" value="Send"/>
- <input runs="0xff1b" type="submit" value="ESC"/>
+ <button runs="inp4">Send</button> <button runs="0xff1b">ESC</button>
 </div><div>
 <table border="0" cellpadding="0" cellspacing="0">
-<tr><td><input runs="49" type="submit" value="1"/></td><td><input runs="50" type="submit" value="2"/></td><td><input runs="51" type="submit" value="3"/></td></tr>
-<tr><td><input runs="52" type="submit" value="4"/></td><td><input runs="53" type="submit" value="5"/></td><td><input runs="54" type="submit" value="6"/></td></tr>
-<tr><td><input runs="55" type="submit" value="7"/></td><td><input runs="56" type="submit" value="8"/></td><td><input runs="57" type="submit" value="9"/></td></tr>
-<tr><td><input runs="46" type="submit" value="."/></td><td><input runs="48" type="submit" value="0"/></td><td><input runs="44" type="submit" value=","/></td></tr>
+<tr><td><button runs="49">1</button></td><td><button runs="50">2</button/></td><td><button runs="51">3</button></td></tr>
+<tr><td><button runs="52">4</button></td><td><button runs="53">5</button/></td><td><button runs="54">6</button></td></tr>
+<tr><td><button runs="55">7</button></td><td><button runs="56">8</button/></td><td><button runs="57">9</button></td></tr>
+<tr><td><button runs="46">.</button></td><td><button runs="48">0</button/></td><td><button runs="44">,</button></td></tr>
 </table>
 </div><div>
 <span id="check"></span> / <span id="lms"></span>
