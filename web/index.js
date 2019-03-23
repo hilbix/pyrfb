@@ -166,6 +166,7 @@ var req =
   }
 , send:		function (id,t) { return this.req((t?t:'t')+'='+escape($(id).value)) }
 , code:		function (c)    { return this.req(         'c='+escape(c)) }
+, key:		function (k)    { return this.req(         'k='+escape(k)) }
 , req:		function (s)    { this.reqs.push(s); return this.next(); }
 , next:		function ()
   {
@@ -216,10 +217,11 @@ var runs =
     if (i in this)	return this[i];
 
     i	= parseInt(str);
-    if (i>0)	return () => { req.req("c="+escape(str)); return false };
+    if (i>0)	return () => { req.code(i); return false };
+    if (str.substr(0,1)=='K') return () => { req.key(str.substr(1)); return false };
     if ($(str))	return () => { req.send(str); return false };
 
-    return BUG('bug: undefined functionality: '+r);
+    return BUG('bug: undefined functionality: '+str);
   }
 , run_quick:	function () { poller.quick(poller.state.quick ? 0 : conf.quick) }
 , run_learn:	function () { send('learn', 'l'); return false }

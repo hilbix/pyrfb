@@ -284,7 +284,7 @@ class rfbImg(easyrfb.client):
                 return delaynext
 
         cb,args,kw	= self.evting.pop(0)
-	print('evt', cb,args,kw)
+        #print('evt', cb,args,kw)
         cb(*args, **kw)
 
         return delaynext
@@ -295,7 +295,7 @@ class rfbImg(easyrfb.client):
         timed	= kw.pop('timed', True)
         next	= kw.pop('next', False)
         # for now only queued and timed event are supported
-	print('add', cb,args,kw)
+        #print('add', cb,args,kw)
         self.evting.append((cb, args, kw))
 
     def event_drain(self, child, refresh):
@@ -560,7 +560,10 @@ class controlProtocol(LineReceiver):
 
         def cmd_code(self,*args):
                 for k in args:
-                        self.rfb.key(int(k,0))
+                        v	= easyrfb.getKey(k)
+                        if v == False:
+                                v	= int(k, base=0)
+                        self.rfb.key(v)
                 return self.rfb.event_drain(self, True)
 
         def cmd_exit(self):

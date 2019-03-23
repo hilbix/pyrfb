@@ -31,8 +31,16 @@ $s="";
 if (isset($_GET["c"]))
   {
     $a = intval($_GET["c"], 0);
+    if ($a == 0 && $_GET["c"]!=='0') die("c?");
     $o = sprintf("code %d", $a);
     $s = sprintf("code 0x%04x\n", $a);
+  }
+else if (isset($_GET["k"]))
+  {
+    $a = $_GET["k"];
+    if (!ctype_graph($a)) die("k?");
+    $o = sprintf("code %s", $a);
+    $s = sprintf("key %s\n", $a);
   }
 elseif (isset($_GET["t"]))
   {
@@ -41,7 +49,7 @@ elseif (isset($_GET["t"]))
     for ($i=count($a); --$i>=0; ) {
       $s = "key ".$a[$i]."\n$s";
       if ($i)
-        $s = "code 10\n$s";
+        $s = "code Return\n$s";
     }
   }
 elseif (isset($_GET["x"]))
