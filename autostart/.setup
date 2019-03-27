@@ -113,7 +113,7 @@ do
 
 	mkdirectory  775 ../sub "../sub/$nr" "../sub/$nr/web";
 	mkdirectory  775 "../sub/$nr/web/l" "../sub/$nr/web/s";
-	mkdirectory 1775 "../sub/$nr/web/e" "../sub/$nr/web/o";
+	mkdirectory 1777 "../sub/$nr/web/e" "../sub/$nr/web/o";
 
 	mksoftlink "../web/$nr" "../sub/$nr/web";
 	mksoftlink "websock-$nr.sh" .websock;
