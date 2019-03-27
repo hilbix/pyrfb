@@ -57,6 +57,10 @@ check template..
 	so `!template` means success if the template does not match.
 	(in that case it is not `found`, it is `spare`).
 
+state template..
+	Similar to check, but also
+	saves the state (image) of the found TEMPLATE as s/TEMPLATE.png
+
 wait count template..
 	Wait for some given template to show up.
 	This is like check but a bit more efficient than direct polling.
