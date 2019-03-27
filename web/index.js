@@ -1,4 +1,5 @@
 "use strict";
+//window.setTimeout(function () { poller.stop() }, 10000);
 
 // This Works is placed under the terms of the Copyright Less License,
 // see file COPYRIGHT.CLL.  USE AT OWN RISK, ABSOLUTELY NO WARRANTY.
@@ -28,8 +29,18 @@ function LOG(...a)
   console.log(...a)
 }
 
-function out(s) { out.out=s; $$$('out', out.tmp===undefined ? out.out : out.tmp) }
-function tmp(flag, s) { out.tmp = flag ? s : out.tmp==s ? undefined : out.tmp; out(out.out) }
+function out(s) { out._out=s; $$$('out', out._tmp===undefined ? out._out : out._tmp) }
+out.tmp = function (flag, s) { this._tmp = flag ? s : this._tmp==s ? undefined : this._tmp; out(this._out) }
+
+function clear(e,c)
+{
+  e=$(e);
+  while (e.firstChild)
+    e.removeChild(e.firstChild);
+  if (c)
+    e.appendChild(c);
+  return e;
+}
 
 // IMG: Promise to create an image
 // IMG(img).then(img => { success }, img => { fail }).then(...)
@@ -41,9 +52,12 @@ function IMG(url)
   var img	= document.createElement('IMG');
 
   if (typeof url == 'function')
-    img	= url(img);
-  else if (typeof url == 'string')
-    img.src	= url;
+    url	= url(img);
+  if (typeof url == 'string')
+    {
+      LOG('img', url);
+      img.src	= url;
+    }
   else
     img		= url;
 
@@ -157,50 +171,11 @@ var emit =
 
 
 //
-// Initialization and global callbacks
-//
-
-function newinit()
-{
-  $('lref').href = sub('l/');
-  $('edit').href = "edit.html?"+conf.targ;
-
-  show.init('show');
-
-  emit.init();
-  emit.register('quick', function (v)   { $$$('qrun', v) });
-  emit.register('done',  function (r,t) { out('done: '+r+' '+t) });
-  emit.register('act',   function (r)   { show.grey(); out('do: '+r) });
-  emit.register('wait',  function (w)   { $$$('wait', w) });
-
-  req.init();
-  runs.init();
-  poller.init(conf.poll).quick(conf.quick);
-
-  titles();
-}
-
-function titles()
-{
-  for (var e of document.querySelectorAll('[title]'))
-    {
-      var t = e.title;
-      EVP(e, 'mouseover', CLOSURE(t => tmp(true,  t), t));
-      EVP(e, 'mouseout',  CLOSURE(t => tmp(false, t), t));
-      var f = e.getAttribute('for');
-      if (!f) continue;
-      EVP(f, 'mouseover', CLOSURE(t => tmp(true,  t), t));
-      EVP(f, 'mouseout',  CLOSURE(t => tmp(false, t), t));
-    }
-}
-
-
-//
 // Backend-Calls
 //
 
 var req =
-{ url:		'click.php/'
+{ url:		'click.php'
 , init:		function ()
   {
     this.reqs	= [];
@@ -208,20 +183,23 @@ var req =
     this.cnt	= { req:0 };
     return this;
   }
-, send:		function (id,t) { return this.req((t?t:'t')+'='+escape($(id).value)) }
-, code:		function (c)    { return this.req(         'c='+escape(c)) }
-, key:		function (k)    { return this.req(         'k='+escape(k)) }
-, req:		function (s)    { this.reqs.push(s); return this.next(); }
-, idle:		function (s)	{ this.idle_ = s; return this.next(); }
+, send:		function (id,t)	{ return this.req((t?t:'t')+'='+escape($(id).value)) }
+, code:		function (c)	{ return this.req(         'c='+escape(c)) }
+, key:		function (k)	{ return this.req(         'k='+escape(k)) }
+, req:		function (s)	{ return this.get(this.url, s) }
+, idle:		function (s)	{ this.idle_ = s; return this.next() }
+, get:		function (u,r,cb,...a) { this.reqs.push({u:u, r:r, cb:cb, a:a}); return this.next() }
 , next:		function ()
   {
+    var r;
+
     if (this.active)
       return this;
 
     do
       {
         if (this.reqs.length)
-          var r = this.reqs.shift();
+          r		= this.reqs.shift();
         else
           {
             r		= this.idle_;
@@ -231,19 +209,22 @@ var req =
                 emit.emit('fin');
                 return;
               }
+            r		= { u:this.url, r:r };
           }
-      } while (r===void 0);
+      } while (!r);
 
-    this.active	= true;
+    this.active	= r;
     this.cnt.req++;
     emit.emit('act', r);
-    ajax.get(this.url+'/'+conf.targ+'?decache='+stamp()+'&'+r, t => this.done(r, t));
+    ajax.get(r.u+'/'+conf.targ+'?decache='+stamp()+'&'+r.r, t => this.done(r, t));
     return this;
   }
-, done:		function (...a)
+, done:		function (r, t)
   {
     this.active	= false;
-    emit.emit('done', ...a);
+    emit.emit('done', r, t);
+    if (r.cb)
+      r.cb(t, ...r.a);
     return this.next();
   }
 };
@@ -274,16 +255,16 @@ var runs =
     return BUG('bug: undefined functionality: '+str);
   }
 , run_quick:	function () { poller.quick(poller.state.quick ? 0 : conf.quick) }
-, run_learn:	function () { send('learn', 'l'); return false }
+, run_learn:	function () { req.send('learn', 'l'); return false }
+, run_reload:	reload
 };
 
 
 //
 // Poller
 //
-// The poller logic was complex,
-// so better to encapsulate,
-// so source explains itself a bit better.
+// This polls for image updates,
+// with some linear backoff.
 
 var poller =
 { init:		function (ms)
@@ -404,22 +385,17 @@ var poller =
     $$$('lms', stat);
     $$$('refcnt', ++this.cnt.imgs+'*');
     var t = this.name+'?'+stamp();
-    LOG('load', t);
     IMG(sub(t)).then(i =>
       {
         show.load(i);
         this.quick(this.state.quick-1);
         $$$('refcnt', this.cnt.imgs+'x');
       })
-//    .catch(;
 
     this.state.backoff++;	// give additional cycle backoff to load pic
     emit.emit('backoff', this.state.backoff);
   }
 }
-
-//window.setTimeout(function () { poller.stop() }, 10000);
-
 
 //
 // Mouse
@@ -439,7 +415,6 @@ var mouse =
   }
 , relative:	(o,e) =>
   {
-    LOG('mouse.relative', o, e);
     var xy = mouse.xy_from_event(e);
     return [ xy[0]-o.offsetLeft, xy[1]-o.offsetTop ];
   }
@@ -503,8 +478,8 @@ var show =
 , draw:		function ()
   {
     var	i = this.tmp_ || this.orig_;
-    this.canvas.width	= i.width;
-    this.canvas.height	= i.height;
+    this.canvas.width	= i.naturalWidth;
+    this.canvas.height	= i.naturalHeight;
     this.canvas.style.opacity = 1;
     this.canvas.getContext("2d").drawImage(i,0,0);
   }
@@ -530,39 +505,95 @@ var show =
 
 
 //
-// Things below should be reworked
+// Initialization
 //
 
-function show(i)
-{
-
-}
-
-function init()
-{
-  newinit();
-
+/*
   // we should only list significant things
   // which are recorded by the backend
   // 'l/' is wrong, this must be 's/'
-  var o = $('cit');
-  for (var a=0; a<30; a++)
-    IMG(i =>
-      {
-//      i.mycnt		= a;
-//      i.style.border	= "1px dotted white";
-        i.style.width	= "100px";
-        o.appendChild(i);
-        return sub('l/'+a.toString(16)+'.png');
-      })
     .then(i =>
       {
-        i.onmouseover	= function () { this.style.opacity=0.5; show.tmp(true, this) }
-        i.onmouseout	= function () { this.style.opacity=1;   show.tmp(false, this) }
       })
     .catch(i => i.err=1);
+*/
 
-  out('running');
+
+function init()
+{
+  $('lref').href = sub('l/');
+  $('edit').href = "edit.html?"+conf.targ;
+
+  show.init('show');
+
+  emit.init();
+  emit.register('quick', function (v)   { $$$('qrun', v) });
+  emit.register('done',  function (r,t) { out('done: '+r.r+' '+t) });
+  emit.register('act',   function (r)   { if (!r.cb) show.grey(); out('do: '+r.r) });
+  emit.register('wait',  function (w)   { $$$('wait', w) });
+
+  req.init();
+  runs.init();
+  poller.init(conf.poll).quick(conf.quick);
+
+  for (var e of document.querySelectorAll('[title]'))
+    {
+      var t = e.title;
+      EVP(e, 'mouseover', CLOSURE(t => out.tmp(true,  t), t));
+      EVP(e, 'mouseout',  CLOSURE(t => out.tmp(false, t), t));
+      var f = e.getAttribute('for');
+      if (!f) continue;
+      EVP(f, 'mouseover', CLOSURE(t => out.tmp(true,  t), t));
+      EVP(f, 'mouseout',  CLOSURE(t => out.tmp(false, t), t));
+    }
+
+  reload();
+}
+
+function reload()
+{
+  var assets = { l:'learn', s:'stat' };
+  var f = null;
+  var t = $$('reload');
+  for (var x in assets)
+    {
+      if (t==x)
+        {
+          t	= null;
+          continue;
+        }
+      if (!t)
+        {
+          f	= x;
+          break;
+        }
+      if (!f)
+        f	= x;
+    }
+  var o = clear('cit');
+  $$$('reload', f);
+
+  req.get('exec.php', 'r='+assets[f], t =>
+    {
+      var nr = 0;
+      var a = t.split('\n');
+      a.sort();
+      for (var u of a)
+        {
+          if (u)
+            IMG(i => { i.nr = ++nr; i.main = f+'/'+u; return sub(i.main) })
+            .then(i =>
+              {
+                LOG("here", i.nr, i.src);
+                i.style.border	= "1px dotted white";
+                i.style.width	= "100px";
+                o.appendChild(i);
+                i.onmouseover	= function () { this.style.opacity=0.5; show.tmp(true, this); out.tmp(true, i.nr+' '+i.main) }
+                i.onmouseout	= function () { this.style.opacity=1;   show.tmp(false, this); out.tmp(false, i.nr+' '+i.main) }
+              });
+        }
+    }
+  );
 }
 
 onready(init);
