@@ -28,7 +28,8 @@ function LOG(...a)
   console.log(...a)
 }
 
-function out(s) { $$$('out',s) }
+function out(s) { out.out=s; $$$('out', out.tmp===undefined ? out.out : out.tmp) }
+function tmp(flag, s) { out.tmp = flag ? s : out.tmp==s ? undefined : out.tmp; out(out.out) }
 
 // IMG: Promise to create an image
 // IMG(img).then(img => { success }, img => { fail }).then(...)
@@ -74,6 +75,30 @@ function clone(i)
   o.onload	= i.onload;
   o.onerror	= i.onerror;
   return o;
+}
+
+function mkArray(a)
+{
+  return Array.isArray(a) ? a : [a];
+}
+
+function CLOSURE(fn, ...a)
+{
+  return function (...b) { return fn.call(this, ...a, ...b) }
+}
+
+// Register passive Event
+function EVP(e, ons, fn)
+{
+  for (var l of mkArray(ons))
+    $(e).addEventListener(l, CLOSURE(fn, l), {passive:true, capture:true});
+}
+
+// Register active Event
+function EVT(e, ons, fn)
+{
+  for (var l of mkArray(ons))
+    $(e).addEventListener(l, CLOSURE(fn, l), {passive:false, capture:false});
 }
 
 
@@ -140,16 +165,35 @@ function newinit()
   $('lref').href = sub('l/');
   $('edit').href = "edit.html?"+conf.targ;
 
+  show.init('show');
+
   emit.init();
   emit.register('quick', function (v)   { $$$('qrun', v) });
   emit.register('done',  function (r,t) { out('done: '+r+' '+t) });
-  emit.register('act',   function (r)   { greyi(); out('do: '+r) });
+  emit.register('act',   function (r)   { show.grey(); out('do: '+r) });
   emit.register('wait',  function (w)   { $$$('wait', w) });
 
   req.init();
   runs.init();
   poller.init(conf.poll).quick(conf.quick);
+
+  titles();
 }
+
+function titles()
+{
+  for (var e of document.querySelectorAll('[title]'))
+    {
+      var t = e.title;
+      EVP(e, 'mouseover', CLOSURE(t => tmp(true,  t), t));
+      EVP(e, 'mouseout',  CLOSURE(t => tmp(false, t), t));
+      var f = e.getAttribute('for');
+      if (!f) continue;
+      EVP(f, 'mouseover', CLOSURE(t => tmp(true,  t), t));
+      EVP(f, 'mouseout',  CLOSURE(t => tmp(false, t), t));
+    }
+}
+
 
 //
 // Backend-Calls
@@ -168,6 +212,7 @@ var req =
 , code:		function (c)    { return this.req(         'c='+escape(c)) }
 , key:		function (k)    { return this.req(         'k='+escape(k)) }
 , req:		function (s)    { this.reqs.push(s); return this.next(); }
+, idle:		function (s)	{ this.idle_ = s; return this.next(); }
 , next:		function ()
   {
     if (this.active)
@@ -175,12 +220,18 @@ var req =
 
     do
       {
-        if (!this.reqs.length)
+        if (this.reqs.length)
+          var r = this.reqs.shift();
+        else
           {
-            emit.emit('fin');
-            return;
+            r		= this.idle_;
+            this.idle_	= void 0;
+            if (r === void 0)
+              {
+                emit.emit('fin');
+                return;
+              }
           }
-        var r = this.reqs.shift();
       } while (r===void 0);
 
     this.active	= true;
@@ -193,14 +244,13 @@ var req =
   {
     this.active	= false;
     emit.emit('done', ...a);
-    // sleeps = 0; sleeper = 0;
     return this.next();
   }
 };
 
 
 //
-// Click handling
+// DOM click handling
 //
 
 var runs =
@@ -312,7 +362,7 @@ var poller =
     if (this.state.backoff)
       {
         if (--this.state.backoff > this.state.wait)
-	  this.state.backoff	= this.state.wait;
+          this.state.backoff	= this.state.wait;
         emit.emit('backoff', this.state.backoff);
         return;
       }
@@ -357,9 +407,7 @@ var poller =
     LOG('load', t);
     IMG(sub(t)).then(i =>
       {
-        LOG('show', t);
-        show(i);
-        // XXX TODO XXX abort all others
+        show.load(i);
         this.quick(this.state.quick-1);
         $$$('refcnt', this.cnt.imgs+'x');
       })
@@ -373,98 +421,121 @@ var poller =
 //window.setTimeout(function () { poller.stop() }, 10000);
 
 
+//
+// Mouse
+//
+
+var mouse =
+{ xy_from_event:	e =>
+  {
+    if (!e) var e = window.event;
+    if (e.pageX || e.pageY)
+      return [ e.pageX, e.pageY ];
+    if (e.clientX || e.clientY)
+      return [ e.clientX + document.body.scrollLeft + document.documentElement.scrollLeft,
+               e.clientY + document.body.scrollTop  + document.documentElement.scrollTop
+             ];
+    return [ 0,0 ]
+  }
+, relative:	(o,e) =>
+  {
+    LOG('mouse.relative', o, e);
+    var xy = mouse.xy_from_event(e);
+    return [ xy[0]-o.offsetLeft, xy[1]-o.offsetTop ];
+  }
+, move:		function (t, ev)
+  {
+    var xy = mouse.relative(this,ev);
+    $$$('pos',xy[0]+" "+xy[1]);
+    if ($('ma').checked)
+      req.idle("x="+xy[0]+"&y="+xy[1]);
+  }
+, click:	function (t, ev)
+  {
+    var xy = mouse.relative(this,ev);
+    var mb = document.getElementsByName('mb');
+    var b=0;
+    for (var i=mb.length; --i>=0; )
+      if (mb[i].checked)
+        b |= parseInt(mb[i].value);
+    req.req("x="+xy[0]+"&y="+xy[1]+"&b="+b);
+  }
+};
 
 
+//
+// Canvas
+//
 
+var show =
+{ init:		function (id)
+  {
+    this.id	= id;
+    this.canvas	= $(id);
+    this.orig_	= void 0;
+    this.tmp_	= void 0;
+    this.greyout= $('greyout');
+    EVT(this.canvas, 'click',     mouse.click);
+    EVT(this.canvas, 'mousemove', mouse.move);
+  }
+, load:		function (i)
+  {
+    var need = true;
+    var old = this.current;
+    var current = (keep) =>
+      {
+        if (!need)
+          return false;
+        if (!keep)
+          i.src = '';	// abort request
+        if (this.current === current)
+          this.current = void 0;
+        need = false;
+        // cancel out older pictures which are still loading
+        if (old) old(false);
+        old = void 0;
+        return true;
+      };
+    this.current = current;
+
+    IMG(i).then(img => { if (current(true)) { this.orig_ = img; this.draw() } });
+  }
+, draw:		function ()
+  {
+    var	i = this.tmp_ || this.orig_;
+    this.canvas.width	= i.width;
+    this.canvas.height	= i.height;
+    this.canvas.style.opacity = 1;
+    this.canvas.getContext("2d").drawImage(i,0,0);
+  }
+, grey:		function ()
+  {
+    if (this.greyout && this.greyout.checked)
+      this.canvas.style.opacity = 0.5;
+  }
+, tmp:		function (flag,i)
+  {
+    if (flag)
+      {
+        this.tmp_ = i;
+        this.draw();
+      }
+    else if (this.tmp_ === i)
+      {
+        this.tmp_ = void 0;
+        this.draw();
+      }
+  }
+};
 
 
 //
 // Things below should be reworked
 //
 
-
-
-function mousexy(e)
-{
-  if (!e) var e = window.event;
-  if (e.pageX || e.pageY)
-    return [ e.pageX, e.pageY ];
-  if (e.clientX || e.clientY)
-    return [ e.clientX + document.body.scrollLeft + document.documentElement.scrollLeft,
-             e.clientY + document.body.scrollTop  + document.documentElement.scrollTop
-           ];
-  return [ 0,0 ]
-}
-
-function elxy(o,e)
-{
-  var xy = mousexy(e);
-  return [ xy[0]-o.offsetLeft, xy[1]-o.offsetTop ];
-}
-
-function greyi()
-{
-  if ($('uihelper').checked)
-    return;
-
-  var	e = $('shower');
-
-  if (e.firstChild)
-    e.firstChild.style.opacity = 0.5;
-}
-
-var sleeps = 0;
-var sleeper = 0;
-var defsleep = conf.sleep;
-var maxsleep = defsleep;
-
-
-function clicki(ev)
-{
-  var mb = document.getElementsByName("mb");
-  var b=0;
-  for (var i=mb.length; --i>=0; )
-    if (mb[i].checked)
-      b |= parseInt(mb[i].value);
-  var xy = elxy(this,ev);
-  req.req("x="+xy[0]+"&y="+xy[1]+"&b="+b);
-}
-
-function movei(ev) { var xy = elxy(this,ev); $$$("pos","x="+xy[0]+" y="+xy[1]) }
-
-var shown;
 function show(i)
 {
-  if (i)
-    {
-      shown	= i;
 
-      i.style		= "";
-      i.style.position	= "absolute";
-      i.style.top	= "0px";
-      i.style.left	= "0px";
-      i.onclick		= clicki;
-      i.onmousemove	= movei;
-
-      IMG(i)
-      .then(img => { if (img === shown) { img.style.opacity = 1; show() } });
-
-      return i;
-    }
-
-  var e = $('shower');
-  e.style.width		= ""+shown.width+"px";
-  e.style.height	= ""+shown.height+"px";
-
-  // avoid flicker:
-  // never remove probably currently showing image in this round
-  if (e.lastChild === shown)
-    return;
-
-  if (e.firstChild != e.lastChild && e.firstChild !== shown)
-    later(c => e.removeChild(c), e.firstChild);
-
-  e.appendChild(shown);
 }
 
 function init()
@@ -486,8 +557,8 @@ function init()
       })
     .then(i =>
       {
-        i.onmouseover	= function () { this.style.opacity=0.5; this.was=shown; this.show=clone(this); show(this.show); }
-        i.onmouseout	= function () { this.style.opacity=1; if (shown == this.show) show(this.was); this.was=undefined; this.show=undefined; };
+        i.onmouseover	= function () { this.style.opacity=0.5; show.tmp(true, this) }
+        i.onmouseout	= function () { this.style.opacity=1;   show.tmp(false, this) }
       })
     .catch(i => i.err=1);
 
