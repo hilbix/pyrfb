@@ -101,10 +101,10 @@ if (!e)
 x=0;
 y=0;
 d=0;
+$$$("out",e.keyCode);
 switch (e.keyCode)
   {
     default:
-      $$$("out",e.keyCode);
       return;
 
     case 109: orderregion(-1); return evok(e);
@@ -292,7 +292,7 @@ var stamp = ob.dirt;
 start("saving "+n);
 return function(t,x,s)
   {
-    if (s==200)
+    if (s==200 && t!='')
       {
         done("saved "+n+": "+t);
         if (ob.dirt==stamp)
