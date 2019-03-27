@@ -42,6 +42,7 @@ import twisted
 from PIL import Image,ImageChops,ImageStat,ImageDraw
 
 LEARNDIR='l/'
+STATEDIR='s/'
 IMGEXT='.png'
 TEMPLATEDIR='e/'
 TEMPLATEEXT='.tpl'
@@ -441,6 +442,8 @@ class rfbImg(easyrfb.client):
                 # Check all the templates
                 if self.check_template(t,debug)==t['cond']:
                         waiter['match'] = t
+                        if 'img' in waiter:
+                                waiter['img'] = self.img.convert('RGB')
                         return True
         return False
 
@@ -583,6 +586,11 @@ class controlProtocol(LineReceiver):
                 w = {'t':templates}
                 return len(templates) and self.rfb.check_waiter(w, True) and self.print_wait(w)
 
+        def cmd_state(self,*templates):
+                w = {'t':templates, 'img':1}
+                print w['img']
+                return len(templates) and self.rfb.check_waiter(w, True) and self.print_wait(w)
+
         def cmd_wait(self,*templates):
                 if len(templates)<2:
                         return False
@@ -599,6 +607,8 @@ class controlProtocol(LineReceiver):
                                 self.transport.write("found %s %s %s\n" % (w['name'], w['dx'], w['dy']))
                         else:
                                 self.transport.write("spare %s\n" % (w['name']))
+                        if 'img' in waiter:
+                                waiter['img'].save(STATEDIR+w['name']+IMGEXT)
                         return True
                 else:
                         self.log("timeout")
