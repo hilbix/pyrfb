@@ -6,17 +6,18 @@
 <link rel="stylesheet" type="text/css" href="index.css"/>
 </head><body>
 
-<div id="shower" class="fl"></div>
+<canvas id="show" class="fl"></canvas>
 <div class="fl gap mw190">
 <div>
- <input name="mb" type="checkbox" value="1" checked="checked"/><input name="mb" type="checkbox" value="2"/><input name="mb" type="checkbox" value="4"/>
- drag:
- <input name="mb" type="checkbox" value="65536"/>
- &gt;&gt; <input id="uihelper" type="checkbox" value="1"/>
+ <input id="greyout" type="checkbox"/>
+ <hr/>
+ mouse <input name="mb" type="checkbox" value="1" checked="checked"/><input name="mb" type="checkbox" value="2"/><input name="mb" type="checkbox" value="4"/>
+ <label for="md" title="drag mouse">drag</label><input id="md" name="mb" type="checkbox" value="65536"/>
+ <label for="ma" title="auto send movements">auto</label><input id="ma" type="checkbox"/>
 </div>
-<div><button id="qrun" runs="quick">r</button><span id="refcnt"></span> <span id="wait"></span> <span id="backoff"></span></div>
+<div><button id="qrun" runs="quick" title="enable/disable fast polling">r</button><span id="refcnt"></span> <span id="wait"></span> <span id="backoff"></span></div>
 <div id="out"></div>
-<div id="pos"></div>
+<div id="pos" title="mouse position"></div>
 <div>
  <input id="learn" class="w100"></input>
  <button runs="learn">Learn</button>
