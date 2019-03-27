@@ -14,10 +14,12 @@ $script = $_SERVER["SCRIPT_NAME"];	// this must be relative to document root
 $base = "$root/".dirname($script)."/$targ";
 if (!is_dir($base)) die("wrong $targ");
 
+$dirs = [ 'dir'=>'e', 'learn'=>'l', 'stat'=>'s', 'oper'=>'o' ];
+
 $r = $_GET['r'];
-if ($r=="dir" || $r=="learn")
+if (isset($dirs[$r]))
   {
-    $d = dir("$base/".($r=="dir" ? 'e' : 'l'));
+    $d = dir("$base/".$dirs[$r]);
     while (false !== ($e=$d->read()))
       {
         if ($e=='.' || $e=='..') continue;
