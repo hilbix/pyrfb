@@ -9,13 +9,13 @@
 <canvas id="show" class="fl"></canvas>
 <div class="fl gap mw190">
 <div>
- <input id="greyout" type="checkbox"/>
+ <input id="greyout" type="checkbox" title="grey screen while active"/>
  <hr/>
- mouse <input name="mb" type="checkbox" value="1" checked="checked"/><input name="mb" type="checkbox" value="2"/><input name="mb" type="checkbox" value="4"/>
+ mouse <input name="mb" type="checkbox" value="1" checked="checked" title="left mouse button"/><input name="mb" type="checkbox" value="2" title="middle mouse button"/><input name="mb" type="checkbox" value="4" title="right mouse button"/>
  <label for="md" title="drag mouse">drag</label><input id="md" name="mb" type="checkbox" value="65536"/>
  <label for="ma" title="auto send movements">auto</label><input id="ma" type="checkbox"/>
 </div>
-<div><button id="reload" runs="reload" title="reload assets">r</button><button id="qrun" runs="quick" title="enable/disable fast polling">r</button><span id="refcnt"></span> <span id="wait"></span> <span id="backoff"></span></div>
+<div><button id="reload" runs="reload" title="reload assets">s</button><button id="qrun" runs="quick" title="enable/disable fast polling">r</button><span id="refcnt"></span> <span id="wait"></span> <span id="backoff"></span></div>
 <div id="out">Please enable JavaScript</div>
 <div id="pos" title="mouse position"></div>
 <div>
@@ -44,7 +44,20 @@
 </div><div>
 <span id="check"></span> / <span id="lms"></span>
 </div>
+<table class="w100"><tr><td colspan="2">
+<textarea id="mdef" class="w100" title="macro contents"></textarea>
+</td></tr>
+<tr data-msel="0"><td class="nobr"><button runs="msel" title="next mode: edit">&gt;</button><button runsh="mnew" title="create new macro">New</button></div>
+ </td><td><input id="mname" class="w100" placeholder="macro name" title="enter macro name"></input></td></tr>
+<tr data-msel="1" class="hide"><td class="nobr"><button runs="msel" title="next mode: delete">&gt;</button><button runsh="msave" title="save macro">Save</button>
+</td><td><input id="mloaded" class="w100" disabled placeholder="click macro"></input></td></tr>
+<tr data-msel="2" class="hide"><td class="nobr"><button runs="msel" title="next mode: new">&gt;</button><button runsh="mload" title="delete selected macros">Del</button>
+</td><td><input id="mtodel" class="w100" disabled placeholder="select macros"></input></td></tr>
+</td></tr></table>
+<hr/>
+<div id="mac"></div>
+<hr/>
 </div>
 <div id="cit" class="fl gap mw310"></div>
-
 </body></html>
+
