@@ -6,13 +6,17 @@ button	{ min-width:2em }
 
 .fl	{ position:relative; vertical-align:top; float:left }
 .w100	{ width:100% }
+.wauto	{ width:auto }
 
 .gap	{ padding-left:5px }
 
+.nobr	{ white-space:nowrap }
 .mw190	{ max-width:190px }
 .mw200	{ max-width:200px }
 .mw310	{ max-width:310px }
 .mark	{ border:1px solid red }
+
+.hide	{ display:none }
 
 #out	{ display:block; height:2.2em; overflow:hidden }
 #pos	{ display:block; height:1.1em; overflow:hidden }
