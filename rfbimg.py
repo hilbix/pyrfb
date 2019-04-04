@@ -37,6 +37,7 @@ import io
 import re
 
 import time
+import random
 
 import twisted
 from PIL import Image,ImageChops,ImageStat,ImageDraw
@@ -46,6 +47,8 @@ STATEDIR='s/'
 IMGEXT='.png'
 TEMPLATEDIR='e/'
 TEMPLATEEXT='.tpl'
+MACRODIR='o/'
+MACROEXT='.macro'
 
 log	= None
 
@@ -62,6 +65,10 @@ def cacheimage(path):
                 pass
         cachedimages[path] = (os.stat(path).st_mtime,Image.open(path).convert('RGB'))
         return cachedimages[path][1]
+
+def rand(x):
+        "return a random integer from 0 to x-1"
+        return random.randrange(x)
 
 class rfbImg(easyrfb.client):
 
@@ -107,6 +114,9 @@ class rfbImg(easyrfb.client):
 
         self.viz	= None
         self.vizualize	= viz
+
+        self.lm_x	= 0
+        self.lm_y	= 0
 
     def timer(self):
         """Called each 0.1 seconds when reactor is idle"""
@@ -228,6 +238,9 @@ class rfbImg(easyrfb.client):
         if click is None:
                 click = 0
         self.event_add(self.myVNC.pointerEvent,x,y,click)
+        self.lm_x	= x
+        self.lm_y	= y
+        self.log('mouse',x,y,click)
 
     def key(self,k):
 #	self.force = 2
@@ -397,6 +410,7 @@ class rfbImg(easyrfb.client):
                         i = cacheimage(LEARNDIR+n)
                         rects = []
                         search = []
+                        first = None
                         for r in t['r']:
                                 if r[3]==0 or r[4]==0:
                                         # special rectangle specifying search range
@@ -410,16 +424,18 @@ class rfbImg(easyrfb.client):
                                         else:
                                                 search.append((r[1]*2 > i.size[0]-r[3] and -1 or 1, 0, r[3]))
                                         continue
-        
+
                                 rect = (r[1],r[2],r[1]+r[3],r[2]+r[4])
                                 pixels = r[3]*r[4]
                                 spec = { 'r':r, 'name':n, 'img':i.crop(rect), 'rect':rect, 'max':r[0], 'pixels':r[3]*r[4] }
+                                if not rects:
+                                        first = spec
                                 # poor man's sort, keep the smallest rect to the top
                                 if rects and pixels <= rects[0]['pixels']:
                                         rects.insert(0,spec)
                                 else:
                                         rects.append(spec)
-                        tpls.append({ 'name':l, 't':t, 'i':i, 'r':rects, 'cond':inv, 'search':search })
+                        tpls.append({ 'name':l, 't':t, 'i':i, 'r':rects, 'first':first, 'cond':inv, 'search':search })
                 except Exception,e:
                         twisted.python.log.err(None, "load")
                         return None
@@ -507,36 +523,108 @@ class controlProtocol(LineReceiver):
                 print(" ".join(tuple(str(v) for v in args)+tuple(str(n)+"="+str(v) for n,v in kw.iteritems())))
 
         def lineReceived(self, line):
+                self.state	= None
                 self.rfb = self.factory.rfb
-                args = line.split(" ")
-                ok = False
-                try:
-                        self.log("cmd",args[0],args)
-                        ok = getattr(self,'cmd_'+args[0], self.cmd_none)(*args[1:])
-                except Exception,e:
-                        twisted.python.log.err(None, "line")
-                if ok:
+                if self.processLine(line):
                         self.transport.write("ok\n")
                         self.log("ok",line)
                 else:
                         self.transport.write("ko\n")
                         self.log("ko",line)
-
                 if self.bye:
                         self.transport.loseConnection()
+
+        def processLine(self, line):
+                return self.processArgs(line.split(" "))
+
+        def processArgs(self, args):
+                try:
+                        self.log("cmd",args)
+                        return getattr(self,'cmd_'+args[0], self.cmd_none)(*args[1:])
+                except Exception,e:
+                        twisted.python.log.err(None, "line")
+                        return None
 
         def cmd_none(self):
                 self.transport.write("unknown cmd\n")
                 self.log("unknown")
                 return False
 
-        def cmd_mouse(self, x, y, click=None):
-                x = int(x)
-                y = int(y)
+        def cmd_sub(self, macro):
+                if not self.valid_filename.match(macro):
+                        return False
+                for l in io.open(MACRODIRDIR+macro+MACROEXT):
+                        self.state	= processLine(self, l)
+                        if not self.state:
+                                return self.state is False
+                        if self.bye:
+                                self.bye	= False
+                                return true
+                return true
+
+        def cmd_run(self, macro):
+                ret		= cmd_sub(macro)
+                self.bye	= True
+                return ret
+
+        def cmd_if(self, *args):
+                self.state	= self.processArgs(args)
+                return self.state is not None
+
+        def cmd_then(self, *args):
+                if self.state == True:
+                        return self.processArgs(args)
+                return true
+
+        def cmd_else(self, *args):
+                if self.state == False:
+                        return self.processArgs(args)
+                return true
+
+        def cmd_err(self, *args):
+                if self.state is None:
+                        return self.processArgs(args)
+                return true
+
+        def cmd_mouse(self, x, y=None, click=None):
                 if click is not None:
                         click = int(click)
+                try:
+                        x = int(x)
+                        y = int(y)
+                except Exception,e:
+                        x,y	= self.templatemouse(x, y, click)
+
                 self.rfb.pointer(x,y,click)
                 return self.rfb.event_drain(self, False)
+
+        def templatemouse(self, x, n, click):
+                t	= self.rfb.load_templates([x])
+                r	= t[0]['first']['r']
+                # Mouse button release
+                if not click and r[1] <= self.rfb.lm_x < r[1]+r[3] and r[2] <= self.rfb.lm_y < r[2]+r[4]:
+                        # jitter 1 pixel
+                        return self.rfb.lm_x+rand(3)-1, self.rfb.lm_y+rand(3)-1
+
+                x	= r[1]+rand(r[3]);
+                y	= r[2]+rand(r[4]);
+
+                # move mouse in n pieces
+                try:
+                        # We should move relative to a random spline,
+                        # but this must do for now
+                        n	= min(int(n), (abs(self.rfb.lm_x-x)+abs(self.rfb.lm_y-y))/20)
+                        # We should have a speeding curve from 0..n
+                        # but a linear move must do for now
+                        while n>0:
+                                n	= n-1
+                                tx	= rand(11)-5 + (x-self.rfb.lm_x)/(n+2)
+                                ty	= rand(11)-5 + (y-self.rfb.lm_y)/(n+2)
+                                self.rfb.pointer(tx, ty)
+                except Exception,e:
+                        pass
+
+                return x,y
 
         def cmd_learn(self,to):
                 if not self.valid_filename.match(to):
