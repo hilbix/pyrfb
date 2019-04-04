@@ -24,8 +24,6 @@ $fd = fsockopen("unix://../sub/$targ/sock");
 if (!$fd) die("cannot open $targ");
 socket_set_blocking($fd,1);
 fwrite($fd,"state$t\n");
-if ($s)
-  fwrite($fd,"check$t\n");
 fwrite($fd, "exit\n");
 fflush($fd);
 echo fread($fd,4096);
