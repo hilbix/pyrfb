@@ -12,6 +12,9 @@
 
 // These functions should go into a lib
 
+function Doms(sel) { return document.querySelectorAll(sel) }
+function Dome(e)  { return document.createElement(e) }
+
 function later(fn, ...a) { setTimeout(() => fn(...a)) }
 
 function BUG(x) { var f=function () { alert(x); return false; }; f(); return f }
@@ -49,7 +52,7 @@ function clear(e,c)
 // See also: https://github.com/bfred-it/image-promise/blob/master/index.js
 function IMG(url)
 {
-  var img	= document.createElement('IMG');
+  var img	= Dome('IMG');
 
   if (typeof url == 'function')
     url	= url(img);
@@ -99,6 +102,11 @@ function mkArray(a)
 function CLOSURE(fn, ...a)
 {
   return function (...b) { return fn.call(this, ...a, ...b) }
+}
+
+function PASSTHIS(self, name, ...a)
+{
+  return function (...b) { return self[name].call(self, ...a, this, ...b) }
 }
 
 // Register passive Event
@@ -216,13 +224,13 @@ var req =
     this.active	= r;
     this.cnt.req++;
     emit.emit('act', r);
-    ajax.get(r.u+'/'+conf.targ+'?decache='+stamp()+'&'+r.r, t => this.done(r, t));
+    ajax.get(r.u+'/'+conf.targ+'?nocache='+stamp()+'&'+r.r, (t,x,s) => this.done(r, t, s));
     return this;
   }
-, done:		function (r, t)
+, done:		function (r, t, s)
   {
     this.active	= false;
-    emit.emit('done', r, t);
+    emit.emit('done', r, t, s);
     if (r.cb)
       r.cb(t, ...r.a);
     return this.next();
@@ -239,7 +247,7 @@ var runs =
 , init:		function (attrib)
   {
     if (!attrib) attrib = this.attribute;
-    for (var e of document.querySelectorAll('['+attrib+']'))
+    for (var e of Doms('['+attrib+']'))
       e.onclick = this.click(e.getAttribute(attrib));
   }
 , click:	function (str)
@@ -257,6 +265,20 @@ var runs =
 , run_quick:	function () { poller.quick(poller.state.quick ? 0 : conf.quick) }
 , run_learn:	function () { req.send('learn', 'l'); return false }
 , run_reload:	reload
+, run_msel:	function ()
+  {
+    var m = Doms('[data-msel]');
+    var h = 0, s = 0;
+    for (var i=m.length; --i>=0; )
+      if (m[i].contains(this))
+        {
+          h = i;
+          s = i+1;
+          break;
+        }
+    m[h].classList.add('hide');
+    m[s<m.length ? s : 0].classList.remove('hide');
+  }
 };
 
 
@@ -505,22 +527,47 @@ var show =
 
 
 //
+// Macros
+//
+
+var macro =
+{ id:		'mac'
+, query:	'r=oper'
+, init:		function ()
+  {
+    var m = clear(this.id);
+    req.get('exec.php', this.query, t =>
+      {
+        var a = t.split('\n');
+        var r = /^([A-Z0-9].*)\.macro/;
+        var k;
+        a.sort();
+        for (var u of a)
+          if (k = r.exec(u))
+            {
+              var b = Dome("button");
+              $$$(b, k[1]);
+              b.onclick = PASSTHIS(this, 'macroclick');
+              m.appendChild(b);
+            }
+      }
+    );
+  }
+, macroclick: function (el, e)
+  {
+    ;
+  }
+}
+
+
+//
 // Initialization
 //
 
-/*
-  // we should only list significant things
-  // which are recorded by the backend
-  // 'l/' is wrong, this must be 's/'
-    .then(i =>
-      {
-      })
-    .catch(i => i.err=1);
-*/
-
-
 function init()
 {
+  out('init failed');
+
   $('lref').href = sub('l/');
   $('edit').href = "edit.html?"+conf.targ;
 
@@ -528,7 +575,7 @@ function init()
 
   emit.init();
   emit.register('quick', function (v)   { $$$('qrun', v) });
-  emit.register('done',  function (r,t) { out('done: '+r.r+' '+t) });
+  emit.register('done',  function (r,t,s) { out((s==200 ? 'done' : 'fail'+s)+': '+r.r+' '+t) });
   emit.register('act',   function (r)   { if (!r.cb) show.grey(); out('do: '+r.r) });
   emit.register('wait',  function (w)   { $$$('wait', w) });
 
@@ -536,7 +583,8 @@ function init()
   runs.init();
   poller.init(conf.poll).quick(conf.quick);
 
-  for (var e of document.querySelectorAll('[title]'))
+  // improve hoverness
+  for (var e of Doms('[title]'))
     {
       var t = e.title;
       EVP(e, 'mouseover', CLOSURE(t => out.tmp(true,  t), t));
@@ -547,53 +595,61 @@ function init()
       EVP(f, 'mouseout',  CLOSURE(t => out.tmp(false, t), t));
     }
 
-  reload();
+  reload(false);
+
+  out('ok');
 }
 
-function reload()
+function reload(e)
 {
-  var assets = { l:'learn', s:'stat' };
-  var f = null;
-  var t = $$('reload');
-  for (var x in assets)
-    {
-      if (t==x)
-        {
-          t	= null;
-          continue;
-        }
-      if (!t)
-        {
-          f	= x;
-          break;
-        }
-      if (!f)
-        f	= x;
-    }
-  var o = clear('cit');
-  $$$('reload', f);
+  macro.init();
 
+  var assets = { l:'learn', s:'stat' };
+
+  var f = $$('reload');
+  if (e)
+    {
+      var t = f;
+      f = null;
+      for (var x in assets)
+        {
+          if (t==x)
+            {
+              t	= null;
+              continue;
+            }
+          if (!t)
+            {
+              f	= x;
+              break;
+            }
+          if (!f)
+            f	= x;
+        }
+      $$$('reload', f);
+    }
+
+  var o = clear('cit');
   req.get('exec.php', 'r='+assets[f], t =>
     {
       var nr = 0;
       var a = t.split('\n');
       a.sort();
       for (var u of a)
-        {
-          if (u)
-            IMG(i => { i.nr = ++nr; i.main = f+'/'+u; return sub(i.main) })
-            .then(i =>
-              {
-                LOG("here", i.nr, i.src);
-                i.style.border	= "1px dotted white";
-                i.style.width	= "100px";
-                o.appendChild(i);
-                i.onmouseover	= function () { this.style.opacity=0.5; show.tmp(true, this); out.tmp(true, i.nr+' '+i.main) }
-                i.onmouseout	= function () { this.style.opacity=1;   show.tmp(false, this); out.tmp(false, i.nr+' '+i.main) }
-              });
-        }
+        if (u)
+          IMG(i => { i.nr = ++nr; i.main = f+'/'+u; return sub(i.main) })
+          .then(i =>
+            {
+              LOG("here", i.nr, i.src);
+              i.style.border	= "1px dotted white";
+              i.style.width	= "100px";
+              o.appendChild(i);
+              i.onmouseover	= function () { this.style.opacity=0.5; show.tmp(true, this); out.tmp(true, i.nr+' '+i.main) }
+              i.onmouseout	= function () { this.style.opacity=1;   show.tmp(false, this); out.tmp(false, i.nr+' '+i.main) }
+            });
     }
   );
+
 }
 
 onready(init);
