@@ -1,26 +1,58 @@
 # rfbimg commands
 
-./sendsock.py NR 'cmd1 args' 'cmd2 args' .. && echo all commands OK || echo something failed
+`./sendsock.py NR 'cmd1 args' 'cmd2 args' .. && echo all commands OK || echo something failed`
 
 none
-	Default command which just prints error and terminate connection
+	Default command which just prints error and terminates connection
 
-mouse x y [click]
-	move mouse to x y
-	then do the click with the given buttons
-	1 is the left button
-	2 is the middle button
-	4 is the right button
-	and so on
-	If number is present, the button is pressed.
-	You can press multiple buttons at once.
+`if cmd [args..]`
+- This remembers the state of the given command.  So `if exit` sets the state to True.
+- Note that this catches `exit`, so you can return early from command.
+- `if` returns `True` for normal `cmd` termination (`True` or `False`) and `False` if `cmd` errors
 
-learn [filename.png]
-	"learn" (write out) the current screen to the given file.
-	This is prone to a race conditions today,
-	so do not use this in parallel on more than one screen.
-	If name is missing it will be `screenshot-NUMBER`
-	with some obsucre `NUMBER`
+`then cmd [args..]`
+- Process cmd if state is True (command succeeded)
+
+`else cmd [args..]`
+- Process cmd if state is False (command failed)
+
+`err cmd [args..]`
+- Process cmd if state is Error (like file not found)
+- Note that this cannot be reached in macros,
+- as `if` returns `False` on errors, which means the `sub` terminates
+
+`sub macro`
+- Macros are files in subdirectory `o/`, which are processed line-by-line
+- This shortcuts and terminates at the first command which fails.
+- If you do not want this, then prefix all commands in the macro with `if`.
+- This then still terminates on errors.
+- If you do not want this, then prefix all commands with `if if`.
+
+`run macro`
+- same as: `sub macro` followed by `exit`
+
+`mouse x y [click]`
+- move mouse to `x` `y`
+- then press the given mouse button
+- 1 is the left button
+- 2 is the middle button
+- 4 is the right button
+- and so on
+- If `click` is missing or 0, the button is released
+- You can press multiple buttons at once.
+- You can drag by not releasing the button.
+
+`mouse template [nr [click]]`
+- move mouse to the first template region, randomnized position
+- nr is the number of mouse movement events to send (0=none intermediate)
+- click is as before
+- Note that the mousemove is relative to the last pointer position
+
+`learn [filename]`
+- it is written to `l/filename.png`
+- "learn" (write out) the current screen to the given file.
+- Do not use this in parallel on several command (this currently has a race then)
+- If name is missing it will be `screenshot-NUMBER` with some obsucre `NUMBER`
 
 key String
 	send the given string as keystrokes
@@ -88,6 +120,8 @@ Templates can be edited with the edit frontend as follows:
 All rectangles in a template must match!
 Dirt is the maximum delta allowed (quadratic) to mismatch in the pixels.
 
+## horzontal/vertical displacements
+
 If there are horizontal/vertical 0 width/height rectangles
 (those would always match) these define search direction.
 
@@ -97,4 +131,10 @@ Note that position right/below of the middle of the screen inverts search direct
 (This is experiental and likely to change.)
 
 The found offset is output on "check", so you can adjust accordingly.
+
+
+## clicks
+
+If a template is used to do a click, this is done on the first region of a template.
+The position is randomnized on this region.
 
