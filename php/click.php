@@ -52,9 +52,12 @@ elseif (isset($_GET["t"]))
         $s = "code Return\n$s";
     }
   }
-elseif (isset($_GET["x"]))
+elseif (isset($_GET["x"]) || isset($_GET["X"]))
   {
-    $s = sprintf("mouse %d %d", $_GET["x"], $_GET["y"]);
+    if (isset($_GET["X"]))
+      $s	= sprintf('mouse %s %d', $_GET['X'], (isset($_GET['y']) ? $_GET['y'] : 100));
+    else
+      $s	= sprintf("mouse %d %d", $_GET["x"], $_GET["y"]);
     if (isset($_GET["b"]))
       {
         $b = $_GET["b"];
@@ -69,6 +72,8 @@ elseif (isset($_GET["l"]))
     $a = explode("\n",$_GET["l"]);
     $s = "learn ".$a[0];
   }
+else
+  die('wrong request');
 if ($o=="") $o = $s;
 fwrite($fd,"$o\n");
 fflush($fd);
