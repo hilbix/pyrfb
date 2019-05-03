@@ -3,7 +3,7 @@
 # This Works is placed under the terms of the Copyright Less License,
 # see file COPYRIGHT.CLL.  USE AT OWN RISK, ABSOLUTELY NO WARRANTY.
 
-SCREENS=4	# this is an example
+SCREENS=5	# this is an example
 
 .PHONY: all
 all:
