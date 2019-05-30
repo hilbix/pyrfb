@@ -54,6 +54,8 @@ class FunnelRfbProtocol(rfb.RFBClient):
 		self.factory.wrap.beginUpdate(self)
 
 	def updateRectangle(self, x, y, width, height, data):
+		if self.width<x+width or self.height<y+height:
+			self.reinit = True
 		self.factory.wrap.updateRectangle(self, x, y, width, height, data)
 
 	def commitUpdate(self, rectangles=None):
@@ -106,6 +108,7 @@ class client(object):
     def log(self, *args, **kw):
 	if self.logger:
 		print(" ".join(tuple(str(v) for v in args)+tuple(str(n)+"="+str(v) for n,v in kw.iteritems())))
+	return self
 
     def logging(self, log=sys.stdout):
 	self.logger = log
@@ -124,12 +127,14 @@ class client(object):
 		self.started = False
 		self.log("stopping service")
 		self.vnc.stopService()
+	return self
 
     def run(self):
 	self.start()
 	self.log("starting reactor")
 	self.control = True
 	twisted.internet.reactor.run()
+	return self
 
     def halt(self):
 	self.stop()
@@ -151,13 +156,11 @@ class client(object):
 	self.log("connectionMade")
 
     def vncConnectionMade(self, vnc):
-        self.log("Orig. screen:  %dx%d depth=%d bits_per_pixel=%r bytes_per_pixel=%r" % (vnc.width, vnc.height, vnc.depth, vnc.bpp, vnc.bypp))
         self.log("Desktop name: ", vnc.name)
+        self.log("Screen format: %dx%d depth=%d bits_per_pixel=%r bytes_per_pixel=%r" % (vnc.width, vnc.height, vnc.depth, vnc.bpp, vnc.bypp))
 
         vnc.setEncodings([rfb.RAW_ENCODING])
         vnc.setPixelFormat()
-
-        self.log("Screen format: %dx%d depth=%d bits_per_pixel=%r bytes_per_pixel=%r" % (vnc.width, vnc.height, vnc.depth, vnc.bpp, vnc.bypp))
 
         vnc.framebufferUpdateRequest()
 
