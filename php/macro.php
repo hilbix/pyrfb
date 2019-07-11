@@ -1,4 +1,8 @@
 <?php
+# Macro management
+#
+# This Works is placed under the terms of the Copyright Less License,
+# see file COPYRIGHT.CLL.  USE AT OWN RISK, ABSOLUTELY NO WARRANTY.
 header("Content-type: text/plain");
 header("Pragma: no-cache");
 header("Expires: -1");
@@ -27,7 +31,7 @@ for ($i=1; ++$i<$l; )
 $fd = fsockopen("unix://../sub/$targ/sock");
 if (!$fd) die("cannot open $targ");
 socket_set_blocking($fd,1);
-fwrite($fd,"run$t\n");
+fwrite($fd,"run$t\n");		# run (macro)
 fflush($fd);
 echo fread($fd,4096);
 fclose($fd);
