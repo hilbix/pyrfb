@@ -721,6 +721,11 @@ class controlProtocol(LineReceiver):
                 self.sendLine("pong");
                 return True
 
+        def cmd_stop(self):
+                self.sendLine("stopping");
+                self.rfb.stop()
+                return True
+
 from twisted.internet import reactor
 class createControl(twisted.internet.protocol.Factory):
         protocol = controlProtocol
