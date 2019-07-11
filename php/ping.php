@@ -27,7 +27,7 @@ if (!$fd) die("cannot open $targ"); # ($name) ($pwd) ($err)");
 
 switch (isset($pi[2]) ? $pi[2] : '')
 {
-  case "exit":	$cmd	= 'exit'; break;
+  case 'stop':	$cmd	= 'stop'; break;
   default:	$cmd	= 'ping'; break;
 }
 
