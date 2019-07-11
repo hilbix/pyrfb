@@ -75,7 +75,7 @@ elseif (isset($_GET["l"]))
 else
   die('wrong request');
 if ($o=="") $o = $s;
-fwrite($fd,"$o\n");
+fwrite($fd,"$o\n");	# learn/mouse/key/code
 fflush($fd);
 fclose($fd);
 echo $s;
