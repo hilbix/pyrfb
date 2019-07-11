@@ -1,6 +1,9 @@
 <?php
-# Send a PING to the backend, should output PONG
-# (Checks backend alive.)
+# Send a PING (or some easy commands) to the backend,
+# should output PONG (or the command output).
+#
+# default:	Checks backend alive.
+# c=exit:	Lets backend exit (it comes back) for resynchronization
 #
 # This Works is placed under the terms of the Copyright Less License,
 # see file COPYRIGHT.CLL.  USE AT OWN RISK, ABSOLUTELY NO WARRANTY.
@@ -12,7 +15,8 @@ header("Expires: -1");
 #foreach ($_SERVER as $k=>$v)
 #  printf("%20s = %s\n", $k, json_encode($v,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES));
 
-$targ = intval(substr($_SERVER["PATH_INFO"],1));
+$pi = explode('/', $_SERVER["PATH_INFO"]);
+$targ = intval($pi[1]);
 
 $name = "../sub/$targ/sock";
 #$name = "sock:-1 (basic shuttle outflop)\n";
@@ -21,8 +25,14 @@ $fd = fsockopen("unix://$name");
 $err = json_encode(error_get_last(),JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);
 if (!$fd) die("cannot open $targ"); # ($name) ($pwd) ($err)");
 
+switch (isset($pi[2]) ? $pi[2] : '')
+{
+  case "exit":	$cmd	= 'exit'; break;
+  default:	$cmd	= 'ping'; break;
+}
+
 socket_set_blocking($fd,1);
-fwrite($fd,"ping\n");
+fwrite($fd,"$cmd\n");		# ping/exit
 fflush($fd);
 echo fread($fd,4096);
 fclose($fd);
