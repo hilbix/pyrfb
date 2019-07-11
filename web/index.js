@@ -99,9 +99,14 @@ function mkArray(a)
   return Array.isArray(a) ? a : [a];
 }
 
+function CLOSURE_(fn, a)
+{
+  return a.length ? function (...b) { return fn.call(this, ...a, ...b) } : fn;
+}
+
 function CLOSURE(fn, ...a)
 {
-  return function (...b) { return fn.call(this, ...a, ...b) }
+  return CLOSURE_(fn, a);
 }
 
 function PASSTHIS(self, name, ...a)
@@ -182,6 +187,19 @@ var emit =
 // Backend-Calls
 //
 
+// req.get(url, query-string, callback, callback-args)
+//	runs callback(response, callback-args)
+//	failure: response is undefined
+// req.ext(url, path, query-string, callback, callback-args)
+//	same as req.get but extended.  path does not need first slash
+//
+// req.send(element-id, type)	click.php type=element-contents, type defaults to "t"
+// req.code(charcode)		click.php character-code
+// req.key(key)			click.php special-key
+// req.req(query)		click.php with given query
+// req.idle(query)		click.php query when idle (last one wins).  This is just before emit(fin)
+// req.next()			(internal) process next request if no other is active
+// req.done()			(internal) process finished request (even on error)
 var req =
 { url:		'click.php'
 , init:		function ()
@@ -196,7 +214,7 @@ var req =
 , key:		function (k)	{ return this.req(         'k='+escape(k)) }
 , req:		function (s)	{ return this.get(this.url, s) }
 , idle:		function (s)	{ this.idle_ = s; return this.next() }
-, get:		function (u,r,cb,...a) { this.reqs.push({u:u, r:r, cb:cb, a:a}); return this.next() }
+, get:		function (u,r,cb,...a) { this.reqs.push({u:mkArray(u), r:r, cb:cb, a:a}); return this.next() }
 , next:		function ()
   {
     var r;
@@ -224,7 +242,10 @@ var req =
     this.active	= r;
     this.cnt.req++;
     emit.emit('act', r);
-    ajax.get(r.u+'/'+conf.targ+'?nocache='+stamp()+'&'+r.r, (t,x,s) => this.done(r, t, s));
+    // ajax callback is: text, XMLHttpRequest-object, status, last-modified-header
+    var u	= Array.from(r.u);
+    u.splice(1, 0, conf.targ);
+    ajax.get(u.join('/')+'?nocache='+stamp()+(r.r?'&'+r.r:''), (t,x,s) => this.done(r, t, s));
     return this;
   }
 , done:		function (r, t, s)
@@ -252,8 +273,9 @@ var runs =
   }
 , click:	function (str)
   {
-    var i = 'run_'+str;
-    if (i in this)	return this[i];
+    var w = (''+str).split(' ');
+    var i = 'run_'+w.shift();
+    if (i in this)	return CLOSURE_(this[i], w);
 
     i	= parseInt(str);
     if (i>0)	return () => { req.code(i); return false };
@@ -278,6 +300,10 @@ var runs =
         }
     m[h].classList.add('hide');
     m[s<m.length ? s : 0].classList.remove('hide');
+  }
+, run_cmd:	function (cmd)
+  {
+    req.get(['ping.php', cmd], '');
   }
 };
 
