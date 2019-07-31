@@ -15,7 +15,29 @@
 function Doms(sel) { return document.querySelectorAll(sel) }
 function Dome(e)  { return document.createElement(e) }
 
+function DIV(inner)
+{
+  return $$$(Dome('div'), inner);
+}
+
+function BUTTON(inner, click)
+{
+  var b = $$$(Dome('button'), inner);
+  b.onclick = click;
+  return b;
+}
+
+
+// https://stackoverflow.com/a/17772086/490291
+['Arguments', 'Function', 'String', 'Number', 'Date', 'RegExp'].forEach(
+  n => window[`is${n}`] = o => toString.call(o) == `[object ${n}]`
+);
+
 function later(fn, ...a) { setTimeout(() => fn(...a)) }
+
+function strCut(s, at) { var n = s.length-at.length; return n>=0 && s.substr(n)==at ? s.substring(0,n) : s }
+function strCutAt(s, at) { var n = s.indexOf(at); return n>=0 ? s.substring(0,n) : s }
+
 
 function BUG(x) { var f=function () { alert(x); return false; }; f(); return f }
 
@@ -35,6 +57,8 @@ function LOG(...a)
 function out(s) { out._out=s; $$$('out', out._tmp===undefined ? out._out : out._tmp) }
 out.tmp = function (flag, s) { this._tmp = flag ? s : this._tmp==s ? undefined : this._tmp; out(this._out) }
 
+function OUT(s) { out(JSON.stringify(s)) }
+
 function clear(e,c)
 {
   e=$(e);
@@ -52,7 +76,7 @@ function clear(e,c)
 // See also: https://github.com/bfred-it/image-promise/blob/master/index.js
 function IMG(url)
 {
-  var img	= Dome('IMG');
+  var img	= Dome('img');
 
   if (typeof url == 'function')
     url	= url(img);
@@ -109,7 +133,7 @@ function CLOSURE(fn, ...a)
   return CLOSURE_(fn, a);
 }
 
-function PASSTHIS(self, name, ...a)
+function SELFCALLwithTHIS(self, name, ...a)
 {
   return function (...b) { return self[name].call(self, ...a, this, ...b) }
 }
@@ -146,7 +170,7 @@ conf.sleep	= 6;
 conf.targ	= ''+conf.n+'';
 conf.dir	= conf.targ+'/';
 
-function sub(s) { return conf.dir+s }
+function subdir(s) { return conf.dir+s }
 
 
 //
@@ -396,7 +420,7 @@ var poller =
         return;
       }
     $$$("check",++this.cnt.check + '*');
-    ajax.head(sub(this.name), (...a) => this.check(...a), this.state.last_modified);
+    ajax.head(subdir(this.name), (...a) => this.check(...a), this.state.last_modified);
 
     if (++this.state.wait > this.set.maxwait)
       this.state.wait = this.set.maxwait;
@@ -433,7 +457,7 @@ var poller =
     $$$('lms', stat);
     $$$('refcnt', ++this.cnt.imgs+'*');
     var t = this.name+'?'+stamp();
-    IMG(sub(t)).then(i =>
+    IMG(subdir(t)).then(i =>
       {
         show.load(i);
         this.quick(this.state.quick-1);
@@ -570,12 +594,7 @@ var macro =
         a.sort();
         for (var u of a)
           if (k = r.exec(u))
-            {
-              var b = Dome("button");
-              $$$(b, k[1]);
-              b.onclick = PASSTHIS(this, 'macroclick');
-              m.appendChild(b);
-            }
+            m.appendChild(BUTTON(k[1], SELFCALLwithTHIS(this, 'macroclick')))
       }
     );
   }
@@ -594,7 +613,7 @@ function init()
 {
   out('init failed');
 
-  $('lref').href = sub('l/');
+  $('lref').href = subdir('l/');
   $('edit').href = "edit.html?"+conf.targ;
 
   show.init('show');
@@ -626,11 +645,114 @@ function init()
   out('ok');
 }
 
+// chi.nr must be present.
+// It is sorted according to that
+function placeChild(ob, chi)
+{
+  for (var n of ob.children)
+    if (!('nr' in n) || chi.nr<n.nr)
+      {
+         ob.insertBefore(chi, n);
+         return;
+      }
+  ob.appendChild(chi);
+}
+
+var Assets =
+{
+  learn: (...a) => Assets.img(...a),
+  stat:  (...a) => Assets.img(...a),
+  dir:   (...a) => Assets.template(...a),
+
+  img:	(ctx, u) =>
+    {
+      if (u.indexOf('~')>=0) return;
+      IMG(i => { i.nr = ++ctx.nr; i.main = ctx.f+'/'+u; ctx.loading(i); return subdir(i.main) })
+      .then(i =>
+        {
+          LOG(ctx.name, i.nr, i.src);
+          ctx.loaded(i);
+          if (!ctx.current)
+            return;
+
+          i.style.border	= "1px dotted white";
+          i.style.width		= "100px";
+
+          placeChild(ctx.o, i);
+
+          i.onmouseover	= function () { this.style.opacity=0.5; show.tmp(true,  this); out.tmp(true,  i.nr+' '+i.main) }
+          i.onmouseout	= function () { this.style.opacity=1;   show.tmp(false, this); out.tmp(false, i.nr+' '+i.main) }
+          i.onclick	= function () { $('learn').value = strCut(u, '.png') }
+        });
+    },
+
+  template:	(ctx, u) =>
+    {
+      u = strCut(u, '.tpl');
+
+      LOG(ctx.name, u);
+
+      var b = BUTTON(u, e => upd());
+      b.setAttribute('class', 'no');
+
+      function upd(quiet)
+        {
+          req.get(['state.php', u], '', t =>
+            {
+              t = strCutAt(t, '\n');
+              if (!quiet)
+                OUT(t);
+              b.setAttribute('class', t=='ko' ? 'ko' : 'ok');
+            });
+        };
+
+      ctx.o.appendChild(b);
+      upd(1);
+    },
+};
+
+class CTX
+  {
+  constructor(o, name, props)
+    {
+      this.nr	= 0;
+      this.o	= o;
+      this.gen	= new Date();
+      this._l	= 0;
+      this.name	= name;
+      this.p	= props;
+
+      if (props && !isString(props))
+        for (var p in props)
+          this[p] = props[p];
+
+      o.gen	= this.gen;
+    }
+
+  get current() { return this.gen === this.o.gen }
+
+  loading(ob)
+    {
+      if (this._l++ || !this.current) return;
+      this._o = DIV('load...');
+      this.o.appendChild(this._o);
+      out(`loading ${this.name}`);
+    }
+
+  loaded(ob)
+    {
+      if (--this._l || !this.current) return;
+      this.o.removeChild(this._o);
+      delete this._o;
+      out(`loaded ${this.name}`);
+    }
+  }
+
 function reload(e)
 {
   macro.init();
 
-  var assets = { l:'learn', s:'stat' };
+  var assets = { l:'learn', s:'stat', t:'dir' };
 
   var f = $$('reload');
   if (e)
@@ -655,24 +777,16 @@ function reload(e)
       $$$('reload', f);
     }
 
-  var o = clear('cit');
-  req.get('exec.php', 'r='+assets[f], t =>
+  var a = assets[f];
+  var ctx = new CTX(clear('cit'), a, {f:f});
+
+  req.get('exec.php', 'r='+a, t =>
     {
-      var nr = 0;
-      var a = t.split('\n');
-      a.sort();
-      for (var u of a)
+      var s = t.split('\n');
+      s.sort();
+      for (var u of s)
         if (u)
-          IMG(i => { i.nr = ++nr; i.main = f+'/'+u; return sub(i.main) })
-          .then(i =>
-            {
-              LOG("here", i.nr, i.src);
-              i.style.border	= "1px dotted white";
-              i.style.width	= "100px";
-              o.appendChild(i);
-              i.onmouseover	= function () { this.style.opacity=0.5; show.tmp(true, this); out.tmp(true, i.nr+' '+i.main) }
-              i.onmouseout	= function () { this.style.opacity=1;   show.tmp(false, this); out.tmp(false, i.nr+' '+i.main) }
-            });
+          Assets[a](ctx, u);
     }
   );
 

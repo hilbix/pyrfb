@@ -18,7 +18,7 @@
 // Revision 1.2  2011-03-16 11:53:29  tino
 // __() ___()
 
-function $$$(e,s){$(e).innerHTML=s};
+function $$$(e,s){e=$(e); e.innerHTML=s; return e};
 function $$(e){return $(e).innerHTML};
 function $(e){if(typeof e=='string')e=document.getElementById(e);return e};
 var __aps = Array.prototype.slice;

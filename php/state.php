@@ -1,6 +1,8 @@
 <?php
 # Send state check to backend
 #
+# state.php/targ/tpl/tpl..
+#
 # This Works is placed under the terms of the Copyright Less License,
 # see file COPYRIGHT.CLL.  USE AT OWN RISK, ABSOLUTELY NO WARRANTY.
 

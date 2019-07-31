@@ -21,3 +21,7 @@ button	{ min-width:2em }
 #out	{ display:block; height:2.2em; overflow:hidden }
 #pos	{ display:block; height:1.1em; overflow:hidden }
 
+.no	{ border:10px solid grey }
+.ok	{ border:10px solid green }
+.ko	{ border: 10px solid red }
+
