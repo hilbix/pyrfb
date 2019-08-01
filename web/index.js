@@ -667,6 +667,7 @@ var Assets =
   img:	(ctx, u) =>
     {
       if (u.indexOf('~')>=0) return;
+
       IMG(i => { i.nr = ++ctx.nr; i.main = ctx.f+'/'+u; ctx.loading(i); return subdir(i.main) })
       .then(i =>
         {
@@ -688,6 +689,8 @@ var Assets =
 
   template:	(ctx, u) =>
     {
+      if (u.indexOf('~')>=0) return;
+
       u = strCut(u, '.tpl');
 
       LOG(ctx.name, u);
