@@ -378,6 +378,8 @@ function editit(e)
 }
 function dir(l)
 {
+var tilde = $('tilde').checked;
+
 l=l.split("\n");
 l.sort();
 var x=[];
@@ -385,6 +387,7 @@ for (var i=0; i<l.length; i++)
   {
     if (l[i]=="")
       continue;
+    if (!tilde && l[i].indexOf('~')>=0) continue;
     var o = __("span",___(l[i]));
     o.tag = l[i];
     o.loadcache = null;
@@ -418,11 +421,13 @@ dispimg(currentsel());
 }
 function learns(l)
 {
+var tilde = $('tilde').checked;
+
 l=l.split("\n");
 l.sort();
 var x=[];
 for (var i=0; i<l.length; i++)
-  if (l[i]!="")
+  if (l[i]!="" && (tilde || l[i].indexOf('~')<0))
     x.push(__('option',___(l[i])));
 var e = __('select',x);
 e.onchange = selimg;
