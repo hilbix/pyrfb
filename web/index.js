@@ -430,8 +430,9 @@ var poller =
   }
 , check:	function (txt, r, stat, l_m)
   {
+    var etag = r.getResponseHeader('etag');
     $$$("check", this.cnt.check + '_');
-    if (stat==304)
+    if (stat==304 && etag == this.state.etag)
       {
         // not modified
         // if we are in quick mode, do the next poll immediately
@@ -450,6 +451,7 @@ var poller =
         $$$('lms', stat+'?'+ ++this.state.noimg);
         return;
       }
+    this.state.etag		= etag;
     this.state.last_modified	= l_m;
     this.state.noimg		= 0;
     this.state.nomod		= 0;
