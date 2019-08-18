@@ -178,6 +178,10 @@ function subdir(s) { return conf.dir+s }
 //
 
 // emit class
+//
+// emit some state or whatever such that others can react on it
+//
+// currently only used for displaying things.
 
 var emit =
 { STOP:	['STOP']
@@ -192,6 +196,9 @@ var emit =
         f(...a);
     return this;
   }
+// register emitter callback function with given args
+// callback will be called with given args followed by the emitted args
+// if it returns emit.STOP the callback will be deregistered
 , register:	function (what, cb, ...a)
   {
     if (!(what in this.emits))
@@ -199,10 +206,6 @@ var emit =
     var f = (...b) => { if (cb(...a,...b)===this.STOP) this.emits[what].remove(f) };
     this.emits[what].push(f);
     return this;
-  }
-, bound:	function (what, that, cb, ...a)
-  {
-    return this.register(what, cb.bind(that), ...a);
   }
 };
 
@@ -348,7 +351,7 @@ var poller =
     this.speed(ms);
     this.reset();
     this.start();
-    emit.bound('fin', this, this.reset);
+    emit.register('fin', this.reset.bind(this));
     return this;
   }
 , speed:	function (ms)
