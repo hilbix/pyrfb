@@ -93,6 +93,16 @@ function evok(e)
     }
   return false;
 }
+function moveregion(d)
+{
+  var i = current + d;
+  if (i<0 || i>=edit.r.length)
+    return;
+  var o = edit.r[current];
+  edit.r[current]	= edit.r[i];
+  edit.r[i]		= o;
+  regions(d);
+}
 function keyboard(e)
 {
 if (!e)
@@ -117,11 +127,12 @@ switch (e.code)
     default:
       return;
 
-    case 'PageUp':	regions(-1); return evok(e);
-    case 'PageDown':	regions(+1); return evok(e);
+    case 'PageUp':	moveregion(-1); return evok(e);
+    case 'PageDown':		moveregion(+1); return evok(e);
 
-    case 'NumpadSubtract':	orderregion(-1); return evok(e);
-    case 'NumpadAdd':		orderregion(+1); return evok(e);
+    case 'NumpadSubtract':	regions(-1); return evok(e);
+    case 'NumpadAdd':	regions(+1); return evok(e);
+
 
     case 'Backspace':	abortit(); return evok(e);
 
@@ -287,8 +298,11 @@ edit.dirt = new Date().getTime();
 }
 function newrect()
 {
+var r = [0,0,0,10,10];
+if (edit.r[current])
+  r = edit.r[current].slice(0);
 current = edit.r.length;
-edit.r.push([0,0,0,10,10]);
+edit.r.push(r);
 dirt();
 regions();
 }
@@ -339,35 +353,6 @@ var n=$('filename').value;
 edit.img = currentsel();
 edit.name = $('filename').value;
 ajax.post(config.exec+"?r=save&f="+escape(edit.name),saved(edit),JSON.encode(edit));
-}
-var dispi;
-function dispok(e)
-{
-  this.haveload	 = 1;
-  dispimg(dispi);
-  done(Object.keys(imgcache).length + ' images cached');
-}
-var imgcache={};
-function dispimg(i)
-{
-  var e=$('show');
-  var c;
-
-  dispi	= i;
-  if (i in imgcache)
-    c			= imgcache[i];
-  else
-    {
-      c			= new Image();
-      c.src		= sub('l/')+i+'?decache='+decache;
-      c.onload		= dispok;
-      c.dispi		= i;
-      c.haveload	= 0;
-      imgcache[i]	= c;
-    }
-  if (e.src != c.src)
-    e.src		= c.src;
-  e.style.opacity	= c.haveload ? 1 : 0.5;
 }
 
 var showel;
@@ -523,6 +508,38 @@ function lostfocus()
 ///////////////////////////////////////////////////////////////////////
 // Newer stuff
 ///////////////////////////////////////////////////////////////////////
+
+var dispi;
+var imgcache={};
+
+function dispok(e)
+{
+  this.haveload	 = 1;
+  dispimg(dispi);
+  done(Object.keys(imgcache).length + ' images cached');
+}
+
+function dispimg(i)
+{
+  var e=$('show');
+  var c;
+
+  dispi	= i;
+  if (i in imgcache)
+    c			= imgcache[i];
+  else
+    {
+      c			= new Image();
+      c.src		= sub('l/')+i+'?decache='+decache;
+      c.onload		= dispok;
+      c.dispi		= i;
+      c.haveload	= 0;
+      imgcache[i]	= c;
+    }
+  if (e.src != c.src)
+    e.src		= c.src;
+  e.style.opacity	= c.haveload ? 1 : 0.5;
+}
 
 function setname(name)
 {
