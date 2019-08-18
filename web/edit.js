@@ -5,18 +5,20 @@
 
 JSON.encode=JSON.stringify;
 
-var n = parseInt(window.location.search.substr(1));
-var config =
+var config = (function (n) { return (
   {
     targ: ""+n+"",
     dir: ""+n+"/",
     exec: "exec.php/"+n,
-  };
+  });
+})(parseInt(window.location.search.substr(1)));
 
 function sub(s) { return config.dir+s }
 
 
-
+///////////////////////////////////////////////////////////////////////
+// Old stuff
+///////////////////////////////////////////////////////////////////////
 
 
 var decache;
@@ -42,7 +44,7 @@ var currentregion;
 var blinker=0;
 function timer()
 {
-if (!blink || !kbprocessing || !currentregion)
+if (!blink || !currentregion)
   return;
 switch (++blinker)
   {
@@ -93,55 +95,76 @@ function evok(e)
 }
 function keyboard(e)
 {
-if (!kbprocessing)
-  return;
 if (!e)
   e = window.event;
+
+$$$("out",e.key+' '+e.code);
+
+if (e.ctrlKey)
+  switch (e.code)
+    {
+    case 'KeyR':	refreshall(); return evok(e);
+    }
+
+if (!kbprocessing || !edit)
+  return;
 
 x=0;
 y=0;
 d=0;
-$$$("out",e.keyCode);
-switch (e.keyCode)
+switch (e.code)
   {
     default:
       return;
 
-    case 109: orderregion(-1); return evok(e);
-    case 107: orderregion(+1); return evok(e);
+    case 'PageUp':	regions(-1); return evok(e);
+    case 'PageDown':	regions(+1); return evok(e);
 
-    case 8: abortit(); return evok(e);
+    case 'NumpadSubtract':	orderregion(-1); return evok(e);
+    case 'NumpadAdd':		orderregion(+1); return evok(e);
 
-    case 37: x=-1; break;
-    case 38: y=-1; break;
-    case 39: x=1; break;
-    case 40: y=1; break;
+    case 'Backspace':	abortit(); return evok(e);
 
-    case 81: d=1; break;
-    case 87: d=10; break;
-    case 69: d=100; break;
-    case 82: d=1000; break;
-    case 84: d=10000; break;
-    case 90: d=100000; break;
-    case 85: d=1000000; break;
-    case 73: d=10000000; break;
-    case 79: d=100000000; break;
+    case 'ArrowLeft':	x= -1; break;
+    case 'ArrowUp':	y= -1; break;
+    case 'ArrowRight':	x= +1; break;
+    case 'ArrowDown':	y= +1; break;
+    case 'NumPad7':	x= -1; y= -1; break;
+    case 'NumPad8':	x=  0; y= -1; break;
+    case 'NumPad9':	x= +1; y= -1; break;
+    case 'NumPad4':	x= -1; y=  0; break;
+    case 'NumPad7':	x= +1; y=  0; break;
+    case 'NumPad1':	x= -1; y= +1; break;
+    case 'NumPad2':	x=  0; y= +1; break;
+    case 'NumPad3':	x= +1; y= +1; break;
 
-    case 65: d=-1; break;
-    case 83: d=-10; break;
-    case 68: d=-100; break;
-    case 70: d=-1000; break;
-    case 71: d=-10000; break;
-    case 72: d=-100000; break;
-    case 74: d=-1000000; break;
-    case 75: d=-10000000; break;
-    case 76: d=-100000000; break;
+    case 'KeyQ':	d= +1; break;
+    case 'KeyW':	d= +10; break;
+    case 'KeyE':	d= +100; break;
+    case 'KeyR':	d= +1000; break;
+    case 'KeyT':	d= +10000; break;
+    case 'KeyY':	d= +100000; break;
+    case 'KeyU':	d= +1000000; break;
+    case 'KeyI':	d= +10000000; break;
+    case 'KeyO':	d= +100000000; break;
+
+    case 'KeyA':	d= -1; break;
+    case 'KeyS':	d= -10; break;
+    case 'KeyD':	d= -100; break;
+    case 'KeyF':	d= -1000; break;
+    case 'KeyG':	d= -10000; break;
+    case 'KeyH':	d= -100000; break;
+    case 'KeyJ':	d= -1000000; break;
+    case 'KeyK':	d= -10000000; break;
+    case 'KeyL':	d= -100000000; break;
   }
 if (!e.ctrlKey)
   {
     x *= 16;
     y *= 16;
   }
+else if (!x && !y)
+  return;
 var r = edit.r[current];
 if (e.shiftKey)
   {
@@ -161,12 +184,11 @@ return evok(e);
 function modder(mod)
 {
 blink = mod=="e";
-var el=document.getElementsByName("mod");
-for (var i=el.length; --i>=0; )
-  if (el[i].getAttribute("mod")==mod)
-    show(el[i]);
+for (var e of document.querySelectorAll('[show]'))
+  if (e.getAttribute("show")==mod)
+    show(e);
   else
-    hide(el[i]);
+    hide(e);
 }
 function hilight()
 {
@@ -183,6 +205,9 @@ regions();
 }
 function fixregion(t)
 {
+  if (!t)
+    return;
+
   var i = t.regionnr;
   var e = t.regiondiv;
   var r = edit.r[i];
@@ -191,14 +216,16 @@ function fixregion(t)
   e.style.top = r[2]+'px';
   e.style.width = r[3]+'px';
   e.style.height = r[4]+'px';
-  e.style.borderColor = '#'+colors[r[0]];
+//  e.style.borderColor = '#'+colors[r[0]];
   $$$(t,r);
 }
 var edit;
-var current;
-var colors=['000000','ff0000','00ff00','0000ff'];
-function regions()
+var current = 0;
+//var colors=['000000','ff0000','00ff00','0000ff'];
+function regions(d)
 {
+if (d && (d+=current)>=0 && d<edit.r.length)
+  current = d;
 currentregion = null;
 if (!edit.r)
   edit.r = [];
@@ -215,8 +242,8 @@ for (var i=0; i<edit.r.length; i++)
 
     if (i==current)
       {
-	currentregion = t;
-	t.style.color = "red";
+        currentregion = t;
+        t.style.color = "red";
       }
     else
       {
@@ -250,7 +277,7 @@ if (edit && edit.dirt && edit!==e)
     return;
 edit = e;
 modder("e");
-$("filename").value = edit.name;
+setname(edit.name);
 movesel(edit.img);
 regions();
 }
@@ -271,7 +298,7 @@ return new Date().getTime();
 }
 function exe(r,cb)
 {
-ajax.get(config.exec+"?decache="+stamp()+"&r="+r,function(e){cb(e)});
+ajax.get(config.exec+"?decache="+stamp()+"&r="+r,function(d,x,s){if (s==200) cb(d); else err('failed '+r+' ('+s+'): '+d)});
 }
 function clear(e,c)
 {
@@ -295,8 +322,10 @@ return function(t,x,s)
     if (s==200 && t!='')
       {
         done("saved "+n+": "+t);
+        setname(null);
         if (ob.dirt==stamp)
           ob.dirt = 0;
+        refreshdir();
       }
     else
       err("save error "+n+": "+s+": "+t);
@@ -311,23 +340,36 @@ edit.img = currentsel();
 edit.name = $('filename').value;
 ajax.post(config.exec+"?r=save&f="+escape(edit.name),saved(edit),JSON.encode(edit));
 }
-var dispi, dispsrc;
+var dispi;
 function dispok(e)
 {
-this.style.opacity = 1;
+  this.haveload	 = 1;
+  dispimg(dispi);
+  done(Object.keys(imgcache).length + ' images cached');
 }
+var imgcache={};
 function dispimg(i)
 {
-var e=$("show");
-if (e.src!=dispsrc || i!=dispi)
-  {
-    e.style.opacity = 0.5;
-    e.onload = dispok;
-    e.src=sub('l/')+i+'?decache='+decache;
-  }
-dispi = i;
-dispsrc = e.src;
+  var e=$('show');
+  var c;
+
+  dispi	= i;
+  if (i in imgcache)
+    c			= imgcache[i];
+  else
+    {
+      c			= new Image();
+      c.src		= sub('l/')+i+'?decache='+decache;
+      c.onload		= dispok;
+      c.dispi		= i;
+      c.haveload	= 0;
+      imgcache[i]	= c;
+    }
+  if (e.src != c.src)
+    e.src		= c.src;
+  e.style.opacity	= c.haveload ? 1 : 0.5;
 }
+
 var showel;
 function presentit(e)
 {
@@ -421,6 +463,7 @@ dispimg(currentsel());
 }
 function learns(l)
 {
+imgcache={};
 var tilde = $('tilde').checked;
 
 l=l.split("\n");
@@ -477,6 +520,48 @@ function lostfocus()
     kbprocessing = true;
 }
 
+///////////////////////////////////////////////////////////////////////
+// Newer stuff
+///////////////////////////////////////////////////////////////////////
+
+function setname(name)
+{
+  var e = $('filename');
+
+  if (name!==null)
+    e.value = name;
+  checkname.call(e);
+}
+
+function checkname()
+{
+  $('killer').disabled = !edit || this.value != edit.name;
+}
+
+function killer()
+{
+  var e = edit;
+
+  if (!e)
+    return;
+
+  if ($("filename").value != e.name)
+    return;
+
+  start("killing "+e.name);
+
+  ajax.post(config.exec+"?r=kick&f="+escape(edit.name), function (t,x,s)
+    {
+      if (s==200 && t!='')
+        {
+          done('killed '+e.name+': '+t);
+          refreshdir();
+          return;
+        }
+      err('kill error '+e.name+': '+s+': '+t);
+    });
+}
+
 var clickmap =
 { editagain:	editagain
 , abortit:	abortit
@@ -484,19 +569,19 @@ var clickmap =
 , newit:	newit
 , saveit:	saveit
 , newrect: 	newrect
+, killer: 	killer
 };
 
-function clickproxy()
+function clickproxy(e)
 {
   var r = this.getAttribute('runs');
 
   if (clickmap[r])
-    return clickmap[r].call(this);
+    return clickmap[r].call(this, e);
 
   out('UNKNOWN '+r);
   return false;
 }
-
 
 function init()
 {
@@ -509,8 +594,12 @@ function init()
   refreshall();
   modder("m");
 
-  window.setInterval(timer,500);
+  window.setInterval(timer,200);
   window.onkeydown = keyboard;
+
+  e = $('filename');
+  e.onkeyup = checkname;
+  e.onchange = checkname;
 
   var el = document.getElementsByName("focus");
   for (var i=el.length; --i>=0; )
