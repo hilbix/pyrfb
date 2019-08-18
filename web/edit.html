@@ -1,24 +1,27 @@
+<!DOCTYPE html>
 <html><head>
+<meta charset="ISO-8859-1"/>
 <script type="text/javascript" src="ajax.js"></script>
 <script type="text/javascript" src="json2.js"></script>
 <script type="text/javascript" src="edit.js"></script>
 <link rel="stylesheet" type="text/css" href="edit.css"/>
 </head><body>
 <div id="main" class="gap w500 left">
-<button name="mod" mod="m" runs="editagain">Edit</button>
-<button name="mod" mod="e" runs="abortit">Back</button>
+<button show="m" runs="editagain">Edit</button>
+<button show="e" runs="abortit">Back</button>
 <button runs="refreshall">reload</button>
 <input id="tilde" type="checkbox" title="show tilde files, too" runs="refreshall"/>
-<button name="mod" mod="m" runs="newit">New</button>
-<button name="mod" mod="e" runs="saveit">Save</button>
+<button show="m" runs="newit">New</button>
+<button show="e" runs="saveit">Save</button>
 <span id="learns"></span>
-<div name="mod" mod="m" id="list"></div>
-<div name="mod" mod="e">
+<div show="m" id="list"></div>
+<div show="e">
 <button runs="newrect">New</button>
-Name: <input name="focus" id="filename" type="text" width="20"/>
+Name: <input name="focus" id="filename" type="text" width="15"/>
+<button id="killer" runs="killer">kill</button>
 </div>
-<div name="mod" mod="e" id="regionlist"></div>
-<div id="out"></div>
+<div show="e" id="regionlist"></div>
+<div id="out">Please enable JavaScript</div>
 </div>
-<div id="img" class="left"><img id="show"/><div id="regions" name="mod" mod="e" class="overlay"></div></div>
+<div id="img" class="left"><img id="show"/><div id="regions" show="e" class="overlay"></div></div>
 </body></html>
