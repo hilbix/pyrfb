@@ -38,13 +38,13 @@ function peek(x)
 out(dump(x));
 return x;
 }
-var blink=false;
+var editmode=false;
 var kbprocessing=true;
 var currentregion;
 var blinker=0;
 function timer()
 {
-if (!blink || !currentregion)
+if (!editmode || !currentregion)
   return;
 switch (++blinker)
   {
@@ -103,38 +103,26 @@ function moveregion(d)
   edit.r[i]		= o;
   regions(d);
 }
-function keyboard(e)
+
+function keyboard_edit(e)
 {
-if (!e)
-  e = window.event;
+  var r = edit.r[current];
 
-$$$("out",e.key+' '+e.code);
-
-if (e.ctrlKey)
+  x=0;
+  y=0;
+  d=0;
   switch (e.code)
     {
-    case 'KeyR':	refreshall(); return evok(e);
-    }
-
-if (!kbprocessing || !edit)
-  return;
-
-x=0;
-y=0;
-d=0;
-switch (e.code)
-  {
     default:
       return;
 
-    case 'PageUp':	moveregion(-1); return evok(e);
+    case 'PageUp':		moveregion(-1); return evok(e);
     case 'PageDown':		moveregion(+1); return evok(e);
 
     case 'NumpadSubtract':	regions(-1); return evok(e);
-    case 'NumpadAdd':	regions(+1); return evok(e);
+    case 'NumpadAdd':		regions(+1); return evok(e);
 
-
-    case 'Backspace':	abortit(); return evok(e);
+    case 'Return':		newrect(); return evok(e);
 
     case 'ArrowLeft':	x= -1; break;
     case 'ArrowUp':	y= -1; break;
@@ -148,6 +136,8 @@ switch (e.code)
     case 'NumPad1':	x= -1; y= +1; break;
     case 'NumPad2':	x=  0; y= +1; break;
     case 'NumPad3':	x= +1; y= +1; break;
+
+    case 'Backspace':	d= -r[0]; break;
 
     case 'KeyQ':	d= +1; break;
     case 'KeyW':	d= +10; break;
@@ -168,33 +158,33 @@ switch (e.code)
     case 'KeyJ':	d= -1000000; break;
     case 'KeyK':	d= -10000000; break;
     case 'KeyL':	d= -100000000; break;
-  }
-if (!e.ctrlKey)
-  {
-    x *= 16;
-    y *= 16;
-  }
-else if (!x && !y)
-  return;
-var r = edit.r[current];
-if (e.shiftKey)
-  {
-    r[3] = Math.max(0,r[3]+x);
-    r[4] = Math.max(0,r[4]+y);
-  }
-else
-  {
-    r[1] = Math.max(0,r[1]+x);
-    r[2] = Math.max(0,r[2]+y);
-  }
-r[0] = Math.max(0,r[0]+d);
-dirt();
-fixregion(currentregion);
-return evok(e);
+    }
+  if (!e.ctrlKey)
+    {
+      x *= 16;
+      y *= 16;
+    }
+  else if (!x && !y)
+    return;	// unknown CTRL combination
+
+  if (e.shiftKey)
+    {
+      r[3] = Math.max(0,r[3]+x);
+      r[4] = Math.max(0,r[4]+y);
+    }
+  else
+    {
+      r[1] = Math.max(0,r[1]+x);
+      r[2] = Math.max(0,r[2]+y);
+    }
+  r[0] += d;
+  dirt();
+  fixregion(currentregion);
+  return evok(e);
 }
 function modder(mod)
 {
-blink = mod=="e";
+editmode = mod=="e";
 for (var e of document.querySelectorAll('[show]'))
   if (e.getAttribute("show")==mod)
     show(e);
@@ -508,6 +498,29 @@ function lostfocus()
 ///////////////////////////////////////////////////////////////////////
 // Newer stuff
 ///////////////////////////////////////////////////////////////////////
+
+function keyboard(e)
+{
+  $$$("out",e.key+' '+e.code);
+
+  if (!kbprocessing)
+    return;
+
+  if (e.ctrlKey)
+    switch (e.code)
+      {
+      case 'KeyR':	refreshall(); return evok(e);
+      }
+  else
+    switch (e.code)
+      {
+      case 'Escape':	abortit(); return evok(e);
+      case 'Space':	editagain(); return evok(e);
+      }
+
+  if (edit && editmode && keyboard_edit(e))
+    return evok(e);
+}
 
 var dispi;
 var imgcache={};
