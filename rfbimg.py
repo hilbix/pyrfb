@@ -387,55 +387,67 @@ class rfbImg(easyrfb.client):
                                 return True
         return False
 
-    def load_templates(self,templates):
+    def load_template(self,template):
+        """
+        Just load a single template
+        """
+        return json.load(io.open(TEMPLATEDIR+template+TEMPLATEEXT))
+
+    def prep_templates(self,templates):
+        """
+        Load a bunch of templates for comparision/searching.
+        - it loads the template's image contents for comparision
+        - it extracts the searches
+        - it calculates the condition (!template)
+        - it tries to optimize rectangle order for faster compare
+        """
         tpls = []
         for l in templates:
-                f = l
-                if f=="": continue
-
+                if l=="": continue
                 # template	check if template matches
                 # !template	check if template does not match
-                # DO NOT USE FILENAMES STARTING WITH !
+                # I am not happy with following:
                 # !!template	check if !template does not match
                 # !!!template	check if !template matches
-                # !!!!template	check if !!template matches (and so on)
-                inv = f[0]!='!'
-                if not inv:
-                        inv = l[2]=='!' and l[3]=='!'
-                        f = l[inv and 2 or 1:]
-
+                # !!!!template	check if !!template matches
+                # !!!!!template	check if !!!template matches
+                # and so on
+                # JUST DO NOT USE TEMPLATE NAMES STARTING WITH !
+                f = l
+                cond = l[0]!='!'
+                if not cond:	# !??xxxxx
+                        # template	-> cond=true  template
+                        # !template	-> cond=false template
+                        # !!template	-> cond=false !template
+                        # !!!template	-> cond=true  !template
+                        # !!!!template	-> cond=true  !!template
+                        cond = l[1]=='!' and l[2]=='!'
+                        f = l[(cond and 2 or 1):]
                 try:
-                        t = json.load(io.open(TEMPLATEDIR+f+TEMPLATEEXT))
+                        t = self.load_template(f)
                         n = t['img']
                         i = cacheimage(LEARNDIR+n)
                         rects = []
                         search = []
-                        first = None
                         for r in t['r']:
                                 if r[3]==0 or r[4]==0:
-                                        # special rectangle specifying search range
-                                        # if a 0-width or 0-height rectangle is found
-                                        # search along it's line.
-                                        # If it is right/below the middle of the screen
-                                        # search inverse (from right/bottom to left/top)
-                                        # else normal
+                                        # Special search, if distance parameter is odd search backwards
                                         if r[3]==0:
-                                                search.append((0, r[2]*2 > i.size[1]-r[4] and -1 or 1, r[4]))
+                                                search.append((0, (r[0]&1) and -1 or 1, r[4]))
                                         else:
-                                                search.append((r[1]*2 > i.size[0]-r[3] and -1 or 1, 0, r[3]))
+                                                search.append(((r[0]&1) and -1 or 1, 0, r[3]))
                                         continue
 
                                 rect = (r[1],r[2],r[1]+r[3],r[2]+r[4])
                                 pixels = r[3]*r[4]
                                 spec = { 'r':r, 'name':n, 'img':i.crop(rect), 'rect':rect, 'max':r[0], 'pixels':r[3]*r[4] }
-                                if not rects:
-                                        first = spec
                                 # poor man's sort, keep the smallest rect to the top
+                                # (probable speed improvement)
                                 if rects and pixels <= rects[0]['pixels']:
                                         rects.insert(0,spec)
                                 else:
                                         rects.append(spec)
-                        tpls.append({ 'name':l, 't':t, 'i':i, 'r':rects, 'first':first, 'cond':inv, 'search':search })
+                        tpls.append({ 'name':l, 't':t, 'i':i, 'r':rects, 'first':first, 'cond':cond, 'search':search })
                 except Exception,e:
                         twisted.python.log.err(None, "load")
                         return None
@@ -446,7 +458,7 @@ class rfbImg(easyrfb.client):
         try:
                 tpls = waiter['templates']
         except KeyError:
-                tpls = self.load_templates(waiter['t'])
+                tpls = self.prep_templates(waiter['t'])
                 self.log("templates loaded",waiter['t'])
                 waiter['templates'] = tpls
 
@@ -667,8 +679,8 @@ class controlProtocol(LineReceiver):
                 return self.rfb.event_drain(self, False)
 
         def templatemouse(self, x, n, click):
-                t	= self.rfb.load_templates([x])
-                r	= t[0]['first']['r']
+                t	= self.rfb.load_template(x)
+                r	= t['r'][0]
                 # Mouse button release
                 if not click and r[1] < self.rfb.lm_x < r[1]+r[3]-1 and r[2] < self.rfb.lm_y < r[2]+r[4]-1:
                         # jitter 1 pixel
