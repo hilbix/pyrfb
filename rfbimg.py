@@ -57,13 +57,13 @@ def timestamp():
         return "%04d%02d%02d-%02d%02d%02d" % ( t.tm_year, t.tm_mon, t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec)
 
 cachedimages = {}
-def cacheimage(path):
+def cacheimage(path, mode='RGB'):
         try:
                 if cachedimages[path][0]==os.stat(path).st_mtime:
                         return cachedimages[path][1]
         except KeyError:
                 pass
-        cachedimages[path] = (os.stat(path).st_mtime,Image.open(path).convert('RGB'))
+        cachedimages[path] = (os.stat(path).st_mtime,Image.open(path).convert(mode))
         return cachedimages[path][1]
 
 def rand(x):
@@ -187,6 +187,23 @@ class rfbImg(easyrfb.client):
         self.width = vnc.width
         self.height = vnc.height
 
+        # According to PIL docs:
+        # 1x1 1 is b/w
+        # 1x8 L is grayscale
+        # 2x8 LA is L with alpha (limited support, really alpha and not transparency mask?)
+        # 1x8 P is palette
+        # 3x8 RGB is red/creen/blue
+        # 4x8 RGBA is 4x8 RGB with transpacency mask
+        # 4x8 RGBX is RGB with padding (limited support)
+        # 4x8 RGBa is RGB with pre-multiplied alpha channel (limited support)
+        # 4x8 CMYK Cyan/Magenta/Yellow/Black substractive color separation
+        # 3x8 YCbCr JPEG based video format
+        # 3x8 LAB L*a*b
+        # 3x8 HSV Hue, Saturation, Value
+        # 1x32 I signed integer pixels
+        # 1x32 F floating point pixels
+        #
+        # We use RGBX here, because that is the VNC data format used
         self.img = Image.new('RGBX',(self.width,self.height),None)
 
     def updateRectangle(self, vnc, x, y, width, height, data):
