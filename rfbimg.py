@@ -698,7 +698,8 @@ class controlProtocol(LineReceiver):
                 """
                 sub MACRO args..:
                 - read file o/MACRO.macro line by line
-                - returns success on "exit" or end of line
+                - returns success on "exit"
+                - returns fail on EOF (possibly truncated file)
                 - returns failure on the first failing command
                 - returns error on error (which sets termination)
                 .
@@ -715,7 +716,7 @@ class controlProtocol(LineReceiver):
                         if self.bye:
                                 self.bye	= False
                                 return self.ok()
-                return self.ok()
+                return self.fail()
 
         def cmd_run(self, macro, *args):
                 """
