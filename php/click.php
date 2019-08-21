@@ -62,9 +62,9 @@ elseif (isset($_GET["x"]) || isset($_GET["X"]))
       {
         $b = $_GET["b"];
         if ($b&65536)
-          $o = sprintf("%s %d", $s, $b&65535);
+          $o = sprintf("%s %d", $s, $b&65535);			# drag
         else
-          $o = sprintf("%s\n%s %d\n%s", $s, $s, $b, $s);
+          $o = sprintf("%s 0\n%s %d\n%s 0", $s, $s, $b, $s);	# click
       }
   }
 elseif (isset($_GET["l"]))
