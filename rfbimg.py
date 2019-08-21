@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python2
 #
 # Save RFB framebuffer to a file
 # or run in a loop and also send commands to VNC through socket
@@ -52,6 +52,9 @@ TEMPLATEEXT='.tpl'
 MACRODIR='o/'
 MACROEXT='.macro'
 
+# Dots are disallowed for a good reason
+valid_filename = re.compile('^[-_a-zA-Z0-9]*$')
+
 log	= None
 
 def timestamp():
@@ -73,6 +76,8 @@ def rand(x):
         return random.randrange(x)
 
 class rfbImg(easyrfb.client):
+
+    valid_filename	= valid_filename
 
     count = 0		# Count the number of pixels changed so far
     fuzz = 0		# Additional dirt added by timer to flush from time to time
@@ -430,6 +435,8 @@ class rfbImg(easyrfb.client):
         """
         Just load a single template
         """
+        if not self.valid_filename.match(template):
+                raise RuntimeError('invalid filename: '+repr(template))
         return json.load(io.open(TEMPLATEDIR+template+TEMPLATEEXT))
 
     def prep_templates(self,templates):
@@ -561,16 +568,69 @@ def rename_away(to,ext):
                         os.rename(to+ext, n)
                         return
 
+def mass_replace(o, d):
+        """
+        mass replace string s
+        by key,value of dict d
+        until string no more changes
+        """
+        s	= str(o)
+        for i in range(100):
+                tmp	= s
+                for k,v in d.iteritems():
+                        tmp = tmp.replace(k,v)
+                if tmp == s:
+                        return s
+                s	= tmp
+
+        raise RuntimeError('instable expansion, too many recursions: '+repr(o))
+
 from twisted.protocols.basic import LineReceiver
 class controlProtocol(LineReceiver):
 
         delimiter='\n'		# DO NOT REMOVE THIS, this black magic is needed
 
-        # Dots are disallowed for a good reason
-        valid_filename = re.compile('^[-_a-zA-Z0-9]*$')
+        valid_filename	= valid_filename
 
-        bye	= False
-        prompt	= None
+        # Called from factory, but no self.factory here!
+        def __init__(self):
+                self.bye	= False
+                self.prompt	= None
+                self.repl	= {}
+                #self.state	= None
+                #self.prevstate	= None
+                #self.rfb	= self.factory.rfb	no self.factory here
+
+        # Called by LineReceiver
+        def lineReceived(self, line):
+                self.state	= None
+                self.prevstate	= None
+                self.rfb	= self.factory.rfb
+
+                if self.prompt and line.strip()=='':
+                        # hack: Do not error on empty lines when prompting
+                        self.autoset()
+                elif self.processLine(line, self.prompt):
+                        self.out('ok', line)
+                else:
+                        self.fail('ko', line)
+
+                if self.bye:
+                        self.stopProducing()
+                        #self.transport.loseConnection()
+                elif self.prompt:
+                        # TODO XXX TODO print some stats here
+                        self.transport.write(mass_replace(self.prompt, self.repl))
+
+        def autoset(self):
+                r	= self.repl
+
+                r['{mx}']	= str(self.rfb.lm_x)
+                r['{my}']	= str(self.rfb.lm_y)
+                r['{mb}']	= str(self.rfb.lm_c)
+                # XXX TODO XXX add more replacements
+
+                return r
 
         def log(self, *args, **kw):
                 print(" ".join(tuple(str(v) for v in args)+tuple(str(n)+"="+str(v) for n,v in kw.iteritems())))
@@ -598,25 +658,10 @@ class controlProtocol(LineReceiver):
                         self.out(*args, **kw)
                 return None			# default return value for "error"
 
-        def lineReceived(self, line):
-                self.state	= None
-                self.prevstate	= None
-                self.rfb	= self.factory.rfb
-                if not self.prompt or line.strip()!='':
-                        # Do not react on empty lines when prompting
-                        if self.processLine(line):
-                                self.out('ok', line)
-                        else:
-                                self.fail('ko', line)
-                if self.bye:
-                        self.stopProducing()
-                        #self.transport.loseConnection()
-                elif self.prompt:
-                        # TODO XXX TODO print some stats here
-                        self.transport.write(self.prompt)
-
-        def processLine(self, line):
-                return self.processArgs(line.split(" "))
+        def processLine(self, line, expand=False):
+                if expand:
+                        line	= mass_replace(line, self.autoset())
+                return self.processArgs(line.split(' '))
 
         def processArgs(self, args):
                 """
@@ -650,7 +695,7 @@ class controlProtocol(LineReceiver):
                 """
                 prompt: set prompt and do not terminate on errors (can no more switched off)
                 """
-                self.prompt = ' '.join(args+('> ',))
+                self.prompt = ' '.join(args)+'> '
                 self.sendLine(__file__ + ' ' + sys.version.split('\n',1)[0].strip())
                 return self.ok()
 
@@ -694,6 +739,51 @@ class controlProtocol(LineReceiver):
                                 self.sendLine(' '+a)
                 return self.ok()
 
+        def cmd_set(self, var=None, *args):
+                """
+                set: list all known {var}s
+                set var: check if {var} is known
+                set var val: set {var} to val.
+                .
+                Replacements only work in macros or when promp is active.
+                However the sequence in what {...} is replaced first
+                is random and implementation dependent.
+                .
+                You can set even macro parameters {0} and so on.
+                .
+                There is a subtle detail:
+                'set a ' <- note the blank
+                sets {a} to the empty string while
+                'set a' <- note the missing blank
+                checks if {a} is known and
+                'set  b' sets {} to b
+                .
+                Example:
+                .
+                if set myvar
+                else set myvar default
+                """
+                if not var:
+                        for k,v in self.repl.iteritems():
+                                self.sendLine(' '+k+' '+repr(v))
+                        return self.ok()
+
+                if not args:
+                        return '{'+var+'}' in self.repl
+
+                self.repl['{'+var+'}']	= ' '.join(args)
+                return self.ok()
+
+        def cmd_unset(self, *args):
+                """
+                unset var..: unset replacements {var}s
+                .
+                this fails for the first {var} missing
+                """
+                for var in args:
+                        del self.repl['{'+var+'}']
+                return self.ok
+
         def cmd_sub(self, macro, *args):
                 """
                 sub MACRO args..:
@@ -705,17 +795,48 @@ class controlProtocol(LineReceiver):
                 .
                 if sub macro:    do not fail on fails
                 if if sub macro: do not fail on errors
+                .
+                The macro can contain replacement sequences:
+                - {N} is replaced by arg N
+                - {mx} {my} {mb} last mouse x y button
+                - more replacements might show up in future
+                - see also: set
                 """
+
+                repl	= dict(self.repl)
+                for i in range(len(args)):
+                        repl['{'+str(i+1)+'}'] = args[i]
+
+                # prevent buggy names
                 if not self.valid_filename.match(macro):
                         return self.fail()
+
+                # read the macro file
                 for l in io.open(MACRODIR+macro+MACROEXT):
-                        # replace args
-                        st	= processLine(self, l)
+                        # l is unicode and contains \n
+                        # we need UTF-8
+                        if l.endswith('\n'): l=l[:-1]
+                        l	= l.encode('utf8')
+
+                        repl['{mx}']	= str(self.rfb.lm_x)
+                        repl['{my}']	= str(self.rfb.lm_y)
+                        repl['{mb}']	= str(self.rfb.lm_c)
+                        # XXX TODO XXX add more replacements
+
+                        # replace {replacements}
+                        l	= mass_replace(l, repl)
+
+                        # parse result
+                        st		= self.processLine(l, True)
                         if not st:
+                                # pass on errors
                                 return st
                         if self.bye:
                                 self.bye	= False
+                                # exit is success
                                 return self.ok()
+
+                # EOF fails
                 return self.fail()
 
         def cmd_run(self, macro, *args):
@@ -768,11 +889,26 @@ class controlProtocol(LineReceiver):
                         return self.processArgs(args)
                 return self.ok()
 
+        def cmd_echo(self, *args):
+                """
+                echo args..: echo the given args
+                """
+                self.sendLine(' '.join(args))
+                return self.ok()
+
+        def cmd_dump(self, *args):
+                """
+                dump args..: print repr of args
+                """
+                self.sendLine(repr(args))
+                return self.ok()
+
         def cmd_mouse(self, x, y=None, click=None):
                 """
                 mouse x y: jump mouse to the coordinates with the current button setting (dragging etc.)
                 mouse x y buttons: release if all released, jump mouse, then apply buttons
                 mouse template N [buttons]: move mouse in N steps to first region of e/template.tpl and performs action
+                mouse template.# N [buttons]: use region n, n=1 is first
                 .
                 To release all buttons, you must give 0 as buttons!
                 buttons are 1(left) 2(middle) 4(right) 8 and so on for further buttons.
@@ -795,8 +931,15 @@ class controlProtocol(LineReceiver):
                 return self.rfb.event_drain(self, False)
 
         def templatemouse(self, x, n, click):
-                t	= self.rfb.load_template(x)
-                r	= t['r'][0]
+                tpl	= self.rfb.load_template(x.split('.',1)[0])
+                r	= tpl['r']
+                try:
+                        n	= int(x.split('.',1)[1])
+                except Exception,e:
+                        n	= 0
+                n	= min(n, len(r))
+                r	= r[max(0,n-1)]
+
                 # Mouse button release
                 if not click and r[1] < self.rfb.lm_x < r[1]+r[3]-1 and r[2] < self.rfb.lm_y < r[2]+r[4]-1:
                         # jitter 1 pixel
