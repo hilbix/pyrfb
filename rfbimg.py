@@ -1146,6 +1146,122 @@ class controlProtocol(LineReceiver):
                 self.rfb.stop()
                 return self.ok()
 
+        def template(self, prefix, name):
+                """
+                load and returns the template named after
+                prefix plus name up to the first underscore
+                """
+                t	= name.split('.',1)[0]
+                if t and self.valid_filename.match(t):
+                        return self.rfb.load_template(prefix+t)
+
+                self.fail('wrong name', name=name, prefix=prefix, t=t)
+                return None
+
+        def cmd_extract(self, name, *img):
+                """
+                extract template images..:
+                .
+                Extract all the regions of each state image given
+                and save it as the state image of the first parameter.
+                .
+                The template used is 'extract' followed by name up to the first underscore.
+                .
+                A 0 with/heigth region (just a short line)
+                defines the placement of the following regions
+                within the same picture.
+                This line then is moved along the other axis
+                by the difference parameter if given, if it is 0
+                according to widht/height of the placed region.
+                .
+                If more such lines follow, they are used for the
+                placement of following pictures accordingly.
+                This way you can create multiple column layouts.
+                """
+                tpl	= self.template('extract', name)
+                if not tpl:
+                        return self.fail()
+
+                reg	= tpl['r']
+
+                class V:
+                        ruler	= [0,0,0,1,0]	# implicite ruler
+                        rulen	= -1
+                        xy	= [0,0]
+                        dir	= 0
+                        had	= None
+
+                # poor man's nonlocal:
+                v = V()
+
+                def jumprule():
+                        """
+                        move the ruler according to distance/had
+                        """
+                        if v.had:
+                                d	= v.ruler[0]
+                                if not d:
+                                        d	= v.had[1-v.dir]
+                                v.ruler[2-v.dir]	+= d
+
+                        # start a new round
+                        v.xy	= v.ruler[1:3]
+                        v.dir	= v.ruler[3]==0 and 1 or 0
+                        v.had	= None
+
+                # this must only be called if there are rulers
+                def nextrule():
+                        """
+                        find next ruler
+                        """
+
+                        # find next ruler
+                        while True:
+                                v.rulen	+= 1
+                                if v.rulen > len(reg):
+                                        v.rulen	= 0
+                                nr	= reg[v.rulen]
+                                if nr[3]==0 or nr[4]==0:
+                                        break
+
+                        # end the old ruler
+                        jumprule()
+                        # now: v.had == None
+
+                        # jump to the new ruler
+                        v.ruler	= nr
+                        jumprule()
+
+                out	= None
+                for i in img:
+                        im	= cacheimage(STATEDIR+i+IMGEXT)
+                        if not out:
+                                out	= Image.new('RGB',im.size)
+
+                        for r in reg:
+                                self.diag(img=i, r=r, xy=v.xy, dir=v.dir, ruler=v.ruler, had=v.had)
+
+                                if r[3]==0 or r[4]==0:
+                                        nextrule()
+                                        continue
+
+                                # handle overflow by extending the picture?
+                                # XXX TODO XXX
+
+                                # paste and advance along the axis
+                                # WTF why does .paste modify xy?
+                                out.paste(im.crop((r[1],r[2],r[1]+r[3],r[2]+r[4])), list(v.xy))
+                                v.xy[v.dir] += r[3+v.dir]
+
+                                # calculate minimal offsets to jump (min == max of pastes)
+                                v.had = (max(v.had and v.had[0] or 0, r[3]), max(v.had and v.had[1] or 0, r[4]))
+
+                        # now move the ruler to the next position
+                        jumprule()
+
+                out.save(STATEDIR+name+IMGEXT)
+                return self.ok('written '+name)
+
 
 from twisted.internet import reactor
 class createControl(twisted.internet.protocol.Factory):
