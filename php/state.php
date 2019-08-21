@@ -30,8 +30,7 @@ for ($i=1; ++$i<$l; )
 $fd = fsockopen("unix://../sub/$targ/sock");
 if (!$fd) die("cannot open $targ");
 socket_set_blocking($fd,1);
-fwrite($fd,"state$t\n");	# state (template)
-fwrite($fd, "exit\n");
+fwrite($fd,"if state$t\nthen echo ok\nelse echo ko\nexit\n");	# state (template)
 fflush($fd);
 echo fread($fd,4096);
 fclose($fd);
