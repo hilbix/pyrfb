@@ -36,8 +36,10 @@ import os
 import io
 import re
 
+import sys
 import time
 import random
+import traceback
 
 import twisted
 from PIL import Image,ImageChops,ImageStat,ImageDraw
@@ -600,14 +602,17 @@ class controlProtocol(LineReceiver):
                 self.state	= None
                 self.prevstate	= None
                 self.rfb	= self.factory.rfb
-                if self.processLine(line):
-                        self.out('ok', line)
-                else:
-                        self.fail('ko', line)
+                if not self.prompt or line.strip()!='':
+                        # Do not react on empty lines when prompting
+                        if self.processLine(line):
+                                self.out('ok', line)
+                        else:
+                                self.fail('ko', line)
                 if self.bye:
                         self.stopProducing()
                         #self.transport.loseConnection()
-                if self.prompt:
+                elif self.prompt:
+                        # TODO XXX TODO print some stats here
                         self.transport.write(self.prompt)
 
         def processLine(self, line):
@@ -625,7 +630,10 @@ class controlProtocol(LineReceiver):
                         return getattr(self,'cmd_'+args[0], self.unknown)(*args[1:])
                 except Exception,e:
                         twisted.python.log.err(None, "line")
-                        self.bye	= True
+                        if self.prompt:
+                                self.sendLine(traceback.format_exc())
+                        else:
+                                self.bye	= True
                         return None
 
         # all cmd_* are supposed to return
@@ -634,14 +642,16 @@ class controlProtocol(LineReceiver):
         # None  on error (exception)
 
         def unknown(self, *args):
-                self.bye	= True
-                return self.err('unknown cmd')
+                if not self.prompt:
+                        self.bye	= True
+                return self.err('unknown cmd, try: help')
 
         def cmd_prompt(self,*args):
                 """
                 prompt: set prompt and do not terminate on errors (can no more switched off)
                 """
-                self.prompt = ' '.join(args+['> '])
+                self.prompt = ' '.join(args+('> ',))
+                self.sendLine(__file__ + ' ' + sys.version.split('\n',1)[0].strip())
                 return self.ok()
 
         def cmd_ok(self,*arg):
@@ -674,7 +684,7 @@ class controlProtocol(LineReceiver):
                         for a in dir(self):
                                 if a.startswith('cmd_'):
                                         all.append(a[4:])
-                        return self.ok(', '.join(all))
+                        return self.ok('known commands: '+', '.join(all))
 
                 fn = getattr(self, 'cmd_'+cmd)
                 for a in fn.__doc__.split('\n'):
