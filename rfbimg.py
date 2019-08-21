@@ -493,7 +493,7 @@ class rfbImg(easyrfb.client):
                                         rects.insert(0,spec)
                                 else:
                                         rects.append(spec)
-                        tpls.append({ 'name':l, 't':t, 'i':i, 'r':rects, 'first':first, 'cond':cond, 'search':search })
+                        tpls.append({ 'name':l, 't':t, 'i':i, 'r':rects, 'cond':cond, 'search':search })
                 except Exception,e:
                         twisted.python.log.err(None, "load")
                         return None
@@ -597,23 +597,26 @@ class controlProtocol(LineReceiver):
                 self.bye	= False
                 self.prompt	= None
                 self.repl	= {}
-                #self.state	= None
-                #self.prevstate	= None
+                self.success	= None
+                self.failure	= 'ko'
+                self.state	= None
+                self.prevstate	= None
                 #self.rfb	= self.factory.rfb	no self.factory here
+                self.quiet	= False
 
         # Called by LineReceiver
         def lineReceived(self, line):
-                self.state	= None
-                self.prevstate	= None
                 self.rfb	= self.factory.rfb
 
                 if self.prompt and line.strip()=='':
                         # hack: Do not error on empty lines when prompting
                         self.autoset()
-                elif self.processLine(line, self.prompt):
-                        self.out('ok', line)
                 else:
-                        self.fail('ko', line)
+                        st	= self.processLine(line, self.prompt)
+                        if st:
+                                self.out(self.success, st, line)
+                        else:
+                                self.fail(self.failure, st, line)
 
                 if self.bye:
                         self.stopProducing()
@@ -632,18 +635,24 @@ class controlProtocol(LineReceiver):
 
                 return r
 
+        def send(self, s):
+                if not self.quiet:
+                        self.sendLine(s)
+                return True
+
         def log(self, *args, **kw):
                 print(" ".join(tuple(str(v) for v in args)+tuple(str(n)+"="+str(v) for n,v in kw.iteritems())))
                 return self
 
         def out(self, s, *args, **kw):
-                self.sendLine(s)
+                if s is not None:
+                        self.send(s)
                 self.log(s, *args,**kw)
                 return self
 
         def ok(self, *args, **kw):
                 if args:
-                        self.sendLine(args[0])
+                        self.send(args[0])
                 if kw or len(args)>1:
                         self.log(*args, **kw)
                 return True			# default return value for "success"
@@ -696,7 +705,31 @@ class controlProtocol(LineReceiver):
                 prompt: set prompt and do not terminate on errors (can no more switched off)
                 """
                 self.prompt = ' '.join(args)+'> '
-                self.sendLine(__file__ + ' ' + sys.version.split('\n',1)[0].strip())
+                self.send(__file__ + ' ' + sys.version.split('\n',1)[0].strip())
+                return self.ok()
+
+        def cmd_success(self,*args):
+                """
+                success string: set or suppresses the success string.  Default suppressed
+                """
+                self.success = args and ' '.join(args) or None
+                return self.ok()
+
+        def cmd_quiet(self,*args):
+                """
+                quiet cmd: suppress normal output of cmd
+                """
+                self.quiet	= True
+                try:
+                        return self.processArgs(args)
+                finally:
+                        self.quiet	= False
+
+        def cmd_failure(self,*args):
+                """
+                failure string: set or suppresses the failure string.  Default: ko
+                """
+                self.failure = args and ' '.join(args) or None
                 return self.ok()
 
         def cmd_ok(self,*arg):
@@ -871,29 +904,26 @@ class controlProtocol(LineReceiver):
                 """
                 then command args..: run command only of STATE (see: if) is success
                 """
-                return self.state if self.processArgs(args) else self.ok()
+                return self.processArgs(args) if self.state else self.ok()
 
         def cmd_else(self, *args):
                 """
                 else command args..: run command only of STATE (see: if) is failure
                 """
-                if self.state == False:
-                        return self.processArgs(args)
-                return self.ok()
+                return self.processArgs(args) if (self.state == False) else self.ok()
 
         def cmd_err(self, *args):
                 """
                 err command args..: run command only of STATE (see: if) is error
                 """
-                if self.state is None:
-                        return self.processArgs(args)
-                return self.ok()
+                return self.processArgs(args) if (self.state is None) else self.ok()
 
         def cmd_echo(self, *args):
                 """
                 echo args..: echo the given args
                 """
-                self.sendLine(' '.join(args))
+                if args:
+                        self.sendLine(' '.join(args))
                 return self.ok()
 
         def cmd_dump(self, *args):
@@ -1075,15 +1105,15 @@ class controlProtocol(LineReceiver):
                         w = waiter['match']
                         self.log("match",w)
                         if w['cond']:
-                                self.sendLine('found %s %s %s' % (w['name'], w['dx'], w['dy']))
+                                self.send('found %s %s %s' % (w['name'], w['dx'], w['dy']))
                         else:
-                                self.sendLine('spare %s' % (w['name']))
+                                self.send('spare %s' % (w['name']))
                         if 'img' in waiter:
                                 waiter['img'].save(STATEDIR+w['name']+IMGEXT)
                         return self.ok()
                 else:
                         self.log("timeout")
-                        self.sendLine('timeout')
+                        self.send('timeout')
                         return self.fail()
 
         def wait_cb(self,**waiter):
@@ -1104,14 +1134,14 @@ class controlProtocol(LineReceiver):
                 """
                 ping: Outputs "pong"
                 """
-                self.sendLine("pong");
+                self.send("pong");
                 return self.ok()
 
         def cmd_stop(self):
                 """
                 stop: Terminate rfbimg.  Use sparingly!
                 """
-                self.sendLine("stopping");
+                self.send("stopping");
                 self.rfb.stop()
                 return self.ok()
 
