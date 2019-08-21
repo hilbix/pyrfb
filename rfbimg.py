@@ -115,6 +115,7 @@ class rfbImg(easyrfb.client):
         self.viz	= None
         self.vizualize	= viz
 
+        self.lm_c	= 0
         self.lm_x	= 0
         self.lm_y	= 0
 
@@ -142,7 +143,7 @@ class rfbImg(easyrfb.client):
 
         self.sleep = self.SLEEP_TIME
 
-        self.write(self.name, self.type)
+        self.save_img(self.name, self.type)
 
         self.count = 0
         self.fuzz = 0
@@ -150,7 +151,7 @@ class rfbImg(easyrfb.client):
         self.dirt = 0
         self.skips = 0
 
-    def write(self,name, type=None, quality=None):
+    def save_img(self,name, type=None, quality=None):
         tmp = os.path.splitext(name)
         tmp = tmp[0]+".tmp"+tmp[1]
 
@@ -204,6 +205,8 @@ class rfbImg(easyrfb.client):
         # 1x32 F floating point pixels
         #
         # We use RGBX here, because that is the VNC data format used
+        #
+        # Image.new(mode, (w,h), color)  missing color==0:black, None:uninitialized
         self.img = Image.new('RGBX',(self.width,self.height),None)
 
     def updateRectangle(self, vnc, x, y, width, height, data):
@@ -251,13 +254,30 @@ class rfbImg(easyrfb.client):
         vnc.framebufferUpdateRequest(incremental=1)
 
     def pointer(self,x,y,click=None):
+        """
+        Then moves the mouse pointer to the given coordinate
+        and applies the button click.
+
+        If all buttons are released, they are released before movement.
+
+        If click is not given, use the same button mask as before (drag etc.)
+        """
 #	self.force = 2
+
+        # First release, then move
+        # If you want to move with button pressed:
+        # Move with button, then release button.
         if click is None:
-                click = 0
-        self.event_add(self.myVNC.pointerEvent,x,y,click)
-        self.lm_x	= x
-        self.lm_y	= y
-        self.log('mouse',x,y,click)
+                click	= self.lm_c
+        elif self.lm_c and not click:
+                self.event_add(self.myVNC.pointerEvent, self.lm_x, self.lm_y, 0)
+
+        self.lm_c	= click
+        if x is not None:	self.lm_x	= x
+        if y is not None:	self.lm_y	= y
+
+        self.event_add(self.myVNC.pointerEvent, self.lm_x, self.lm_y, self.lm_c)
+        self.log('mouse', self.lm_x, self.lm_y, click)
 
     def key(self,k):
 #	self.force = 2
@@ -542,27 +562,53 @@ def rename_away(to,ext):
 from twisted.protocols.basic import LineReceiver
 class controlProtocol(LineReceiver):
 
-        delimiter='\n'
+        delimiter='\n'		# DO NOT REMOVE THIS, this black magic is needed
 
+        # Dots are disallowed for a good reason
         valid_filename = re.compile('^[-_a-zA-Z0-9]*$')
 
-        bye = False
+        bye	= False
+#        prompt	= None
 
-        def log(*args, **kw):
+        def log(self, *args, **kw):
                 print(" ".join(tuple(str(v) for v in args)+tuple(str(n)+"="+str(v) for n,v in kw.iteritems())))
+                return self
+
+        def out(self, s, *args, **kw):
+                self.sendLine(s)
+                self.log(s, *args,**kw)
+                return self
+
+        def ok(self, *args, **kw):
+                if args:
+                        self.sendLine(args[0])
+                if kw or len(args)>1:
+                        self.log(*args, **kw)
+                return True			# default return value for "success"
+
+        def fail(self, *args, **kw):
+                if args:
+                        self.out(*args, **kw)
+                return False			# default return value for "failure"
+
+        def err(self, *args, **kw):
+                if args:
+                        self.out(*args, **kw)
+                return None			# default return value for "error"
 
         def lineReceived(self, line):
                 self.state	= None
                 self.prevstate	= None
                 self.rfb	= self.factory.rfb
                 if self.processLine(line):
-                        self.transport.write("ok\n")
-                        self.log("ok",line)
+                        self.out('ok', line)
                 else:
-                        self.transport.write("ko\n")
-                        self.log("ko",line)
+                        self.fail('ko', line)
                 if self.bye:
-                        self.transport.loseConnection()
+                        self.stopProducing()
+                        #self.transport.loseConnection()
+#                if self.prompt:
+#                        self.transport.write(self.prompt)
 
         def processLine(self, line):
                 return self.processArgs(line.split(" "))
@@ -576,49 +622,97 @@ class controlProtocol(LineReceiver):
                 """
                 try:
                         self.log("cmd",args)
-                        return getattr(self,'cmd_'+args[0], self.cmd_none)(*args[1:])
+                        return getattr(self,'cmd_'+args[0], self.unknown)(*args[1:])
                 except Exception,e:
                         twisted.python.log.err(None, "line")
                         self.bye	= True
                         return None
 
-        def cmd_none(self):
-                """
-                The unknown command, always fails
-                """
-                self.transport.write("unknown cmd\n")
-                self.log("unknown")
-                return False
+        # all cmd_* are supposed to return
+        # True  on success
+        # False on failure
+        # None  on error (exception)
 
-        def cmd_sub(self, macro):
+        def unknown(self, *args):
+                self.bye	= True
+                return self.err('unknown cmd')
+
+#        def cmd_prompt(self,*args):
+#                """
+#                prompt: set prompt and do not terminate on errors (can no more switched off)
+#                """
+#                self.prompt = ' '.join(args+['> '])
+#                return self.ok()
+
+        def cmd_ok(self,*arg):
                 """
-                run MACRO
+                ok: dummy command, ignores args, always succeeds
+                """
+                return self.ok()
 
-                read file o/MACRO.macro line by line
-                returns success on "exit" or end of line
-                returns failure on the first failing command
-                returns error on error (which sets termination)
+        def cmd_fail(self,*arg):
+                """
+                fail: dummy command, ignores args, always fails
 
-                use "if sub macro" to not fail on fails
-                use "if if sub macro" to not fail on errors
+                Also used as "unknown command"
+                """
+                return self.fail()
+
+        def cmd_bug(self,*arg):
+                """
+                bug: dummy command, ignores args, always errors
+                """
+                return self.err()
+
+        def cmd_help(self, cmd=None):
+                """
+                help: list known commands
+                help command: show help of command
+                """
+                if cmd is None:
+                        all	= []
+                        for a in dir(self):
+                                if a.startswith('cmd_'):
+                                        all.append(a[4:])
+                        return self.ok(', '.join(all))
+
+                fn = getattr(self, 'cmd_'+cmd)
+                for a in fn.__doc__.split('\n'):
+                        a	= a.strip()
+                        if len(a):
+                                if a=='.': a=''
+                                self.sendLine(' '+a)
+                return self.ok()
+
+        def cmd_sub(self, macro, *args):
+                """
+                sub MACRO args..:
+                - read file o/MACRO.macro line by line
+                - returns success on "exit" or end of line
+                - returns failure on the first failing command
+                - returns error on error (which sets termination)
+                .
+                if sub macro:    do not fail on fails
+                if if sub macro: do not fail on errors
                 """
                 if not self.valid_filename.match(macro):
-                        return False
+                        return self.fail()
                 for l in io.open(MACRODIR+macro+MACROEXT):
+                        # replace args
                         st	= processLine(self, l)
                         if not st:
                                 return st
                         if self.bye:
                                 self.bye	= False
-                                return True
-                return True
+                                return self.ok()
+                return self.ok()
 
         def cmd_run(self, macro, *args):
                 """
-                run MACRO and sets termination
-
-                same as "sub MACRO" followed by "exit"
-                but different, as this can return failure
+                run MACRO args..: same as "sub MACRO", but followed by "exit"
+                .
+                This is different from "sub MACRO" "exit" in that it can return failure
+                (exit cannot).
                 """
                 st		= cmd_sub(macro, *args)
                 self.bye	= True
@@ -626,63 +720,57 @@ class controlProtocol(LineReceiver):
 
         def cmd_if(self, *args):
                 """
-                if command
-
-                record success/failure of command
-                returns failure on error
-                else returns success
-
-                if if command
-                record error state, error is failure everything else is success
+                if command args..:
+                - record success/failure of command as STATE
+                - returns failure on error
+                - else returns success
+                .
+                if if command args..: record error state, error is failure everything else is success
                 """
                 st		= self.processArgs(args)
                 self.prevstate	= self.state
                 self.state	= st
                 if st is None:
                         self.bye	= False
-                        return False
-                return True
+                        return self.fail()
+                return self.ok()
 
         def cmd_then(self, *args):
                 """
-                then command
-
-                run command only of state is success
+                then command args..: run command only of STATE (see: if) is success
                 """
-                if self.state == True:
-                        return self.processArgs(args)
-                return true
+                return self.state if self.processArgs(args) else self.ok()
 
         def cmd_else(self, *args):
                 """
-                else command
-
-                run command only of state is failure
+                else command args..: run command only of STATE (see: if) is failure
                 """
                 if self.state == False:
                         return self.processArgs(args)
-                return true
+                return self.ok()
 
         def cmd_err(self, *args):
                 """
-                err command
-
-                run command only of state is error
+                err command args..: run command only of STATE (see: if) is error
                 """
                 if self.state is None:
                         return self.processArgs(args)
-                return true
+                return self.ok()
 
         def cmd_mouse(self, x, y=None, click=None):
                 """
-                mouse x y
-                mouse x y buttons
-                mouse template N buttons
-
-                Template reads e/template.tpl and moves mouse to the first rectangle in N pieces
-
-                buttons are 1(left) 2(middle) 4(right) 8 and so on for the pressed buttons
-                note that you can press multiple buttons by adding
+                mouse x y: jump mouse to the coordinates with the current button setting (dragging etc.)
+                mouse x y buttons: release if all released, jump mouse, then apply buttons
+                mouse template N [buttons]: move mouse in N steps to first region of e/template.tpl and performs action
+                .
+                To release all buttons, you must give 0 as buttons!
+                buttons are 1(left) 2(middle) 4(right) 8 and so on for further buttons.
+                To press multiple buttons add their numbers.
+                .
+                Template based mouse movement should set the button before execution like:
+                mouse template 5 0
+                mouse template 0 1
+                mouse template 0 0
                 """
                 if click is not None:
                         click = int(click)
@@ -718,6 +806,7 @@ class controlProtocol(LineReceiver):
                                 tx	= rand(11)-5 + (x-self.rfb.lm_x)/(n+2)
                                 ty	= rand(11)-5 + (y-self.rfb.lm_y)/(n+2)
                                 self.rfb.pointer(tx, ty)
+                                time.sleep(0.01 + 0.01 * rand(10))
                 except Exception,e:
                         pass
 
@@ -725,8 +814,11 @@ class controlProtocol(LineReceiver):
                 return x,y
 
         def cmd_learn(self,to):
+                """
+                learn NAME: save screen to l/NAME.png
+                """
                 if not self.valid_filename.match(to):
-                        return False
+                        return self.fail()
                 if to=='':
                         to = 'screen-'+timestamp()
                 tmp = 'learn.png'
@@ -740,13 +832,12 @@ class controlProtocol(LineReceiver):
                         rename_away(out, IMGEXT)
                 self.log("tmp", tmp, "out", out)
                 os.rename(tmp, out+IMGEXT)
-                return True
+                return self.ok()
 
         def cmd_key(self,*args):
                 """
-                key string
-
-                Output the given string
+                key string: Type the given string
+                Note: This is buggy with characters which use Shift or Control
                 """
                 for k in " ".join(args):
                         self.rfb.key(ord(k))
@@ -754,9 +845,7 @@ class controlProtocol(LineReceiver):
 
         def cmd_code(self,*args):
                 """
-                code code code..
-
-                Send keykodes, can be numbers or names
+                code code code..: Send keykodes, code can be numbers or names
                 """
                 for k in args:
                         v	= easyrfb.getKey(k)
@@ -767,77 +856,83 @@ class controlProtocol(LineReceiver):
 
         def cmd_exit(self):
                 """
-                end conversation / sub / macro
+                exit: end conversation / return from sub or macro
                 """
                 self.bye = True
-                return True
+                return self.ok()
 
         def cmd_next(self):
                 """
-                Wait for next picture flushed out
+                next: Wait for next picture flushed out
 
-                DOES NOT WORK IN MACRO
+                This is asynchronous, so does NOT work in MACROs.
+                It delays reception of next command until the next image is written out.
+
+                Usually followed by: exit
                 """
                 self.pause()
                 self.rfb.next(self.resume)
-                return True
+                return self.ok()
 
         def cmd_flush(self):
                 """
-                Force next picture to be flushed
+                flush: Force next picture to be flushed
+
+                This is asynchronous, so in MACROs it probably does NOT do what what you expect.
+
+                Usually followed by: next
                 """
                 self.rfb.flush()
-                return True
+                return self.ok()
 
         def cmd_check(self,*templates):
                 """
-                check template..
-
-                check if template matches
-                fails if no template matches
-                prints first matching template
+                check template..:
+                - check if template matches
+                - fails if no template matches
+                - prints first matching template
                 """
                 w = {'t':templates}
                 return len(templates) and self.rfb.check_waiter(w, True) and self.print_wait(w)
 
         def cmd_state(self,*templates):
                 """
-                like check, but writes the state to s/TEMPLATE.img
+                state template..: like check, but writes the state (picture) to s/TEMPLATE.img
                 """
                 w = {'t':templates, 'img':1}
                 return len(templates) and self.rfb.check_waiter(w, True) and self.print_wait(w)
 
         def cmd_wait(self,*templates):
                 """
-                wait count template..
+                wait count template..: wait count screen updates for one of the given templates to show up
 
-                DOES NOT WORK IN MACRO
+                This is asynchronous, so does NOT work in MACROs.
+                It delays reception of next command until the next image is written out.
 
-                wait count screen updates for one of the given templates to show up
-                wait without template returns failure
+                Note: This waits count frames, not a defined time
                 """
                 if len(templates)<2:
-                        return False
+                        return self.fail()
                 timeout = int(templates[0])
                 self.pause()
                 self.rfb.wait(cb=self.wait_cb, t=templates[1:], retries=timeout)
-                return True
+                return self.ok()
 
         def print_wait(self,waiter):
                 if waiter['match']:
                         w = waiter['match']
                         self.log("match",w)
                         if w['cond']:
-                                self.transport.write("found %s %s %s\n" % (w['name'], w['dx'], w['dy']))
+                                self.sendLine('found %s %s %s' % (w['name'], w['dx'], w['dy']))
                         else:
-                                self.transport.write("spare %s\n" % (w['name']))
+                                self.sendLine('spare %s' % (w['name']))
                         if 'img' in waiter:
                                 waiter['img'].save(STATEDIR+w['name']+IMGEXT)
-                        return True
+                        return self.ok()
                 else:
                         self.log("timeout")
-                        self.transport.write("timeout\n")
-                        return False
+                        self.sendLine('timeout')
+                        return self.fail()
 
         def wait_cb(self,**waiter):
                 self.print_wait(waiter)
@@ -855,20 +950,19 @@ class controlProtocol(LineReceiver):
 
         def cmd_ping(self):
                 """
-                ping
-
-                Output "pong"
+                ping: Outputs "pong"
                 """
                 self.sendLine("pong");
-                return True
+                return self.ok()
 
         def cmd_stop(self):
                 """
-                Terminate rfbimg.  Use sparingly!
+                stop: Terminate rfbimg.  Use sparingly!
                 """
                 self.sendLine("stopping");
                 self.rfb.stop()
-                return True
+                return self.ok()
+
 
 from twisted.internet import reactor
 class createControl(twisted.internet.protocol.Factory):
