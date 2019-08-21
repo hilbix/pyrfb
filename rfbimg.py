@@ -640,6 +640,10 @@ class controlProtocol(LineReceiver):
                         self.sendLine(s)
                 return True
 
+        def diag(self, **kw):
+                self.send(repr(kw))
+                return True
+
         def log(self, *args, **kw):
                 print(" ".join(tuple(str(v) for v in args)+tuple(str(n)+"="+str(v) for n,v in kw.iteritems())))
                 return self
@@ -846,18 +850,14 @@ class controlProtocol(LineReceiver):
 
                 # read the macro file
                 for l in io.open(MACRODIR+macro+MACROEXT):
+                        # ignore empty lines and comments
+                        if l.strip()=='':	continue
+                        if l[0]=='#':		continue
+
                         # l is unicode and contains \n
-                        # we need UTF-8
                         if l.endswith('\n'): l=l[:-1]
+                        # we need UTF-8
                         l	= l.encode('utf8')
-
-                        repl['{mx}']	= str(self.rfb.lm_x)
-                        repl['{my}']	= str(self.rfb.lm_y)
-                        repl['{mb}']	= str(self.rfb.lm_c)
-                        # XXX TODO XXX add more replacements
-
-                        # replace {replacements}
-                        l	= mass_replace(l, repl)
 
                         # parse result
                         st		= self.processLine(l, True)
@@ -879,6 +879,8 @@ class controlProtocol(LineReceiver):
                 This is different from "sub MACRO" "exit" in that it can return failure
                 (exit cannot).
                 """
+
+                # XXX TODO XXX how to do tail recursion here so this becomes "goto"?
                 st		= cmd_sub(macro, *args)
                 self.bye	= True
                 return st
@@ -930,8 +932,7 @@ class controlProtocol(LineReceiver):
                 """
                 dump args..: print repr of args
                 """
-                self.sendLine(repr(args))
-                return self.ok()
+                return self.diag(args=args)
 
         def cmd_mouse(self, x, y=None, click=None):
                 """
