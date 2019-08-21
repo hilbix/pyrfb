@@ -568,7 +568,7 @@ class controlProtocol(LineReceiver):
         valid_filename = re.compile('^[-_a-zA-Z0-9]*$')
 
         bye	= False
-#        prompt	= None
+        prompt	= None
 
         def log(self, *args, **kw):
                 print(" ".join(tuple(str(v) for v in args)+tuple(str(n)+"="+str(v) for n,v in kw.iteritems())))
@@ -607,8 +607,8 @@ class controlProtocol(LineReceiver):
                 if self.bye:
                         self.stopProducing()
                         #self.transport.loseConnection()
-#                if self.prompt:
-#                        self.transport.write(self.prompt)
+                if self.prompt:
+                        self.transport.write(self.prompt)
 
         def processLine(self, line):
                 return self.processArgs(line.split(" "))
@@ -637,12 +637,12 @@ class controlProtocol(LineReceiver):
                 self.bye	= True
                 return self.err('unknown cmd')
 
-#        def cmd_prompt(self,*args):
-#                """
-#                prompt: set prompt and do not terminate on errors (can no more switched off)
-#                """
-#                self.prompt = ' '.join(args+['> '])
-#                return self.ok()
+        def cmd_prompt(self,*args):
+                """
+                prompt: set prompt and do not terminate on errors (can no more switched off)
+                """
+                self.prompt = ' '.join(args+['> '])
+                return self.ok()
 
         def cmd_ok(self,*arg):
                 """
