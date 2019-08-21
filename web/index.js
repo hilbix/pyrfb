@@ -35,8 +35,9 @@ function BUTTON(inner, click)
 
 function later(fn, ...a) { setTimeout(() => fn(...a)) }
 
-function strCut(s, at) { var n = s.length-at.length; return n>=0 && s.substr(n)==at ? s.substring(0,n) : s }
-function strCutAt(s, at) { var n = s.indexOf(at); return n>=0 ? s.substring(0,n) : s }
+function strCut(s, at) { var n = s.length-at.length; return n>=0 && s.substr(n)==at ? s.substring(0,n) : s }	// remove last
+function strCutAt(s, at) { var n = s.indexOf(at); return n>=0 ? s.substring(0,n) : s }				// remove upto first
+function strTail(s, at) { var n = s.lastIndexOf(at); return n>=0 ? s.substring(n+1) : s }			// remove until last
 
 
 function BUG(x) { var f=function () { alert(x); return false; }; f(); return f }
@@ -707,10 +708,11 @@ var Assets =
         {
           req.get(['state.php', u], '', t =>
             {
-              t = strCutAt(t, '\n');
+              t = strCut(t, '\n');
               if (!quiet)
                 OUT(t);
-              b.setAttribute('class', t=='ko' ? 'ko' : 'ok');
+              t = strTail(t, '\n');
+              b.setAttribute('class', t=='ok' ? 'ok' : 'ko');
             });
         };
 
