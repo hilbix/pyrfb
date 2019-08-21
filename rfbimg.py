@@ -53,7 +53,7 @@ MACRODIR='o/'
 MACROEXT='.macro'
 
 # Dots are disallowed for a good reason
-valid_filename = re.compile('^[-_a-zA-Z0-9]*$')
+valid_filename = re.compile('^[_a-zA-Z0-9][-_a-zA-Z0-9]*$')
 
 log	= None
 
@@ -973,8 +973,6 @@ class controlProtocol(LineReceiver):
                 """
                 if not self.valid_filename.match(to):
                         return self.fail()
-                if to=='':
-                        to = 'screen-'+timestamp()
                 tmp = 'learn.png'
                 try:
                         os.unlink(tmp)
