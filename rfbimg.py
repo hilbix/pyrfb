@@ -40,6 +40,7 @@ import sys
 import time
 import random
 import traceback
+import functools
 
 import twisted
 from PIL import Image,ImageChops,ImageStat,ImageDraw
@@ -585,12 +586,27 @@ def mass_replace(o, d):
 
         raise RuntimeError('instable expansion, too many recursions: '+repr(o))
 
+def restore_property(prop):
+        def decorate(fn):
+                @functools.wraps(fn)
+                def wrap(self, *args, **kw):
+                        old	= getattr(self, prop)
+                        try:
+                                return fn(self, *args, **kw)
+                        finally:
+                                setattr(self, prop, old)
+                return wrap
+        return decorate
+
 from twisted.protocols.basic import LineReceiver
 class controlProtocol(LineReceiver):
 
         delimiter='\n'		# DO NOT REMOVE THIS, this black magic is needed
 
         valid_filename	= valid_filename
+
+        MODE_SPC	= ' '
+        MODE_TAB	= "\t"
 
         # Called from factory, but no self.factory here!
         def __init__(self):
@@ -603,6 +619,8 @@ class controlProtocol(LineReceiver):
                 self.prevstate	= None
                 #self.rfb	= self.factory.rfb	no self.factory here
                 self.quiet	= False
+                self.verbose	= False
+                self.mode	= self.MODE_SPC
 
         # Called by LineReceiver
         def lineReceived(self, line):
@@ -641,7 +659,8 @@ class controlProtocol(LineReceiver):
                 return True
 
         def diag(self, **kw):
-                self.send(repr(kw))
+                if self.verbose:
+                        self.send(repr(kw))
                 return True
 
         def log(self, *args, **kw):
@@ -674,7 +693,7 @@ class controlProtocol(LineReceiver):
         def processLine(self, line, expand=False):
                 if expand:
                         line	= mass_replace(line, self.autoset())
-                return self.processArgs(line.split(' '))
+                return self.processArgs(line.split(self.mode))
 
         def processArgs(self, args):
                 """
@@ -685,6 +704,7 @@ class controlProtocol(LineReceiver):
                 """
                 try:
                         self.log("cmd",args)
+                        self.diag(proc=args)
                         return getattr(self,'cmd_'+args[0], self.unknown)(*args[1:])
                 except Exception,e:
                         twisted.python.log.err(None, "line")
@@ -719,15 +739,21 @@ class controlProtocol(LineReceiver):
                 self.success = args and ' '.join(args) or None
                 return self.ok()
 
+        @restore_property('quiet')
         def cmd_quiet(self,*args):
                 """
                 quiet cmd: suppress normal output of cmd
                 """
                 self.quiet	= True
-                try:
-                        return self.processArgs(args)
-                finally:
-                        self.quiet	= False
+                return self.processArgs(args)
+
+        @restore_property('verbose')
+        def cmd_verbose(self,*args):
+                """
+                verbose cmd: verbose output of cmd
+                """
+                self.verbose	= True
+                return self.processArgs(args)
 
         def cmd_failure(self,*args):
                 """
@@ -819,8 +845,20 @@ class controlProtocol(LineReceiver):
                 """
                 for var in args:
                         del self.repl['{'+var+'}']
-                return self.ok
+                return self.ok()
 
+        def cmd_mode(self, mode):
+                """
+                mode MODE: set command/argument mode
+                Macros always start with SPC.
+                Modes:
+                SPC	a single space
+                TAB	a single TAB
+                """
+                self.mode	= getattr(self, 'MODE_'+mode)
+                return self.ok()
+
+        @restore_property('mode')
         def cmd_sub(self, macro, *args):
                 """
                 sub MACRO args..:
@@ -839,6 +877,8 @@ class controlProtocol(LineReceiver):
                 - more replacements might show up in future
                 - see also: set
                 """
+
+                self.mode	= self.MODE_SPC
 
                 repl	= dict(self.repl)
                 for i in range(len(args)):
@@ -870,6 +910,7 @@ class controlProtocol(LineReceiver):
                                 return self.ok()
 
                 # EOF fails
+                self.diag(macro=macro, err="EOF reached, no 'exit'")
                 return self.fail()
 
         def cmd_run(self, macro, *args):
