@@ -1,4 +1,5 @@
 #!/usr/bin/env python2
+# coding=utf-8
 #
 # Save RFB framebuffer to a file
 # or run in a loop and also send commands to VNC through socket
@@ -42,8 +43,25 @@ import random
 import traceback
 import functools
 
+import PIL.Image
+import PIL.ImageStat
+import PIL.ImageChops
+import PIL.ImageDraw
+
+# We definitively want to become independent
+# if this in future
+#
+# For now easyrfb depends on this
+# so we depend on this, too.
+#
+# however everything of this dependency
+# MUST
+# be moved into easyrfb
+#
+# Below mark twistedisms with (this is on column 89)					# TWISTED
+# to replace them with easyrfbisms.
+# Note that I might have missed things.
 import twisted
-from PIL import Image,ImageChops,ImageStat,ImageDraw
 
 LEARNDIR='l/'
 STATEDIR='s/'
@@ -64,12 +82,19 @@ def timestamp():
 
 cachedimages = {}
 def cacheimage(path, mode='RGB'):
+        """
+        cache an image, re-reads if file modification time has changed.
+
+        Note that this possibly converts the cached image to the given mode.
+        Be sure to cache only compatible modes!
+        """
+        mtime	= os.stat(path).st_mtime
         try:
-                if cachedimages[path][0]==os.stat(path).st_mtime:
-                        return cachedimages[path][1]
+                if cachedimages[path][0]==mtime:
+                        return cachedimages[path][1] if cachedimage[path][2]==mode else cachedimages[path][1].convert(mode)
         except KeyError:
                 pass
-        cachedimages[path] = (os.stat(path).st_mtime,Image.open(path).convert(mode))
+        cachedimages[path] = (mtime,PIL.Image.open(path).convert(mode),mode)
         return cachedimages[path][1]
 
 def rand(x):
@@ -80,18 +105,23 @@ class rfbImg(easyrfb.client):
 
     valid_filename	= valid_filename
 
-    count = 0		# Count the number of pixels changed so far
-    fuzz = 0		# Additional dirt added by timer to flush from time to time
-    force = 0		# Force update in given count of timers
-    changed = 0		# Changed pixel count in batch
-    delta = 0		# Max delta seen so far before update
-    dirt = 0		# Dirty counter, if too high then force flush
-    sleep = 0		# Sleep counter, delay update if recently flushed
-    SLEEP_TIME = 3	# 0.3 seconds
-    DIRT_LEVEL = 40	# 4.0 seconds
+    TICKS	= 0.1	# timer resolution in seconds
+    SLEEP_TIME	= 3	# in TICKS = 0.3s
+    DIRT_LEVEL	= 40	# in TICKS = 4.0s
+    tick	= 0	# monotone tick counter (TICKS resolution)
 
-    def __init__(self, appname, loop=None, mouse=None, name=None, type=None, quality=None, viz=None):
-        super(rfbImg, self).__init__(appname)
+    count	= 0	# Count the number of pixels changed so far
+    fuzz	= 0	# Additional dirt added by timer to flush from time to time
+    forcing	= 0	# Force update in given count of timers
+    changed	= 0	# Changed pixel count in batch
+    delta	= 0	# Max delta seen so far before update
+    dirt	= 0	# Dirty counter, if too high then force flush
+    dirty	= False	# dirty flag (when count!=0 or forcing)
+    sleep	= 0	# Sleep counter, delay update if recently flushed
+    skips	= 0	# Number of skipped (==unchanged) frames received in this update
+
+    def __init__(self, appname, loop=None, mouse=None, name=None, type=None, quality=None, viz=None, **kw):
+        super(rfbImg, self).__init__(appname, **kw)
         self.logging()
 
         if loop is None:	loop	= self._preset("RFBIMGLOOP",    '0') != '0'
@@ -106,58 +136,95 @@ class rfbImg(easyrfb.client):
         self.log("init", loop=loop, mouse=mouse, name=name, type=type, qual=quality)
 
         # Start the timer
-        self._timer = twisted.internet.task.LoopingCall(self.timer);
-        self._timer.start(0.1, now=False)
+        self._timer = twisted.internet.task.LoopingCall(self.timer)			# TWISTED
+        self._timer.start(self.TICKS, now=False)					# TWISTED
 
         # Remember the args
-
-        self.loop = loop
-        self.mouse = mouse
-        self.name = name
-        self.type = type
-        self.quality = quality
-        self.dirt = 0
-        self.sleep = 0
-        self.skips	= 0
+        self.loop	= loop
+        self.mouse	= mouse
+        self.name	= name
+        self.type	= type
+        self.quality	= quality
 
         self.viz	= None
         self.vizualize	= viz
 
+        # we haven't seen the mouse and do not know where it is
         self.lm_c	= 0
         self.lm_x	= 0
         self.lm_y	= 0
 
+    # This is really black magic, sorry
     def timer(self):
-        """Called each 0.1 seconds when reactor is idle"""
+        """Called each 0.1 seconds when idle"""
 
-        if self.count>0:
-                self.dirt += 1
-                self.sleep -= 1
+        self.tick	+= 1
+
+        # has something changed?
+        if self.dirty:
+                self.dirt	+= 1		# TICKS how long we are dirty
+                self.sleep	-= 1		# TICKS we have to wait after the last flush
+
+                # This is something we should adjust in future
+                # perhaps base this on the count seen so far or whatever
                 self.fuzz += self.width/10
-                if self.sleep<0 and ( self.dirt>self.DIRT_LEVEL or self.force==1 or self.width * self.height < self.count * 50 + self.fuzz ):
-                        self.flush()
-        if self.force:
-                self.count += 1
-                self.force -= 1
+
+                # Are we delaying, then skip a flush
+                if self.sleep<0:
+                        # If we are dirty (.dirt) longer then DIRT_LEVEL (4s)
+                        # OR we are .forcing and .forcing has reached 1 (==this tick)
+                        # OR the dirty region (.count) is just too much
+                        if self.dirt>self.DIRT_LEVEL or self.forcing==1 or self.width * self.height < self.count * 50 + self.fuzz:
+                                self.force_flush()
+                else:
+                        self.forcing += 1	# HACK to NOT decrement self.forcing below
+
+        # See HACK above, this works as follows, which is intended:
+        # If self.forcing is set, it is usually set to 2 such that it
+        # does not force on the direct next tick (which can be right now).
+        # However if we are forcing and nothing changed we still want
+        # to write out the picture - perhaps some filesystem trigger waits.
+        if self.forcing:
+                self.forcing	-= 1
+                self.dirty	= True
 
         self.autonext(False)
 
-    # Called when the image must be written to disk
-    def flush(self):
+    def flush(self, fast):
         """
-        Flush the image to disk
+        Force a flush after the next tick (0.1s to 0.2s).
+
+        Set fast, if it should be on the next tick (0.s to 0.1s).
+        If you really need immediate, then use .force_flush()
+        """
+        if self.forcing!=1:
+                self.forcing	= 2
+        if fast:
+                self.count	+= self.width*self.height	# HACK to refresh on next timer
+
+    # Called when the image must be written to disk
+    def force_flush(self):
+        """
+        Immediately write image to disk.
         The target is overwritten atomically by rename()
+
+        This should not be called directly,
+        because it might flush() unneccessarily.
+        Use .flush_soon() instead
         """
 
         self.sleep = self.SLEEP_TIME
 
-        self.save_img(self.name, self.type)
+        # Do not flush if nothing changed
+        if self.count or self.changed:
+                self.save_img(self.name, self.type)
 
-        self.count = 0
-        self.fuzz = 0
-        self.delta = 0
-        self.dirt = 0
-        self.skips = 0
+        self.count	= 0
+        self.fuzz	= 0
+        self.delta	= 0
+        self.dirt	= 0
+        self.skips	= 0
+        self.dirty	= False
 
     def save_img(self,name, type=None, quality=None):
         tmp = os.path.splitext(name)
@@ -170,10 +237,10 @@ class rfbImg(easyrfb.client):
 
         if self.vizualize:
                 old		= self.viz
-                self.viz	= Image.new('RGBA',(self.width,self.height),(0,0,0,0))
+                self.viz	= PIL.Image.new('RGBA',(self.width,self.height),(0,0,0,0))
                 if old:
-                        self.viz	= Image.blend(self.viz, old, alpha=.75)
-                self.vizdraw	= ImageDraw.Draw(self.viz)
+                        self.viz	= PIL.Image.blend(self.viz, old, alpha=.75)
+                self.vizdraw	= PIL.ImageDraw.Draw(self.viz)
 
         if quality is None:
                 quality	= self.quality
@@ -214,32 +281,37 @@ class rfbImg(easyrfb.client):
         #
         # We use RGBX here, because that is the VNC data format used
         #
-        # Image.new(mode, (w,h), color)  missing color==0:black, None:uninitialized
-        self.img = Image.new('RGBX',(self.width,self.height),None)
+        # PIL.Image.new(mode, (w,h), color)  missing color==0:black, None:uninitialized
+        self.img = PIL.Image.new('RGBX',(self.width,self.height),None)
 
     def updateRectangle(self, vnc, x, y, width, height, data):
         #print "%s %s %s %s" % (x, y, width, height)
-        img = Image.frombuffer('RGBX',(width,height),data,'raw','RGBX',0,1)
+        img = PIL.Image.frombuffer('RGBX',(width,height),data,'raw','RGBX',0,1)
         if x==0 and y==0 and width==self.width and height==self.height:
                 # Optimization on complete screen refresh
                 self.img = img
         elif self.loop or self.mouse:
-                # Skip counting update if nothing changed
-                st = ImageStat.Stat(ImageChops.difference(img,self.img.crop((x,y,x+width,y+height))))
-                self.img.paste(img,(x,y))
-
-                #print ImageChops.difference(img,self.img.crop((x,y,x+width,y+height))).getbbox()
                 # If not looping this apparently updates the mouse cursor
-                outline=(255,0,0,255)
-                delta = reduce(lambda x,y:x+y, st.sum2)
-                if delta<100*width*height:
-                        self.skips += 1
-                        outline=(0,0,255,255)
+                bb	= PIL.ImageChops.difference(img,self.img.crop((x,y,x+width,y+height)))
+
                 if self.viz:
+                        outline=(255,0,0,255)			# major changes are marked red
+                        st	= PIL.ImageStat.Stat(bb)
+                        if reduce(lambda x,y:x+y, st.sum2) < 100*width*height:
+                                outline=(0,0,255,255)		# minor changes are marked black
                         self.vizdraw.rectangle((x,y,x+width,y+height),outline=outline)
 
+                # Skip update if region is really unchanged
+                if not bb.getbbox():
+                        # Can this actually happen with RFB?
+                        self.skips	+= 1
+                        return
+
+                self.img.paste(img,(x,y))
+
+        self.dirty	= True
         self.changed	+= width*height
-#	self.rect = [ x,y,width,height ]
+#       self.rect = [ x,y,width,height ]
 
     def beginUpdate(self, vnc):
         self.changed = 0
@@ -247,14 +319,17 @@ class rfbImg(easyrfb.client):
     def commitUpdate(self, vnc, rectangles=None):
         #print "commit %d %s %s" % ( self.count, len(rectangles), self.rect )
 
-        # Increment by the biggest batch seen so far
+        # remember the biggest batch
         if self.changed > self.delta:
                 self.delta = self.changed
+        self.changed = 0
+
+        # Increment by the biggest batch seen so far
         self.count += self.delta
 
         # If one-shot then we are ready
         if not self.loop:
-                self.flush()
+                self.force_flush()
                 self.stop()	# This is asynchronous
                 #self.halt()	# I really have no idea why this is not needed
 
@@ -270,7 +345,7 @@ class rfbImg(easyrfb.client):
 
         If click is not given, use the same button mask as before (drag etc.)
         """
-#	self.force = 2
+#       self.forcing = 2
 
         # First release, then move
         # If you want to move with button pressed:
@@ -288,19 +363,77 @@ class rfbImg(easyrfb.client):
         self.log('mouse', self.lm_x, self.lm_y, click)
 
     def key(self,k):
-#	self.force = 2
-#	self.count += self.width*self.height
+#       self.forcing = 2
+#       self.count += self.width*self.height
         self.event_add(self.myVNC.keyEvent,k,1)
         self.event_add(self.myVNC.keyEvent,k,0)
 
-    #
+#    def todo(self,*
+#    def todo(self, cb, *args, **kw):
+#       self.event_add(*args, **kw)
+
+
+
+
+
+
+
+
+
+# NEEDS REWRITE START[
+# NEEDS REWRITE START[
+# NEEDS REWRITE START[
+# NEEDS REWRITE START[
+# NEEDS REWRITE START[
+# NEEDS REWRITE START[
+# NEEDS REWRITE START[
+# NEEDS REWRITE START[
+# NEEDS REWRITE START[
+# NEEDS REWRITE START[
+# NEEDS REWRITE START[
+# NEEDS REWRITE START[
+# NEEDS REWRITE START[
+# NEEDS REWRITE START[
+# NEEDS REWRITE START[
+# NEEDS REWRITE START[
+# NEEDS REWRITE START[
+# NEEDS REWRITE START[
+# NEEDS REWRITE START[
+# NEEDS REWRITE START[
+# NEEDS REWRITE START[
+# NEEDS REWRITE START[
+
+# Sorry in German, because this for me until this got rewritten:
+#
+# Das Ganze hier ist ein einziger grosser gigantischer Misthaufen
+# der nicht nur übel stinkt sondern auch noch dazu große
+# environmentale Probleme bereitet.
+#
+# Das ist nicht nur hackish sondern komplett fehldesigned.
+#
+# Was ich brauche ist ein ordentliches System mit dem man etwas
+# nebenläufig ablaufen lassen kann.
+# Das Halte und Startproblem (pause, resume) darf hier nicht rein
+# sondern kann meinetwegen in einer Zwischenklasse implementiert werden.
+#
+# Das Ganze muss wohl mit Callbacks organisiert sein.
+# Callbacks funktionieren mit allen Varianten,
+# egal onb AsyncIO, Threads, Twisted oder sonstwas.
+# Ich will da nicht von irgendeinem Framewürg abhängig bleiben,
+# sprich, das hängt dann technisch nur von easyrfb ab.
+#
+# Ja, eigentlich sollte das in EasyRFB rein.  Issesabernich.
+# Noch nicht.  Also bleibt das erst einmal vorerst hier.
+# Aber sollte da hin verschoben werden können,
+# schließlich erbt es dann diese Klasse hier.
+
     # next management
     #
     # force==False:
     # Timer is asynchronous.  Hence it may hit too early.
     # So we need to delay the next invocation for the next timer.
     # This gives the picture at least 0.1s time to update properly
-    # before recheching.
+    # before rechecking.
     #
     # force==True:
     # Synchronous at the end of a round.
@@ -357,18 +490,6 @@ class rfbImg(easyrfb.client):
         #print('add', cb,args,kw)
         self.evting.append((cb, args, kw))
 
-    def event_drain(self, child, refresh):
-        child.pause()
-        self.event_add(self.event_drained, child, refresh);
-        return True
-
-    def event_drained(self, child, refresh):
-        child.resume()
-        self.force	= 2
-        if refresh:
-                self.count	+= self.width*self.height
-        return True
-
     nexting	= []
     def next(self, cb):
         self.nexting.append(cb)
@@ -383,10 +504,38 @@ class rfbImg(easyrfb.client):
     def wait(self, **waiter):
         self.waiting.append(waiter)
 
+# NEEDS REWRITE END]
+# NEEDS REWRITE END]
+# NEEDS REWRITE END]
+# NEEDS REWRITE END]
+# NEEDS REWRITE END]
+# NEEDS REWRITE END]
+# NEEDS REWRITE END]
+# NEEDS REWRITE END]
+# NEEDS REWRITE END]
+# NEEDS REWRITE END]
+# NEEDS REWRITE END]
+# NEEDS REWRITE END]
+# NEEDS REWRITE END]
+# NEEDS REWRITE END]
+# NEEDS REWRITE END]
+# NEEDS REWRITE END]
+# NEEDS REWRITE END]
+# NEEDS REWRITE END]
+# NEEDS REWRITE END]
+# NEEDS REWRITE END]
+# NEEDS REWRITE END]
+# NEEDS REWRITE END]
+
+
+
+
+
+
     def check_rect(self,template,r,rect,debug,trace):
         # IC.difference apparently does not work on RGBX, so we have to convert to RGB first
-        bb = ImageChops.difference(r['img'], self.img.crop(rect).convert('RGB'))
-        st = ImageStat.Stat(bb)
+        bb = PIL.ImageChops.difference(r['img'], self.img.crop(rect).convert('RGB'))
+        st = PIL.ImageStat.Stat(bb)
         delta = reduce(lambda x,y:x+y, st.sum2)		# /(bb.size[0]*bb.size[1])
         if delta<=r['max']:
                 if trace:
@@ -496,7 +645,7 @@ class rfbImg(easyrfb.client):
                                         rects.append(spec)
                         tpls.append({ 'name':l, 't':t, 'i':i, 'r':rects, 'cond':cond, 'search':search })
                 except Exception,e:
-                        twisted.python.log.err(None, "load")
+                        twisted.python.log.err(None, "load")				# TWISTED
                         return None
         return tpls
 
@@ -598,10 +747,9 @@ def restore_property(prop):
                 return wrap
         return decorate
 
-from twisted.protocols.basic import LineReceiver
-class controlProtocol(LineReceiver):
-
-        delimiter='\n'		# DO NOT REMOVE THIS, this black magic is needed
+import twisted.protocols.basic
+class controlProtocol(twisted.protocols.basic.LineReceiver):				# TWISTED
+        delimiter='\n'									# TWISTED black magic, DO NOT REMOVE
 
         valid_filename	= valid_filename
 
@@ -623,7 +771,7 @@ class controlProtocol(LineReceiver):
                 self.mode	= self.MODE_SPC
 
         # Called by LineReceiver
-        def lineReceived(self, line):
+        def lineReceived(self, line):							# TWISTED
                 self.rfb	= self.factory.rfb
 
                 if self.prompt and line.strip()=='':
@@ -649,6 +797,7 @@ class controlProtocol(LineReceiver):
                 r['{mx}']	= str(self.rfb.lm_x)
                 r['{my}']	= str(self.rfb.lm_y)
                 r['{mb}']	= str(self.rfb.lm_c)
+                r['{tick}']	= str(self.rfb.tick)
                 # XXX TODO XXX add more replacements
 
                 return r
@@ -707,7 +856,7 @@ class controlProtocol(LineReceiver):
                         self.diag(proc=args)
                         return getattr(self,'cmd_'+args[0], self.unknown)(*args[1:])
                 except Exception,e:
-                        twisted.python.log.err(None, "line")
+                        twisted.python.log.err(None, "line")				# TWISTED
                         if self.prompt:
                                 self.sendLine(traceback.format_exc())
                         else:
@@ -786,6 +935,9 @@ class controlProtocol(LineReceiver):
                 """
                 help: list known commands
                 help command: show help of command
+                .
+                Note that this application is single threaded,
+                hence lengthy calculations block other things.
                 """
                 if cmd is None:
                         all	= []
@@ -858,6 +1010,15 @@ class controlProtocol(LineReceiver):
                 self.mode	= getattr(self, 'MODE_'+mode)
                 return self.ok()
 
+        # FALSCH IMPLEMENTIERT
+        def cmd_sleep(self, sec):
+                """
+                sleep sec: sleep the given seconds
+                """
+                time.sleep(float(sec))
+                return self.ok()
+
+        # FALSCH IMPLEMENTIERT
         @restore_property('mode')
         def cmd_sub(self, macro, *args):
                 """
@@ -874,6 +1035,7 @@ class controlProtocol(LineReceiver):
                 The macro can contain replacement sequences:
                 - {N} is replaced by arg N
                 - {mx} {my} {mb} last mouse x y button
+                - {tick} global tick counter
                 - more replacements might show up in future
                 - see also: set
                 """
@@ -913,6 +1075,7 @@ class controlProtocol(LineReceiver):
                 self.diag(macro=macro, err="EOF reached, no 'exit'")
                 return self.fail()
 
+        # FALSCH IMPLEMENTIERT
         def cmd_run(self, macro, *args):
                 """
                 run MACRO args..: same as "sub MACRO", but followed by "exit"
@@ -1000,7 +1163,17 @@ class controlProtocol(LineReceiver):
                         x,y	= self.templatemouse(x, y, click)
 
                 self.rfb.pointer(x,y,click)
-                return self.rfb.event_drain(self, False)
+                return self.event_drain(False)
+
+        def event_drain(self, refresh):
+                self.pause()
+                self.rfb.event_add(self.event_drained, refresh)
+                return True
+
+        def event_drained(self, refresh):
+                self.rfb.drained(refresh)				# XXX TODO XXX WTF HACK WTF!
+                self.resume()
+                return True
 
         def templatemouse(self, x, n, click):
                 tpl	= self.rfb.load_template(x.split('.',1)[0])
@@ -1065,7 +1238,7 @@ class controlProtocol(LineReceiver):
                 """
                 for k in " ".join(args):
                         self.rfb.key(ord(k))
-                return self.rfb.event_drain(self, True)
+                return self.event_drain(True)
 
         def cmd_code(self,*args):
                 """
@@ -1076,7 +1249,7 @@ class controlProtocol(LineReceiver):
                         if v == False:
                                 v	= int(k, base=0)
                         self.rfb.key(v)
-                return self.rfb.event_drain(self, True)
+                return self.event_drain(True)
 
         def cmd_exit(self):
                 """
@@ -1106,7 +1279,7 @@ class controlProtocol(LineReceiver):
 
                 Usually followed by: next
                 """
-                self.rfb.flush()
+                self.rfb.force_flush()
                 return self.ok()
 
         def cmd_check(self,*templates):
@@ -1277,7 +1450,7 @@ class controlProtocol(LineReceiver):
                 for i in img:
                         im	= cacheimage(STATEDIR+i+IMGEXT)
                         if not out:
-                                out	= Image.new('RGB',im.size)
+                                out	= PIL.Image.new('RGB',im.size)
 
                         for r in reg:
                                 self.diag(img=i, r=r, xy=v.xy, dir=v.dir, ruler=v.ruler, had=v.had)
@@ -1304,9 +1477,8 @@ class controlProtocol(LineReceiver):
                 return self.ok('written '+name)
 
 
-from twisted.internet import reactor
-class createControl(twisted.internet.protocol.Factory):
-        protocol = controlProtocol
+class createControl(twisted.internet.protocol.Factory):					# TWISTED
+        protocol = controlProtocol							# TWISTED black magic, DO NOT REMOVE
 
         def __init__(self, sockname, rfb):
                 self.rfb = rfb
@@ -1314,12 +1486,12 @@ class createControl(twisted.internet.protocol.Factory):
                         os.unlink(sockname)
                 except:
                         pass
-                reactor.listenUNIX(sockname,self)
+                twisted.internet.reactor.listenUNIX(sockname,self)			# TWISTED
 
 if __name__=='__main__':
         rfb	= rfbImg("RFB image writer")
         if rfb.loop:
-                createControl(rfb._preset("RFBIMGSOCK", '.sock'), rfb)
+                createControl(rfb._preset("RFBIMGSOCK", '.sock'), rfb)			# TWISTED
 
         rfb.run()
 
