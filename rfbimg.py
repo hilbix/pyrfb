@@ -200,6 +200,7 @@ class rfbImg(easyrfb.client):
         if self.forcing!=1:
                 self.forcing	= 2
         if fast:
+		self.dirty	= True
                 self.count	+= self.width*self.height	# HACK to refresh on next timer
 
     # Called when the image must be written to disk
@@ -210,7 +211,7 @@ class rfbImg(easyrfb.client):
 
         This should not be called directly,
         because it might flush() unneccessarily.
-        Use .flush_soon() instead
+        Use .flush() instead
         """
 
         self.sleep = self.SLEEP_TIME
@@ -1171,7 +1172,7 @@ class controlProtocol(twisted.protocols.basic.LineReceiver):				# TWISTED
                 return True
 
         def event_drained(self, refresh):
-                self.rfb.drained(refresh)				# XXX TODO XXX WTF HACK WTF!
+                self.rfb.flush(refresh)				# XXX TODO XXX WTF HACK WTF!
                 self.resume()
                 return True
 
