@@ -91,7 +91,7 @@ def cacheimage(path, mode='RGB'):
         mtime	= os.stat(path).st_mtime
         try:
                 if cachedimages[path][0]==mtime:
-                        return cachedimages[path][1] if cachedimage[path][2]==mode else cachedimages[path][1].convert(mode)
+                        return cachedimages[path][1] if cachedimages[path][2]==mode else cachedimages[path][1].convert(mode)
         except KeyError:
                 pass
         cachedimages[path] = (mtime,PIL.Image.open(path).convert(mode),mode)
@@ -1476,6 +1476,28 @@ class controlProtocol(twisted.protocols.basic.LineReceiver):				# TWISTED
 
                 out.save(STATEDIR+name+IMGEXT)
                 return self.ok('written '+name)
+
+        def cmd_collage(self, name, *img):
+                """
+                collage template images..:
+
+                Create a collage from the given state images
+                and save it as the state image of the first parameter.
+
+                The template used is 'collage' followed by name up to the first underscore.
+                The template used has 'collage' plush name up to the first dot.
+
+                Each template is taken from the next picture
+                and placed at the same location on the template.
+
+                The difference parameter is RRGGBBTT
+                RRGGBB are RGB values (color) and TT is transparency.
+                00 is min and 99 is max
+                """
+                t	= self.template('collage', name)
+                r	= t['r']
+                return self.fail()
+                return self.ok()
 
 
 class createControl(twisted.internet.protocol.Factory):					# TWISTED
