@@ -200,7 +200,7 @@ class rfbImg(easyrfb.client):
         if self.forcing!=1:
                 self.forcing	= 2
         if fast:
-		self.dirty	= True
+                self.dirty	= True
                 self.count	+= self.width*self.height	# HACK to refresh on next timer
 
     # Called when the image must be written to disk
@@ -773,6 +773,7 @@ class controlProtocol(twisted.protocols.basic.LineReceiver):				# TWISTED
 
         # Called by LineReceiver
         def lineReceived(self, line):							# TWISTED
+                self.log("lR1")
                 self.rfb	= self.factory.rfb
 
                 if self.prompt and line.strip()=='':
@@ -781,16 +782,26 @@ class controlProtocol(twisted.protocols.basic.LineReceiver):				# TWISTED
                 else:
                         st	= self.processLine(line, self.prompt)
                         if st:
+                                self.log("lR1 ok")
                                 self.out(self.success, st, line)
                         else:
+                                self.log("lR1 fail")
                                 self.fail(self.failure, st, line)
 
+                self.log("lR1 mid")
                 if self.bye:
+                        self.log("bye")
                         self.stopProducing()
                         #self.transport.loseConnection()
                 elif self.prompt:
                         # TODO XXX TODO print some stats here
+                        self.log("lR1 A")
                         self.transport.write(mass_replace(self.prompt, self.repl))
+                        self.log("lR1 B")
+                else:
+                        self.log("lR1 end")
+#                self.transport.resumeProducing()
+
 
         def autoset(self):
                 r	= self.repl
@@ -1167,6 +1178,7 @@ class controlProtocol(twisted.protocols.basic.LineReceiver):				# TWISTED
                 return self.event_drain(False)
 
         def event_drain(self, refresh):
+                self.log("drain",refresh)
                 self.pause()
                 self.rfb.event_add(self.event_drained, refresh)
                 return True
@@ -1337,13 +1349,16 @@ class controlProtocol(twisted.protocols.basic.LineReceiver):				# TWISTED
                 self.resume()
 
         def resume(self):
+                self.log('resume')
                 try:
                         self.transport.resumeProducing()
                 except:
                         # may have gone away in the meantime
                         self.log("gone away")
+                        self.bye	= True
 
         def pause(self):
+                self.log('pause')
                 self.transport.pauseProducing()
 
         def cmd_ping(self):
