@@ -11,6 +11,9 @@ import sys
 import os
 import socket
 
+OKPATTERN="---------------------------------------[[[OK]]]----------------------------------------"
+KOPATTERN="---------------------------------------[[[KO]]]----------------------------------------"
+
 def unixsocket(name):
         sock = socket.socket(socket.AF_UNIX)
         sock.connect(name)
@@ -25,9 +28,9 @@ def get(err):
                                 print('EOF')
                                 sys.exit(err)
                         return
-                if s=="ko\n":
+                if s==KOPATTERN+'\n':
                         sys.exit(err)
-                if s=="ok\n":
+                if s==OKPATTERN+'\n':
                         return
                 sys.stdout.write(s)
 
@@ -39,6 +42,8 @@ def send(s):
 
 if __name__=='__main__':
         sock = unixsocket('sub/'+sys.argv[1]+'/sock').makefile(mode='rw')
+        send("success "+OKPATTERN)
+        send("failure "+KOPATTERN)
         if len(sys.argv)==2:
                 while True:
                         arg	= sys.stdin.readline()	# interactively/unbuffered line by line
