@@ -41,7 +41,7 @@ Prerequisites:
   `sudo ln --relative -s web /var/www/html/vnc`
 
 - Serve PHP files from the `php/` directory.  
-  If your web root is PHP enables you can do  
+  If your web root is PHP enabled, you can do  
   `ln --relative -s php/* web`
 
 - Be sure to restrict access to the web directory, as else anybody can send commands.
@@ -54,7 +54,7 @@ Prerequisites:
 
 	RFBIMGLOOP=1 RFBIMGVIZ=1 RFBIMGQUAL=18 EASYRFBPORT=5900 nice -99 ./rfbimg.py
 
-Note that this must run permanently.  See `autostart/` for details.
+Note that this must run permanently.  [See `autostart/` for details](autostart/.readme.md).
 
 
 ## License
