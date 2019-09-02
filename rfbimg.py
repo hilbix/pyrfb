@@ -736,6 +736,11 @@ def mass_replace(o, d):
 
         raise RuntimeError('instable expansion, too many recursions: '+repr(o))
 
+def WRAP(fn, *args, **kw):
+        def x():
+                return fn(*args, **kw)
+        return x
+
 def restore_property(prop):
         def decorate(fn):
                 @functools.wraps(fn)
@@ -770,6 +775,7 @@ class controlProtocol(twisted.protocols.basic.LineReceiver):				# TWISTED
                 self.quiet	= False
                 self.verbose	= False
                 self.mode	= self.MODE_SPC
+                self.pausing	= []
 
         # Called by LineReceiver
         def lineReceived(self, line):							# TWISTED
@@ -1179,13 +1185,11 @@ class controlProtocol(twisted.protocols.basic.LineReceiver):				# TWISTED
 
         def event_drain(self, refresh):
                 self.log("drain",refresh)
-                self.pause()
-                self.rfb.event_add(self.event_drained, refresh)
-                return True
-
-        def event_drained(self, refresh):
-                self.rfb.flush(refresh)				# XXX TODO XXX WTF HACK WTF!
-                self.resume()
+                def drained():
+                        self.rfb.flush(refresh)		# XXX TODO XXX WTF HACK WTF!
+                        self.resume()
+                self.pause(drained)
+                self.rfb.event_add(self.resume)
                 return True
 
         def templatemouse(self, x, n, click):
@@ -1349,17 +1353,24 @@ class controlProtocol(twisted.protocols.basic.LineReceiver):				# TWISTED
                 self.resume()
 
         def resume(self):
-                self.log('resume')
+                self.log('resume', self.pausing)
+                if self.pausing:
+                        return (self.pausing.pop())()
                 try:
                         self.transport.resumeProducing()
                 except:
                         # may have gone away in the meantime
                         self.log("gone away")
                         self.bye	= True
+                        return False
+                return True
 
-        def pause(self):
+        def pause(self, fn=None):
                 self.log('pause')
+                if fn:
+                        self.pausing.append(fn)
                 self.transport.pauseProducing()
+                return self
 
         def cmd_ping(self):
                 """
