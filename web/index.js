@@ -165,8 +165,10 @@ var conf = {}
 
 conf.n		= parseInt(window.location.search.substr(1));
 conf.quick	= 100;		// count
+conf.quickmode	= 10;		// initial quick
 conf.poll	= 200;		// ms
 conf.maxwait	= 1000000;	// ms
+conf.holdpolls	= 3;		// nr of images when hold mode
 conf.sleep	= 6;
 conf.targ	= ''+conf.n+'';
 conf.dir	= conf.targ+'/';
@@ -312,7 +314,7 @@ var runs =
 
     return BUG('bug: undefined functionality: '+str);
   }
-, run_quick:	function () { poller.quick(poller.state.quick ? 0 : conf.quick) }
+, run_quick:	function () { poller.quick(poller.state.quick>0 ? 0 : poller.state.quick<0 ? conf.quick : -1) }
 , run_learn:	function () { req.send('learn', 'l'); return false }
 , run_reload:	reload
 , run_msel:	function ()
@@ -347,7 +349,7 @@ var poller =
   {
     this.name	= 'test.jpg';
     this.cnt	= { run:0, check:0, imgs:0 };
-    this.state	= { nomod:0, noimg:0 };
+    this.state	= { nomod:0, noimg:0, holdpolls:conf.holdpolls };
     this.set	= {};
     this.speed(ms);
     this.reset();
@@ -370,6 +372,8 @@ var poller =
     this.state.wait	= 0;
     this.state.backoff	= 0;
     emit.emit('wait', this.state.wait, this.state.backoff);
+    if (!this.state.ticking)
+      this.tick();
     return this;
   }
 , start:	function ()
@@ -394,11 +398,15 @@ var poller =
 , tick:		function ()
   {
     // The timer
+    this.state.ticking	= false;
     if (this.state.stopped)
       {
         this.state.started	= false;
         return;
       }
+    if (this.state.quick<0 && this.state.backoff>this.state.holdpolls)
+      return;
+    this.state.ticking	= true;
     this.cnt.run++;
     this.poll();
     this.state.started	= window.setTimeout(() => { this.tick() }, this.set.ms);
@@ -410,8 +418,10 @@ var poller =
   }
 , quick:	function (nr)
   {
-    this.state.quick	= nr>0 ? (this.state.wait=0, nr) : 0;
+    this.state.quick	= nr<0 ? -1 : nr>0 ? (this.state.wait=0, nr) : 0;
     emit.emit('quick', this.state.quick);
+    if (!this.state.ticking)
+      this.tick();
   }
 , poll:	function ()
   {
@@ -441,7 +451,7 @@ var poller =
         // not modified
         // if we are in quick mode, do the next poll immediately
         // else at the next backoff interval.
-        if (this.state.quick)
+        if (this.state.quick>0)
           {
             this.state.wait	= 0;
             // zu unruhig: emit.emit('wait', this.state.wait);
@@ -466,7 +476,8 @@ var poller =
     IMG(subdir(t)).then(i =>
       {
         show.load(i);
-        this.quick(this.state.quick-1);
+        if (this.state.quick > 0)
+          this.quick(this.state.quick-1);
         $$$('refcnt', this.cnt.imgs+'x');
       })
 
@@ -615,6 +626,11 @@ var macro =
 // Initialization
 //
 
+function isSlowMobile()
+{
+  return navigator && navigator.connection && navigator.connection.effectiveType && navigator.connection.effectiveType<'4g';
+}
+
 function init()
 {
   out('init failed');
@@ -632,7 +648,7 @@ function init()
 
   req.init();
   runs.init();
-  poller.init(conf.poll).quick(conf.quick);
+  poller.init(conf.poll).quick(isSlowMobile() ? -1 : conf.quickmode);
 
   // improve hoverness
   for (var e of Doms('[title]'))
