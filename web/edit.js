@@ -302,9 +302,9 @@ function stamp()
 {
 return new Date().getTime();
 }
-function exe(r,cb)
+function files(r,cb)
 {
-ajax.get(config.exec+"?decache="+stamp()+"&r="+r,function(d,x,s){if (s==200) cb(d); else err('failed '+r+' ('+s+'): '+d)});
+ajax.get(config.exec+"?decache="+stamp()+"&r=dir&d="+r,function(d,x,s){if (s==200) cb(d); else err('failed '+r+' ('+s+'): '+d)});
 }
 function clear(e,c)
 {
@@ -344,7 +344,7 @@ if (!edit)
 var n=$('filename').value;
 edit.img = currentsel();
 edit.name = $('filename').value;
-ajax.post(config.exec+"?r=save&f="+escape(edit.name),saved(edit),JSON.encode(edit));
+ajax.post(config.exec+"?d=ed&r=save&f="+escape(edit.name),saved(edit),JSON.encode(edit));
 }
 
 var showel;
@@ -463,11 +463,11 @@ done("images loaded");
 }
 function refreshdir()
 {
-exe("dir",dir);
+files("ed",dir);
 }
 function refreshimgs()
 {
-exe("learn",learns);
+files("learn",learns);
 }
 function refreshall()
 {
@@ -582,7 +582,7 @@ function killer()
 
   start("killing "+e.name);
 
-  ajax.post(config.exec+"?r=kick&f="+escape(edit.name), function (t,x,s)
+  ajax.post(config.exec+"?d=ed&r=kick&f="+escape(edit.name), function (t,x,s)
     {
       if (s==200 && t!='')
         {
