@@ -27,6 +27,63 @@ function BUTTON(inner, click)
   return b;
 }
 
+function quote(s)
+{
+  return String(s)
+    .replace(/\\/g, '\\\\')
+    .replace(/\f/g, '\\f')
+    .replace(/\n/g, '\\n')
+    .replace(/\r/g, '\\r')
+    .replace(/\t/g, '\\t')
+    .replace(/\v/g, '\\v')
+    .replace(/\'/g, '\\\'')
+    .replace(/[\x00-\x1f]/g,
+             function (c) { return '\\x'+('0'+c.charCodeAt().toString(16)).slice(-2) }
+            );
+}
+
+function dumpstring(s)
+{
+  var t;
+
+  try { t=JSON.stringify(s); } catch (e) {}
+  s = String(s);
+  if (s==t || t===undefined)
+    return s;
+  var g = quote(s);
+  var q = '"'+g+'"';
+  if (q==t)
+    return g==s ? s : t;
+  return g==t ? s : s+t;
+}
+
+var DEBUG =
+{ el:		'debug'
+, hist:		[]
+, timing:	30000
+, timer:	0
+, log:		function (...args)
+  {
+    this.hist.push(args.map(x => dumpstring(x)).join(' '));
+    this.show();
+  }
+, show:		function ()
+  {
+    $(this.el).innerText = this.hist.join('\n');
+    if (this.hist.length>0)
+      {
+        if (this.timer)
+          clearTimeout(this.timer);
+        this.timer = setTimeout(() => { this.timer=0; this.hist.shift(); this.show() }, this.timing/this.hist.length);
+      }
+  }
+};
+
+function xLOG(...args)
+{
+  DEBUG.log(...args);
+  LOG(...args);
+}
 
 // https://stackoverflow.com/a/17772086/490291
 ['Arguments', 'Function', 'String', 'Number', 'Date', 'RegExp'].forEach(
@@ -38,7 +95,6 @@ function later(fn, ...a) { setTimeout(() => fn(...a)) }
 function strCut(s, at) { var n = s.length-at.length; return n>=0 && s.substr(n)==at ? s.substring(0,n) : s }	// remove last
 function strCutAt(s, at) { var n = s.indexOf(at); return n>=0 ? s.substring(0,n) : s }				// remove upto first
 function strTail(s, at) { var n = s.lastIndexOf(at); return n>=0 ? s.substring(n+1) : s }			// remove until last
-
 
 function BUG(x) { var f=function () { alert(x); return false; }; f(); return f }
 
@@ -305,7 +361,7 @@ var runs =
   {
     var w = (''+str).split(' ');
     var i = 'run_'+w.shift();
-    if (i in this)	return CLOSURE_(this[i], w);
+    if (i in this)	return CLOSURE_(this[i], [w]);
 
     i	= parseInt(str);
     if (i>0)	return () => { req.code(i); return false };
@@ -314,27 +370,37 @@ var runs =
 
     return BUG('bug: undefined functionality: '+str);
   }
-, run_quick:	function () { poller.quick(poller.state.quick>0 ? 0 : poller.state.quick<0 ? conf.quick : -1) }
-, run_learn:	function () { req.send('learn', 'l'); return false }
-, run_reload:	reload
-, run_msel:	function ()
+, run_sel:	function (args, ev)
   {
-    var m = Doms('[data-msel]');
+    // This has to be rewritten into a Dom Selector class
+    // such that the Doms() only needed to calculated once
+    // and there is a global status,
+    // such that the button can become independent from the current selection
+    LOG('sel', args, ev);
+    var m = Doms('[data-'+args[0]+']');
     var h = 0, s = 0;
     for (var i=m.length; --i>=0; )
       if (m[i].contains(this))
-        {
+        {	// currently the button must be part of the selected group
           h = i;
           s = i+1;
           break;
         }
+    if (s>=m.length) s=0;
     m[h].classList.add('hide');
-    m[s<m.length ? s : 0].classList.remove('hide');
+    m[s].classList.remove('hide');
+    var a = m[s].getAttribute('data-sel');
+    emit.emit('sel', args[0], s, h, ev, a);
+    emit.emit('sel-'+args[0], s, h, ev, a);
   }
-, run_cmd:	function (cmd)
-  {
-    req.get(['ping.php', cmd], '');
-  }
+, run_reload:	reload
+, run_cmd:	function (args) { req.get(['ping.php', args[0]], ''); }
+, run_quick:	function () { poller.quick(poller.state.quick>0 ? 0 : poller.state.quick<0 ? conf.quick : -1) }
+, run_learn:	function () { req.send('learn', 'l'); return false }
+, run_mnew:	function (...a) { macro.add(...a) }
+, run_msave:	function (...a) { macro.save(...a) }
+, run_mdel:	function (...a) { macro.del(...a) }
+, run_mrun:	function (...a) { macro.run(...a) }
 };
 
 
@@ -599,26 +665,61 @@ var show =
 
 var macro =
 { id:		'mac'
-, query:	'r=oper'
+, query:	'r=dir&d=oper'
 , init:		function ()
   {
+    this.sel	= [];
+    this.mode	= null;
+    emit.register('sel-m', (x,y,e,s) => this.setup(s));
+    this.setup('run');	// assumed, perhaps later we can fix this
+  }
+, reload:	function ()
+  {
+    this.macros	= {};
     var m = clear(this.id);
     req.get('exec.php', this.query, t =>
       {
         var a = t.split('\n');
-        var r = /^([A-Z0-9].*)\.macro/;
+        var r = /^([A-Za-z0-9_].*)\.macro$/;
         var k;
         a.sort();
         for (var u of a)
           if (k = r.exec(u))
-            m.appendChild(BUTTON(k[1], SELFCALLwithTHIS(this, 'macroclick')))
+            {
+              var b	= BUTTON(k[1], SELFCALLwithTHIS(this, 'macroclick'));
+              this.macros[k[1]] = b;
+              m.appendChild(b);
+            }
       }
     );
   }
-, macroclick: function (el, e)
+, setup:	function (what)
   {
-    ;
+    var s = 'setup_'+what;
+    if (!(s in this))
+      return BUG('unknown macro function '+what);
+    if (this.mode)
+      {
+        this.sel[this.mode] = this.selected();
+      }
+    this.mode	= what;
+    return this[s].call(this);
   }
+, setup_run:	function ()	{ this.sel=1 }
+, setup_ed:	function ()	{ this.sel=1 }
+, setup_new:	function ()	{ this.sel=0 }
+, setup_del:	function ()	{ this.sel=-1 }
+, selected:	function ()
+  {
+  }
+, macroclick: function (button, mouse_ev)
+  {
+    return this['click_'+this.mode].call(this, button.id);
+  }
+, click_run:	function (...args) { xLOG('mcrun', ...args); }
+, click_ed:	function (...args) { xLOG('mced', ...args); }
+, click_new:	function (...args) { xLOG('mcnew', ...args); }
+, click_del:	function (...args) { xLOG('mcdel', ...args); }
 }
 
 
@@ -649,6 +750,7 @@ function init()
   req.init();
   runs.init();
   poller.init(conf.poll).quick(isSlowMobile() ? -1 : conf.quickmode);
+  macro.init();
 
   // improve hoverness
   for (var e of Doms('[title]'))
@@ -693,7 +795,7 @@ var Assets =
       IMG(i => { i.nr = ++ctx.nr; i.main = ctx.f+'/'+u; ctx.loading(i); return subdir(i.main) })
       .then(i =>
         {
-          LOG(ctx.name, i.nr, i.src);
+          LOG('asset', ctx.name, i.nr, i.src);
           ctx.loaded(i);
           if (!ctx.current)
             return;
@@ -715,7 +817,7 @@ var Assets =
 
       u = strCut(u, '.tpl');
 
-      LOG(ctx.name, u);
+      LOG('template', ctx.name, u);
 
       var b = BUTTON(u, e => upd());
       b.setAttribute('class', 'no');
@@ -774,14 +876,14 @@ class CTX
     }
   }
 
-function reload(e)
+function reload(ev)
 {
-  macro.init();
+  macro.reload();
 
-  var assets = { l:'learn', s:'stat', t:'dir' };
+  var assets = { l:'learn', s:'stat', t:'ed' };
 
   var f = $$('reload');
-  if (e)
+  if (ev)
     {
       var t = f;
       f = null;
@@ -806,7 +908,7 @@ function reload(e)
   var a = assets[f];
   var ctx = new CTX(clear('cit'), a, {f:f});
 
-  req.get('exec.php', 'r='+a, t =>
+  req.get('exec.php', 'r=dir&d='+a, t =>
     {
       var s = t.split('\n');
       s.sort();
