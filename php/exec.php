@@ -14,32 +14,35 @@ $script = $_SERVER['SCRIPT_NAME'];	// this must be relative to document root
 $base = "$root/".dirname($script)."/$targ";
 if (!is_dir($base)) die("wrong $targ");
 
-$dirs = [ 'dir'=>'e', 'learn'=>'l', 'stat'=>'s', 'oper'=>'o' ];
+$dirs = [ 'ed'=>'e',   'learn'=>'l',   'stat'=>'s',   'oper'=>'o' ];
+$exts = [ 'ed'=>'tpl', 'learn'=>'png', 'stat'=>'png', 'oper'=>'macro' ];
 
 function getname($flag)
 {
-  GLOBAL $base;
+  GLOBAL $base, $ext;
 
   $name = $_GET['f'];
   $pi = pathinfo($name);
   if ($name != $pi['filename'] || $name=='')
     die("wrong name (parameter $flag)");
-  return "$base/e/$name.tpl";
+  return "$base/$name.$ext";
 }
 
 function renamer($name)
 {
- if (!file_exists($name))
-   return 0;
- for ($i=0;; $i++)
-   {
-     $to = "$name.tpl.~$i~";
-     if (!file_exists($to))
-       {
-         rename($name,$to);
-         return 1;
-       }
-   }
+  GLOBAL $ext;
+
+  if (!file_exists($name))
+    return 0;
+  for ($i=0;; $i++)
+    {
+      $to = "$name.~$i~";
+      if (!file_exists($to))
+        {
+          rename($name,$to);
+          return 1;
+        }
+    }
 }
 
 function fail($reason)
@@ -47,10 +50,17 @@ function fail($reason)
   header("HTTP/1.0 500 $reason");
 }
 
+$d = $_GET['d'];
+if (!isset($dirs[$d]))
+  die('wrong param d');
+
+$base	= "$base/".$dirs[$d];
+$ext	= $exts[$d];
+
 $r = $_GET['r'];
-if (isset($dirs[$r]))
+if ($r=='dir')
   {
-    $d = dir("$base/".$dirs[$r]);
+    $d = dir($base);
     while (false !== ($e=$d->read()))
       {
         if ($e=='.' || $e=='..') continue;
