@@ -4,6 +4,10 @@ span	{ vertical-align:top }
 textarea { width:100% }
 button	{ min-width:2em }
 
+.sel	{ background:#ccffcc }
+
+.clear	{ clear:both }
+.ovh	{ overflow:auto; }
 .fl	{ position:relative; vertical-align:top; float:left }
 .w100	{ width:100% }
 .wauto	{ width:auto }
