@@ -21,7 +21,7 @@ function getname($flag)
 {
   GLOBAL $base, $ext;
 
-  $name = $_GET['f'];
+  $name = $_GET[$flag];
   $pi = pathinfo($name);
   if ($name != $pi['filename'] || $name=='')
     die("wrong name (parameter $flag)");
@@ -70,12 +70,8 @@ if ($r=='dir')
   }
 elseif ($r=='kick')
   {
-    $name = $_GET['f'];
-    $pi = pathinfo($name);
-    if ($name!=$pi['filename'] || $name=='')
-      die('wrong name (parameter f)');
     $name	= getname('f');
-    if (renamer(getname('f')))
+    if (renamer($name))
       echo 'kicked';
     else
       fail('unknown');
