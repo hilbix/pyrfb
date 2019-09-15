@@ -209,6 +209,20 @@ function EVT(e, ons, fn)
     $(e).addEventListener(l, CLOSURE(fn, l), {passive:false, capture:false});
 }
 
+function ArrayToggle(arr, val)
+{
+  xLOG("toggle", val, arr);
+  for (var i=arr.length; --i>=0; )
+    if (arr[i]==val)
+      {
+        xLOG("del");
+        arr.splice(i,1);
+        return arr
+      }
+  xLOG("add");
+  arr.push(val);
+  return arr;
+}
 
 //
 // Config
@@ -300,7 +314,8 @@ var req =
 , key:		function (k)	{ return this.req(         'k='+escape(k)) }
 , req:		function (s)	{ return this.get(this.url, s) }
 , idle:		function (s)	{ this.idle_ = s; return this.next() }
-, get:		function (u,r,cb,...a) { this.reqs.push({u:mkArray(u), r:r, cb:cb, a:a}); return this.next() }
+, get:		function (u,r,cb,...a)   { this.reqs.push({u:mkArray(u), r:r, cb:cb, a:a}); return this.next() }
+, post:		function (u,r,p,cb,...a) { this.reqs.push({u:mkArray(u), r:r, cb:cb, a:a, post:p}); return this.next() }
 , next:		function ()
   {
     var r;
@@ -330,8 +345,14 @@ var req =
     emit.emit('act', r);
     // ajax callback is: text, XMLHttpRequest-object, status, last-modified-header
     var u	= Array.from(r.u);
-    u.splice(1, 0, conf.targ);
-    ajax.get(u.join('/')+'?nocache='+stamp()+(r.r?'&'+r.r:''), (t,x,s) => this.done(r, t, s));
+    if (u[0]=='')
+      u[0]	= conf.targ;
+    else
+      u.splice(1, 0, conf.targ);
+    if (r.post)
+      ajax.push(u.join('/')+'?nocache='+stamp()+(r.r?'&'+r.r:''), (t,x,s) => this.done(r, t, s), r.post);
+    else
+      ajax.get(u.join('/')+'?nocache='+stamp()+(r.r?'&'+r.r:''), (t,x,s) => this.done(r, t, s));
     return this;
   }
 , done:		function (r, t, s)
@@ -339,11 +360,56 @@ var req =
     this.active	= false;
     emit.emit('done', r, t, s);
     if (r.cb)
-      r.cb(t, ...r.a);
+      r.cb(s==200 ? t : null, ...r.a, s, t);
     return this.next();
   }
+, P:		function (u, r, post) { return new Promise((ok,ko) =>
+  {
+    var cb=(t,s,o) => { if (s==200) ok(o); else ko(o) };
+    if (post)
+      this.post(u,r,post,cb);
+    else
+      this.get (u,r,     cb);
+  })}
 };
 
+//
+// Dom helper
+//
+var Dom =
+{ dummy: 1
+, sel:	function (tag, sel, ...args)
+  {
+//    xLOG('dom.sel1', tag, sel, args);
+
+    var m = Doms('[data-'+tag+']');
+    var current = 0, togo=-1;
+
+    for (var i=m.length; --i>=0; )
+      {
+        if (!m[i].classList.contains('hide'))
+          current	= i;
+        if (sel && m[i].getAttribute('data-sel') == sel)
+          togo		= i;
+        else
+          m[i].classList.add('hide');
+      }
+//    xLOG('dom.sel2', current, togo);
+    if (sel==+1 || sel==-1)
+      togo	= current+sel;
+    else if (togo==-1)
+      togo	= current+1;
+    if (togo<0)
+      togo	= m.length-1;
+    if (togo>=m.length)
+      togo	= 0;
+    m[togo].classList.remove('hide');
+    var sel = m[togo].getAttribute('data-sel');
+//    xLOG('dom.sel3', tag, current, togo, sel, args);
+    emit.emit('sel', tag, current, togo, sel, ...args);
+    emit.emit('sel-'+tag, current, togo, sel, ...args);
+  }
+};
 
 //
 // DOM click handling
@@ -370,37 +436,15 @@ var runs =
 
     return BUG('bug: undefined functionality: '+str);
   }
-, run_sel:	function (args, ev)
-  {
-    // This has to be rewritten into a Dom Selector class
-    // such that the Doms() only needed to calculated once
-    // and there is a global status,
-    // such that the button can become independent from the current selection
-    LOG('sel', args, ev);
-    var m = Doms('[data-'+args[0]+']');
-    var h = 0, s = 0;
-    for (var i=m.length; --i>=0; )
-      if (m[i].contains(this))
-        {	// currently the button must be part of the selected group
-          h = i;
-          s = i+1;
-          break;
-        }
-    if (s>=m.length) s=0;
-    m[h].classList.add('hide');
-    m[s].classList.remove('hide');
-    var a = m[s].getAttribute('data-sel');
-    emit.emit('sel', args[0], s, h, ev, a);
-    emit.emit('sel-'+args[0], s, h, ev, a);
-  }
+, run_sel:	function (args, ev) { Dom.sel(args[0], args[1], ev); }
 , run_reload:	reload
 , run_cmd:	function (args) { req.get(['ping.php', args[0]], ''); }
 , run_quick:	function () { poller.quick(poller.state.quick>0 ? 0 : poller.state.quick<0 ? conf.quick : -1) }
 , run_learn:	function () { req.send('learn', 'l'); return false }
-, run_mnew:	function (...a) { macro.add(...a) }
-, run_msave:	function (...a) { macro.save(...a) }
-, run_mdel:	function (...a) { macro.del(...a) }
-, run_mrun:	function (...a) { macro.run(...a) }
+, run_mnew:	function (...a) { macro.mnew(...a) }
+, run_msave:	function (...a) { macro.msave(...a) }
+, run_mdel:	function (...a) { macro.mdel(...a) }
+, run_mrun:	function (...a) { macro.mrun(...a) }
 };
 
 
@@ -658,6 +702,24 @@ var show =
   }
 };
 
+function insertTab(ev)
+{
+//  xLOG(ev.code);
+  if (ev.code != 'Tab' || ev.shiftKey || ev.ctrlKey || ev.altKey)
+    return true;
+
+  var p	= this.scrollTop;
+  var s	= this.selectionStart;
+  var e	= this.selectionEnd;
+
+  this.value = this.value.substr(0,s)+"\t"+this.value.substr(e);
+  this.setSelectionRange(s+1,s+1);
+  this.focus();
+
+  this.scrolTop	= p;
+  ev.preventDefault();
+  return false;
+}
 
 //
 // Macros
@@ -665,61 +727,155 @@ var show =
 
 var macro =
 { id:		'mac'
+, selclass:	'sel'
+, match:	/^([A-Za-z0-9_].*)\.macro(.*)$/
+, ext:		'.macro'
 , query:	'r=dir&d=oper'
 , init:		function ()
   {
-    this.sel	= [];
+    $('mdef').onkeydown	= insertTab;
+    this.was	= '';
+    this.wasurl	= '';
+    this.sel	= {};
     this.mode	= null;
-    emit.register('sel-m', (x,y,e,s) => this.setup(s));
+    emit.register('sel-m', (x,y,s) => this.setup(s));
     this.setup('run');	// assumed, perhaps later we can fix this
   }
 , reload:	function ()
   {
+    xLOG('mreload');
     this.macros	= {};
     var m = clear(this.id);
-    req.get('exec.php', this.query, t =>
+    return req.P('exec.php', this.query
+    ).then(t =>
       {
         var a = t.split('\n');
-        var r = /^([A-Za-z0-9_].*)\.macro$/;
+        xLOG('mreloaded', a.length);
         var k;
         a.sort();
         for (var u of a)
-          if (k = r.exec(u))
+          if (validfile(u) && (k = this.match.exec(u)))
             {
-              var b	= BUTTON(k[1], SELFCALLwithTHIS(this, 'macroclick'));
-              this.macros[k[1]] = b;
+              var n	= k[1]+k[2];
+              var b	= BUTTON(n, SELFCALLwithTHIS(this, 'macroclick'));
+              b.realurl = u;
+              this.selbutton(b);
+              this.macros[n] = b;
               m.appendChild(b);
             }
+        return t;
       }
-    );
+    )
   }
 , setup:	function (what)
   {
-    var s = 'setup_'+what;
-    if (!(s in this))
+    xLOG('mset', what);
+    if (!('click_'+what in this))
       return BUG('unknown macro function '+what);
-    if (this.mode)
-      {
-        this.sel[this.mode] = this.selected();
-      }
     this.mode	= what;
-    return this[s].call(this);
+    return this.select();
   }
-, setup_run:	function ()	{ this.sel=1 }
-, setup_ed:	function ()	{ this.sel=1 }
-, setup_new:	function ()	{ this.sel=0 }
-, setup_del:	function ()	{ this.sel=-1 }
-, selected:	function ()
+, click_run:	function (m) { this.toggle(1, m); }
+, click_ed:	function (m) { this.toggle(1, m); this.load(m) }
+, click_new:	function (m) { this.toggle(1, m); this.load(m) }
+, click_del:	function (m) { this.toggle(0, m); }
+, getsel:	function (m) { return this.mode=='new' ? 'ed' : this.mode; }
+, toggle:	function (radio, id)
   {
+    var	s, m=this.getsel(m);
+
+    if (radio || !(s=this.sel[m]))
+      s	= [id];
+    else
+      s	= ArrayToggle(s, id);
+    this.sel[m]	= s;
+    xLOG('mtoggle', id, s);
+    this.select();
   }
-, macroclick: function (button, mouse_ev)
+, select:	function ()
   {
-    return this['click_'+this.mode].call(this, button.id);
+    for (var b=$(this.id).firstChild; b; b=b.nextSibling)
+      this.selbutton(b);
   }
-, click_run:	function (...args) { xLOG('mcrun', ...args); }
-, click_ed:	function (...args) { xLOG('mced', ...args); }
-, click_new:	function (...args) { xLOG('mcnew', ...args); }
-, click_del:	function (...args) { xLOG('mcdel', ...args); }
+, selbutton:	function (b)
+  {
+    var m = this.getsel();
+    var s = this.sel[m];
+    b.classList.toggle(this.selclass, s!=void 0 && s.includes(b.realurl));
+//    xLOG('selb', b.realurl, b.classList);
+  }
+, macroclick: function (button, mouse_ev, ...args)
+  {
+    xLOG('mc', this.mode, ...args);
+    return this['click_'+this.mode].call(this, button.realurl);
+  }
+, load:		function (url)
+  {
+    xLOG('mload', url);
+    var o = $('mdef');
+    return req.P(['','o',url])
+    .then(t =>
+      {
+        if (o.value != t)
+          {
+            if (o.value != this.was && !confirm('overwrite edit?'))
+              return Promise.reject(t);
+            o.value	= t;
+          }
+        return t;
+      })
+    .then(this.saved.bind(this, url))
+  }
+, saved:	function (url, data, ...args)
+  {
+    xLOG('msaved', url, ...args);
+    if (url)
+      {
+        this.wasurl		= url;
+        $('mloaded').value	= url;
+      }
+    if (data)
+      this.was	= data;
+    return data;
+  }
+, save:		function (id)
+  {
+    var name = $(id).value.trim();
+    var	k = this.match.exec(name);
+    if (k[1]) name	= k[1];
+
+    var data = $('mdef').value;
+    xLOG('msave', id, name);
+    if (!name)
+      cause	= 'no name';
+    else if (!data.trim())
+      cause	= 'no data';
+    else if (this.was == data && name == this.wasurl)
+      cause	= 'unchanged';
+    else
+      return req.P('exec.php', 'r=save&d=oper&f='+escape(name), data)
+      .then(this.saved.bind(this, name+this.ext, data))
+    out('not saved: '+cause+'!');
+    return Promise.reject();
+  }
+, msave:	function () { this.save('mloaded'); }
+, mnew:		function () { this.save('mname').then(this.reload.bind(this)).then(t => Dom.sel('m', 'ed')) }
+, mrun:		function (...a) { xLOG('mrun', ...a); }
+, mdel:		function ()
+  {
+    xLOG('mdel:', this.sel['del']);
+    var p = [];
+    for (var i=this.sel['del'].length; --i>=0; )
+      {
+        var nam	= this.sel['del'][i];
+        var k	= this.match.exec(nam);
+        if (!k[1] || k[2]) continue;
+        var deleted = (k,n) => t => { xLOG('mdel', k, n, t); return t };
+        p[i] = req.P('exec.php', 'r=kick&d=oper&f='+escape(k[1]))
+               .then(deleted(k[1], nam));
+      }
+    return Promise.all(p).then(() => { out('deleted'), this.reload() });
+  }
 }
 
 
@@ -786,12 +942,10 @@ var Assets =
 {
   learn: (...a) => Assets.img(...a),
   stat:  (...a) => Assets.img(...a),
-  dir:   (...a) => Assets.template(...a),
+  ed:    (...a) => Assets.template(...a),
 
   img:	(ctx, u) =>
     {
-      if (u.indexOf('~')>=0) return;
-
       IMG(i => { i.nr = ++ctx.nr; i.main = ctx.f+'/'+u; ctx.loading(i); return subdir(i.main) })
       .then(i =>
         {
@@ -813,8 +967,6 @@ var Assets =
 
   template:	(ctx, u) =>
     {
-      if (u.indexOf('~')>=0) return;
-
       u = strCut(u, '.tpl');
 
       LOG('template', ctx.name, u);
@@ -864,7 +1016,7 @@ class CTX
       if (this._l++ || !this.current) return;
       this._o = DIV('load...');
       this.o.appendChild(this._o);
-      out(`loading ${this.name}`);
+      xLOG('loading', this.name);
     }
 
   loaded(ob)
@@ -872,18 +1024,28 @@ class CTX
       if (--this._l || !this.current) return;
       this.o.removeChild(this._o);
       delete this._o;
-      out(`loaded ${this.name}`);
+      xLOG('loaded', this.name);
+    }
+
+  load(dir)
+    {
+      this.loading(dir);
+      return req.P('exec.php', 'r=dir&d='+dir)
+             .then(t => { later(t => this.loaded(dir)); return t })
     }
   }
 
+var $showdel;
+
 function reload(ev)
 {
-  macro.reload();
-
   var assets = { l:'learn', s:'stat', t:'ed' };
 
+  $showdel	= $('showdel');
+  macro.reload();
+
   var f = $$('reload');
-  if (ev)
+  if (ev=='next')
     {
       var t = f;
       f = null;
@@ -908,16 +1070,22 @@ function reload(ev)
   var a = assets[f];
   var ctx = new CTX(clear('cit'), a, {f:f});
 
-  req.get('exec.php', 'r=dir&d='+a, t =>
+  ctx.load(a).then(t =>
     {
       var s = t.split('\n');
       s.sort();
       for (var u of s)
-        if (u)
+        if (validfile(u))
           Assets[a](ctx, u);
     }
   );
 
+}
+
+function validfile(u)
+{
+  if (!u) return false;
+  return u.indexOf('~')<0 ? true : $showdel.checked;
 }
 
 onready(init);
