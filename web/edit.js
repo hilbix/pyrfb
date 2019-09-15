@@ -344,7 +344,7 @@ if (!edit)
 var n=$('filename').value;
 edit.img = currentsel();
 edit.name = $('filename').value;
-ajax.post(config.exec+"?d=ed&r=save&f="+escape(edit.name),saved(edit),JSON.encode(edit));
+ajax.push(config.exec+"?d=ed&r=save&f="+escape(edit.name),saved(edit),JSON.encode(edit));
 }
 
 var showel;
