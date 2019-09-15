@@ -9,66 +9,64 @@
 
 <canvas id="show" class="fl"></canvas>
 <div class="fl gap mw190">
-<div>
- <input id="greyout" type="checkbox" title="grey screen while active"/>
- <hr/>
- mouse <input name="mb" type="checkbox" value="1" checked="checked" title="left mouse button"/><input name="mb" type="checkbox" value="2" title="middle mouse button"/><input name="mb" type="checkbox" value="4" title="right mouse button"/>
- <label for="md" title="drag mouse">d</label><input id="md" name="mb" type="checkbox" value="65536"/>
- <label for="ma" title="auto send movements">a</label><input id="ma" type="checkbox"/>
-</div>
-<div><button id="reload" runs="reload" title="reload assets">s</button><button id="qrun" runs="quick" title="disable/enable/fast polling">r</button><span id="refcnt"></span> <span id="wait"></span> <span id="backoff"></span></div>
-<div id="out">Please enable JavaScript</div>
-<div id="pos" title="mouse position"></div>
-<div>
- <input id="learn" class="w100"></input>
- <button runs="learn">Learn</button>
- <a id="lref">lrn</a> <a id="edit">ed</a>
- <button runs="cmd ping">PNG</button> <button runs="cmd stop">RST</button>
-</div><div>
- <textarea id="inp1"></textarea>
- <button runs="inp1">Send</button> <button runs="0xff0a">Enter</button>
-</div><div>
- <textarea id="inp2"></textarea>
- <button runs="inp2">Send</button> <button runs="0xff08">BS</button>
-</div><div>
- <textarea id="inp3"></textarea>
- <button runs="inp3">Send</button> <button runs="0xff0d">CR</button>
-</div><div>
- <textarea id="inp4"></textarea>
- <button runs="inp4">Send</button> <button runs="0xff1b">ESC</button>
-</div><div>
-<table border="0" cellpadding="0" cellspacing="0">
-<tr><td><button runs="49">1</button></td><td><button runs="50">2</button/></td><td><button runs="51">3</button></td><td></td><td><button runs="KF11">F11</button></tr>
-<tr><td><button runs="52">4</button></td><td><button runs="53">5</button/></td><td><button runs="54">6</button></td></tr>
-<tr><td><button runs="55">7</button></td><td><button runs="56">8</button/></td><td><button runs="57">9</button></td></tr>
-<tr><td><button runs="46">.</button></td><td><button runs="48">0</button/></td><td><button runs="44">,</button></td></tr>
-</table>
-</div><div>
-<span id="check"></span> / <span id="lms"></span>
-</div>
-<table class="w100"><tr><td colspan="2">
-<textarea id="mdef" class="w100" title="macro contents"></textarea>
-</td></tr>
-<tr data-m="0" data-sel="run"><td class="nobr"><button
-	runs="sel m" title="next mode: edit">&lt;</button><button
-	runs="mrun" title="run selected macro with entered parameters">Run</button>
-	</td><td><input id="mtorun" class="w100" disabled placeholder="select macro"></input></td></tr>
-<tr data-m="1" data-sel="ed" class="hide"><td class="nobr"><button
-	runs="sel m" title="next mode: new">^</button><button
-	runs="msave" title="save macro">Save</button>
-	</td><td><input id="mloaded" class="w100" disabled placeholder="click macro"></input></td></tr>
-<tr data-m="2" data-sel="new" class="hide"><td class="nobr"><button
-	runs="sel m" title="next mode: delete">&gt;</button><button
-	runs="mnew" title="create new macro">New</button></div>
-	</td><td><input id="mname" class="w100" placeholder="macro name" title="enter macro name"></input></td></tr>
-<tr data-m="3" data-sel="del" class="hide"><td class="nobr"><button
-	runs="sel m" title="next mode: run">v</button><button
-	runs="mdel" title="delete selected macros">Del</button>
-	</td><td><input id="mtodel" class="w100" disabled placeholder="select macros"></input></td></tr>
-</td></tr></table>
-<hr/>
-<div id="mac"></div>
-<hr/>
+ <div>
+  <input id="greyout" type="checkbox" title="grey screen while active"/>
+  <input id="showdel" type="checkbox" title="show deleted assets" runs="reload"/>
+  <hr/>
+  mouse <input name="mb" type="checkbox" value="1" checked="checked" title="left mouse button"/><input name="mb" type="checkbox" value="2" title="middle mouse button"/><input name="mb" type="checkbox" value="4" title="right mouse button"/>
+  <label for="md" title="drag mouse">d</label><input id="md" name="mb" type="checkbox" value="65536"/>
+  <label for="ma" title="auto send movements">a</label><input id="ma" type="checkbox"/>
+ </div>
+ <div><button id="reload" runs="reload next" title="reload assets">s</button><button id="qrun" runs="quick" title="disable/enable/fast polling">r</button><span id="refcnt"></span> <span id="wait"></span> <span id="backoff"></span></div>
+ <div id="out">Please enable JavaScript</div>
+ <div id="pos" title="mouse position"></div>
+ <div>
+  <input id="learn" class="w100"></input>
+  <button runs="learn">Learn</button>
+  <a id="lref">lrn</a> <a id="edit">ed</a>
+  <button runs="cmd ping">PNG</button> <button runs="cmd stop">RST</button>
+ </div><div>
+  <textarea id="inp1"></textarea>
+  <button runs="inp1">Send</button> <button runs="0xff0a">Enter</button>
+ </div><div>
+  <textarea id="inp2"></textarea>
+  <button runs="inp2">Send</button> <button runs="0xff08">BS</button>
+ </div><div>
+  <textarea id="inp3"></textarea>
+  <button runs="inp3">Send</button> <button runs="0xff0d">CR</button>
+ </div><div>
+  <textarea id="inp4"></textarea>
+  <button runs="inp4">Send</button> <button runs="0xff1b">ESC</button>
+ </div><div>
+ <table border="0" cellpadding="0" cellspacing="0">
+ <tr><td><button runs="49">1</button></td><td><button runs="50">2</button/></td><td><button runs="51">3</button></td><td></td><td><button runs="KF11">F11</button></tr>
+ <tr><td><button runs="52">4</button></td><td><button runs="53">5</button/></td><td><button runs="54">6</button></td></tr>
+ <tr><td><button runs="55">7</button></td><td><button runs="56">8</button/></td><td><button runs="57">9</button></td></tr>
+ <tr><td><button runs="46">.</button></td><td><button runs="48">0</button/></td><td><button runs="44">,</button></td></tr>
+ </table>
+ </div><div>
+ <span id="check"></span> / <span id="lms"></span>
+ </div>
+ <table class="w100">
+ <tr><td colspan="2"><textarea id="mdef" class="w100" title="macro contents"></textarea></td></tr>
+ <tr data-m="0" data-sel="run"><td class="nobr"><button
+ 	runs="sel m" title="next mode: edit">&lt;</button><button
+ 	runs="mrun" title="run selected macro with entered parameters">Run</button>
+ 	</td><td><input id="mtorun" class="w100" disabled placeholder="select macro"></input></td></tr>
+ <tr data-m="1" data-sel="ed" class="hide"><td class="nobr"><button
+ 	runs="sel m" title="next mode: new">^</button><button
+ 	runs="msave" title="save macro">Save</button>
+ 	</td><td><input id="mloaded" class="w100" disabled placeholder="click macro"></input></td></tr>
+ <tr data-m="2" data-sel="new" class="hide"><td class="nobr"><button
+ 	runs="sel m" title="next mode: delete">&gt;</button><button
+ 	runs="mnew" title="create new macro">New</button></div>
+ 	</td><td><input id="mname" class="w100" placeholder="macro name" title="enter macro name"></input></td></tr>
+ <tr data-m="3" data-sel="del" class="hide"><td class="nobr"><button
+ 	runs="sel m" title="next mode: run">v</button><button
+ 	runs="mdel" title="delete selected macros">Del</button>
+ 	</td><td><input id="mtodel" class="w100" disabled placeholder="select macros"></input></td></tr>
+ <tr><td colspan="2"><hr/><div id="mac"></div><hr/></td></tr>
+ </td></tr></table>
 </div>
 <div id="cit" class="fl gap mw310"></div>
 <div id="debug"></div>
