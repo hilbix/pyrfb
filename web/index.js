@@ -805,18 +805,18 @@ var macro =
   }
 , select:	function ()
   {
-    // Highlight selection again
-    var m = this.getsel();
-    var s = this.sel[this.getsel()];
-    for (var b=$(this.id).firstChild; b; b=b.nextSibling)
-      b.classList.toggle(this.selclass, s!=void 0 && s.includes(b.realurl));
-
     // Remove unknown macros from selection
-    var t = [];
-    for (var u in s)
-      if (u in this.macros)
-        t.push(u);
+    var m = this.getsel();
+    var t = [], s = this.sel[m];
+    if (s)
+      for (var u of s)
+        if (u in this.macros)
+          t.push(u);
     this.sel[m]	 = t;
+
+    // Highlight selection again
+    for (var b=$(this.id).firstChild; b; b=b.nextSibling)
+      b.classList.toggle(this.selclass, t && t.includes(b.realurl));
   }
 , macroclick: function (button, mouse_ev, ...args)
   {
@@ -877,6 +877,9 @@ var macro =
   {
     var u	= this.getname(this.sel['run'][0]);
     xLOG('run',u);
+    return req
+      .P(['macro.php', u], '', $('mdef').value)
+      .then(t => { xLOG('ran',u,t); out('macro',u,t); return t; })
   }
 , mdel:		function ()
   {
