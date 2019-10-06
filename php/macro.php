@@ -16,7 +16,7 @@ $base = "$root/".dirname($script)."/$targ";
 if (!is_dir($base)) die("wrong $targ");
 
 $l = count($pi);
-if ($l!=2) die("too many macros: $l");
+if ($l!=3) die("too many macros: $l");
 
 for ($i=1; ++$i<$l; )
   {
