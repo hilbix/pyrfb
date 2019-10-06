@@ -1109,7 +1109,7 @@ class RfbCommander(object):
 		"""
 
 		# XXX TODO XXX how to do tail recursion here so this becomes "goto"?
-		st		= cmd_sub(macro, *args)
+		st		= self.cmd_sub(macro, *args)
 		self.bye	= True
 		return st
 
@@ -1183,12 +1183,12 @@ class RfbCommander(object):
 		if click is not None:
 			click = int(click)
 		try:
-			x = int(x)
-			y = int(y)
+			a = None if x=='' else int(x)
+			b = None if y=='' else int(y)
 		except Exception,e:
-			x,y	= self.templatemouse(x, y, click)
+			a,b	= self.templatemouse(x, y, click)
 
-		self.rfb.pointer(x,y,click)
+		self.rfb.pointer(a,b,click)
 		return self.event_drain(False)
 
 	def event_drain(self, refresh):
