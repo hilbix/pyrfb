@@ -85,7 +85,7 @@ def cacheimage(path, mode='RGB'):
 
 def rand(x):
 	"return a random integer from 0 to x-1"
-	return random.randrange(x)
+	return random.randrange(x) if x>0 else 0
 
 class rfbImg(easyrfb.client):
 
@@ -343,8 +343,8 @@ class rfbImg(easyrfb.client):
 			self.event_add(self.myVNC.pointerEvent, self.lm_x, self.lm_y, 0)
 
 		self.lm_c	= click
-		if x is not None:	self.lm_x	= x
-		if y is not None:	self.lm_y	= y
+		if x is not None:	self.lm_x	= max(0,x)
+		if y is not None:	self.lm_y	= max(0,y)
 
 		self.event_add(self.myVNC.pointerEvent, self.lm_x, self.lm_y, self.lm_c)
 		self.log('mouse', self.lm_x, self.lm_y, click)
@@ -742,6 +742,11 @@ def WRAP(fn, *args, **kw):
 def bool2str(b):
 	return b and '1' or '0'
 
+# We should have a speeding curve from 0..n
+# but a linear move must do for now
+def curve(end, start, pos, steps, rnd=5):
+	#
+	return rand(rnd+rnd+1)-rnd + end + pos * (start - end) / steps
 
 class RfbCommander(object):
 	valid_filename	= valid_filename
@@ -764,6 +769,13 @@ class RfbCommander(object):
 		self.mode	= self.MODE_SPC
 		self.pausing	= []
 		self.paused	= False
+
+#		self.run	= self.receiver()
+#		self.todo	= next(self.run)
+#		self.schedule()
+
+#	def schedule(self):
+#		self.todo	= self.todo()
 
 	def write(self, s):
 		self.io.write(s)
@@ -1206,17 +1218,17 @@ class RfbCommander(object):
 		x	= r[1]+rand(r[3]);
 		y	= r[2]+rand(r[4]);
 
+		self.diag(x=x, y=y, lx=self.rfb.lm_x, ly=self.rfb.lm_y)
 		# move mouse in n pieces
 		try:
 			# We should move relative to a random spline,
 			# but this must do for now
 			n	= min(int(n), (abs(self.rfb.lm_x-x)+abs(self.rfb.lm_y-y))/20)
-			# We should have a speeding curve from 0..n
-			# but a linear move must do for now
-			while n>0:
-				n	= n-1
-				tx	= rand(11)-5 + (x-self.rfb.lm_x)/(n+2)
-				ty	= rand(11)-5 + (y-self.rfb.lm_y)/(n+2)
+			k	= n-1
+			while k>0:
+				k	= k-1
+				tx	= curve(x, self.rfb.lm_x, k, n)
+				ty	= curve(y, self.rfb.lm_y, k, n)
 				self.rfb.pointer(tx, ty)
 				time.sleep(0.01 + 0.01 * rand(10))
 		except Exception,e:
