@@ -209,6 +209,15 @@ function EVT(e, ons, fn)
     $(e).addEventListener(l, CLOSURE(fn, l), {passive:false, capture:false});
 }
 
+function hover(e, t)
+{
+  if (e == void 0)
+    return e;
+  EVP(e, 'mouseover', CLOSURE(t => out.tmp(true,  t), t));
+  EVP(e, 'mouseout',  CLOSURE(t => out.tmp(false, t), t));
+  return e;
+}
+
 function ArrayToggle(arr, val)
 {
   xLOG("toggle", val, arr);
@@ -744,25 +753,27 @@ var macro =
 , reload:	function ()
   {
     xLOG('mreload');
-    this.macros	= {};
-    var m = clear(this.id);
-    return req.P('exec.php', this.query
-    ).then(t =>
+    var ctx	= new CTX(clear(this.id), 'macros');
+    ctx.load('exec.php', this.query)
+    .then(t =>
       {
-        var a = t.split('\n');
-        xLOG('mreloaded', a.length);
         var k;
+        this.macros = {};
+
+        var  a = t.split('\n');
+        xLOG('mreloaded', a.length);
         a.sort();
+
         for (var u of a)
           if (validfile(u) && (k = this.match.exec(u)))
             {
-              var n	= k[1]+k[2];
-              var b	= BUTTON(n, SELFCALLwithTHIS(this, 'macroclick'));
+              var b	= hover(BUTTON(k[1]+k[2], SELFCALLwithTHIS(this, 'macroclick')), u);
               b.realurl = u;
-              this.selbutton(b);
-              this.macros[n] = b;
-              m.appendChild(b);
+              this.macros[u] = b;
+              ctx.o.appendChild(b);
             }
+
+        this.select();
         return t;
       }
     )
@@ -779,10 +790,10 @@ var macro =
 , click_ed:	function (m) { this.toggle(1, m); this.load(m) }
 , click_new:	function (m) { this.toggle(1, m); this.load(m) }
 , click_del:	function (m) { this.toggle(0, m); }
-, getsel:	function (m) { return this.mode=='new' ? 'ed' : this.mode; }
+, getsel:	function () { return this.mode=='new' ? 'ed' : this.mode; }
 , toggle:	function (radio, id)
   {
-    var	s, m=this.getsel(m);
+    var	s, m=this.getsel();
 
     if (radio || !(s=this.sel[m]))
       s	= [id];
@@ -794,15 +805,18 @@ var macro =
   }
 , select:	function ()
   {
-    for (var b=$(this.id).firstChild; b; b=b.nextSibling)
-      this.selbutton(b);
-  }
-, selbutton:	function (b)
-  {
+    // Highlight selection again
     var m = this.getsel();
-    var s = this.sel[m];
-    b.classList.toggle(this.selclass, s!=void 0 && s.includes(b.realurl));
-//    xLOG('selb', b.realurl, b.classList);
+    var s = this.sel[this.getsel()];
+    for (var b=$(this.id).firstChild; b; b=b.nextSibling)
+      b.classList.toggle(this.selclass, s!=void 0 && s.includes(b.realurl));
+
+    // Remove unknown macros from selection
+    var t = [];
+    for (var u in s)
+      if (u in this.macros)
+        t.push(u);
+    this.sel[m]	 = t;
   }
 , macroclick: function (button, mouse_ev, ...args)
   {
@@ -838,11 +852,10 @@ var macro =
       this.was	= data;
     return data;
   }
+, getname:	function (n) { n=n.trim(); var k = this.match.exec(n); return k && k[1] ? k[1] : n; }
 , save:		function (id)
   {
-    var name = $(id).value.trim();
-    var	k = this.match.exec(name);
-    if (k[1]) name	= k[1];
+    var name = this.getname($(id).value);
 
     var data = $('mdef').value;
     xLOG('msave', id, name);
@@ -860,7 +873,11 @@ var macro =
   }
 , msave:	function () { this.save('mloaded'); }
 , mnew:		function () { this.save('mname').then(this.reload.bind(this)).then(t => Dom.sel('m', 'ed')) }
-, mrun:		function (...a) { xLOG('mrun', ...a); }
+, mrun:		function ()
+  {
+    var u	= this.getname(this.sel['run'][0]);
+    xLOG('run',u);
+  }
 , mdel:		function ()
   {
     xLOG('mdel:', this.sel['del']);
@@ -910,15 +927,7 @@ function init()
 
   // improve hoverness
   for (var e of Doms('[title]'))
-    {
-      var t = e.title;
-      EVP(e, 'mouseover', CLOSURE(t => out.tmp(true,  t), t));
-      EVP(e, 'mouseout',  CLOSURE(t => out.tmp(false, t), t));
-      var f = e.getAttribute('for');
-      if (!f) continue;
-      EVP(f, 'mouseover', CLOSURE(t => out.tmp(true,  t), t));
-      EVP(f, 'mouseout',  CLOSURE(t => out.tmp(false, t), t));
-    }
+    hover(hover(e, e.title).getAttribute('for'), e.title);
 
   reload(false);
 
@@ -950,7 +959,7 @@ var Assets =
       .then(i =>
         {
           LOG('asset', ctx.name, i.nr, i.src);
-          ctx.loaded(i);
+          ctx.loaded();
           if (!ctx.current)
             return;
 
@@ -1011,7 +1020,7 @@ class CTX
 
   get current() { return this.gen === this.o.gen }
 
-  loading(ob)
+  loading()
     {
       if (this._l++ || !this.current) return;
       this._o = DIV('load...');
@@ -1019,7 +1028,7 @@ class CTX
       xLOG('loading', this.name);
     }
 
-  loaded(ob)
+  loaded()
     {
       if (--this._l || !this.current) return;
       this.o.removeChild(this._o);
@@ -1027,11 +1036,11 @@ class CTX
       xLOG('loaded', this.name);
     }
 
-  load(dir)
+  load(...args)
     {
-      this.loading(dir);
-      return req.P('exec.php', 'r=dir&d='+dir)
-             .then(t => { later(t => this.loaded(dir)); return t })
+      this.loading();
+      return req.P(...args)
+             .then(t => { later(t => this.loaded()); return this.current ? t : Promise.reject('no more current') })
     }
   }
 
@@ -1070,7 +1079,8 @@ function reload(ev)
   var a = assets[f];
   var ctx = new CTX(clear('cit'), a, {f:f});
 
-  ctx.load(a).then(t =>
+  ctx.load('exec.php', 'r=dir&d='+a)
+  .then(t =>
     {
       var s = t.split('\n');
       s.sort();
