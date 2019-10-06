@@ -1,3 +1,6 @@
 [submodule "python-vnc-viewer"]
 	path = python-vnc-viewer
 	url = ../python-vnc-viewer.git
+[submodule "noVNC"]
+	path = noVNC
+	url = ../noVNC.git
