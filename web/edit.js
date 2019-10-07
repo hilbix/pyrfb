@@ -141,30 +141,30 @@ function keyboard_edit(e)
 
     case 'Backspace':	d= -r[0]; break;
 
-    case 'KeyQ':	d= +1; break;
-    case 'KeyW':	d= +10; break;
-    case 'KeyE':	d= +100; break;
-    case 'KeyR':	d= +1000; break;
-    case 'KeyT':	d= +10000; break;
-    case 'KeyY':	d= +100000; break;
-    case 'KeyU':	d= +1000000; break;
-    case 'KeyI':	d= +10000000; break;
-    case 'KeyO':	d= +100000000; break;
+    case 'KeyQ':	d= +100000000; break;
+    case 'KeyW':	d=  +10000000; break;
+    case 'KeyE':	d=   +1000000; break;
+    case 'KeyR':	d=    +100000; break;
+    case 'KeyT':	d=     +10000; break;
+    case 'KeyY':	d=      +1000; break;
+    case 'KeyU':	d=       +100; break;
+    case 'KeyI':	d=        +10; break;
+    case 'KeyO':	d=         +1; break;
 
-    case 'KeyA':	d= -1; break;
-    case 'KeyS':	d= -10; break;
-    case 'KeyD':	d= -100; break;
-    case 'KeyF':	d= -1000; break;
-    case 'KeyG':	d= -10000; break;
-    case 'KeyH':	d= -100000; break;
-    case 'KeyJ':	d= -1000000; break;
-    case 'KeyK':	d= -10000000; break;
-    case 'KeyL':	d= -100000000; break;
+    case 'KeyA':	d= -100000000; break;
+    case 'KeyS':	d=  -10000000; break;
+    case 'KeyD':	d=   -1000000; break;
+    case 'KeyF':	d=    -100000; break;
+    case 'KeyG':	d=     -10000; break;
+    case 'KeyH':	d=      -1000; break;
+    case 'KeyJ':	d=       -100; break;
+    case 'KeyK':	d=        -10; break;
+    case 'KeyL':	d=         -1; break;
     }
   if (!e.ctrlKey)
     {
-      x *= 16;
-      y *= 16;
+      x *= 8;
+      y *= 8;
     }
   else if (!x && !y)
     return;	// unknown CTRL combination
@@ -179,6 +179,7 @@ function keyboard_edit(e)
       r[1] = Math.max(0,r[1]+x);
       r[2] = Math.max(0,r[2]+y);
     }
+
   r[0] += d;
   dirt();
   fixregion(currentregion);
