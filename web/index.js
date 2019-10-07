@@ -908,12 +908,20 @@ function isSlowMobile()
   return navigator && navigator.connection && navigator.connection.effectiveType && navigator.connection.effectiveType<'4g';
 }
 
+function href(el, dest)
+{
+  var e	= $(el);
+
+  e.href	= dest;
+  e.target	= el+'-'+conf.targ;
+}
+
 function init()
 {
   out('init failed');
 
-  $('lref').href = subdir('l/');
-  $('edit').href = "edit.html?"+conf.targ;
+  href('lref', subdir(''));
+  href('edit', 'edit.html?'+conf.targ);
 
   show.init('show');
 
