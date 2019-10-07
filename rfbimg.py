@@ -40,6 +40,7 @@ import re
 import sys
 import time
 import random
+import inspect
 import traceback
 import functools
 
@@ -405,7 +406,7 @@ class rfbImg(easyrfb.client):
 #
 # Das Ganze muss wohl mit Callbacks organisiert sein.
 # Callbacks funktionieren mit allen Varianten,
-# egal onb AsyncIO, Threads, Twisted oder sonstwas.
+# egal ob AsyncIO, Threads, Twisted oder sonstwas.
 # Ich will da nicht von irgendeinem Framewürg abhängig bleiben,
 # sprich, das hängt dann technisch nur von easyrfb ab.
 #
@@ -623,7 +624,7 @@ class rfbImg(easyrfb.client):
 
 					rect = (r[1],r[2],r[1]+r[3],r[2]+r[4])
 					pixels = r[3]*r[4]
-					spec = { 'r':r, 'name':n, 'img':i.crop(rect), 'rect':rect, 'max':r[0], 'pixels':r[3]*r[4] }
+					spec = { 'r':r, 'name':n, 'img':i.crop(rect), 'rect':rect, 'max':abs(r[0]), 'pixels':r[3]*r[4] }
 					# poor man's sort, keep the smallest rect to the top
 					# (probable speed improvement)
 					if rects and pixels <= rects[0]['pixels']:
@@ -705,16 +706,19 @@ def rename_away(to,ext):
 			os.rename(to+ext, n)
 			return
 
-def mass_replace(o, d):
+def mass_replace(o, *d):
 	"""
 	mass replace string s
 	by key,value of dict d
 	until string no more changes
 	"""
 	s	= str(o)
+	a	= {}
+	for i in d:
+		a.update(i)
 	for i in range(100):
 		tmp	= s
-		for k,v in d.iteritems():
+		for k,v in a.iteritems():
 			tmp = tmp.replace(k,v)
 		if tmp == s:
 			return s
@@ -745,7 +749,6 @@ def bool2str(b):
 # We should have a speeding curve from 0..n
 # but a linear move must do for now
 def curve(end, start, pos, steps, rnd=5):
-	#
 	return rand(rnd+rnd+1)-rnd + end + pos * (start - end) / steps
 
 class RfbCommander(object):
@@ -754,11 +757,15 @@ class RfbCommander(object):
 	MODE_SPC	= ' '
 	MODE_TAB	= "\t"
 
+	__Nothing	= {}		# some Dummy
+
 	def __init__(self, io):
 		self.io		= io
+
 		self.bye	= False
 		self._prompt	= None
 		self.repl	= {}
+		self.args	= {}
 		self.success	= None
 		self.failure	= 'ko'
 		self.state	= None
@@ -767,15 +774,74 @@ class RfbCommander(object):
 		self.quiet	= False
 		self.verbose	= False
 		self.mode	= self.MODE_SPC
-		self.pausing	= []
-		self.paused	= False
+		self.paused	= True
+		self.stack	= [self.lineInput()]
+		self.lines	= []
+		self.max	= 0
+		self.scheduler()
 
-#		self.run	= self.receiver()
-#		self.todo	= next(self.run)
-#		self.schedule()
+	def queueLine(self, rfb, line):
+		self.rfb	= rfb
+		self.lines.append(line)
+		self.log('got', line)
+		if not self.paused:	# readLine is waiting for data
+			# assert that TOS is generator of lineInput?
+			self.scheduler()
 
-#	def schedule(self):
-#		self.todo	= self.todo()
+	def setmax(self, max):
+		if self.max < max:
+			self.max	= max
+			self.log('depth', max)
+
+	def scheduler(self, v=None):
+#		self.log('scheduler', v)
+		max	= 0
+		while self.stack:
+			g	= self.stack[len(self.stack)-1]
+			try:
+				v	= g.send(v)
+			except StopIteration:
+#				self.log('sched','stop')
+				self.stack.pop()
+				continue
+
+			if v is self.__Nothing:
+#				self.log('sched','ret')
+				self.setmax(max)
+				return
+			if inspect.isgenerator(v):
+#				self.log('sched','gen')
+				self.stack.append(v)
+				if max<len(self.stack): max = len(self.stack)
+				if max>self.max+10: self.setmax(max)
+				v	= None
+#			self.log('sched','v', v)
+#		self.log('scheduler','end')
+		self.io.end()
+
+	def lineInput(self):
+		self.paused	= True				# disable queueLine() sending to us
+		while not self.bye:
+			if not self.lines:
+				self.paused	= False		# enable queueLine() sending to us
+				yield self.__Nothing
+				self.paused	= True		# disable queueLine() until allowed again
+				continue
+			self.io.pause()				# Stop factory, we are busy
+			line	= self.lines.pop(0)
+			self.log('do', line)
+			v	= yield self.readLine(line)
+			self.log('done', line, v)
+			if not self.io.resume():		# Enable factory, we are available again
+				self.log('gone away')
+				self.bye	= True
+				yield False			# going away unexpected is an error
+				return
+		yield True					# this is what we expect, a clean self.bye (due to 'exit')
+
+	#
+	# Direct IO Helpers
+	#
 
 	def write(self, s):
 		self.io.write(s)
@@ -783,15 +849,21 @@ class RfbCommander(object):
 	def writeLine(self, s):
 		self.io.writeLine(s)
 
-	def readLine(self, rfb, line):
-		self.rfb	= rfb
-
+	def readLine(self, line):
 		if self._prompt and line.strip()=='':
 			# hack: Do not error on empty lines when prompting
 			# hack: and do the autoset which usually is done in .processLine
 			self.autoset()
 		else:
-			st	= self.processLine(line, self._prompt)	# only expand on prompts
+			try:
+				st	= None
+				st	= yield self.processLine(line, self._prompt)	# only expand on prompts
+			except Exception,e:
+				twisted.python.log.err(None, "line")				#TWISTED
+				if self._prompt:
+					self.writeLine(traceback.format_exc())
+				else:
+					self.bye	= True
 			if st:
 				self.out(self.success, st, line)
 			else:
@@ -799,30 +871,40 @@ class RfbCommander(object):
 
 		if self.bye:
 			self.log("bye")
-			self.io.end()
+			#self.io.end() is now in scheduler()
+			# this perhaps can be a sub-read or something
 		else:
 			self.prompt()
 
 	def prompt(self):
-		if not self._prompt or self.paused:
-			return self
+		if not self._prompt:
+			return
 		# TODO XXX TODO print some stats here
-		self.io.write(mass_replace(self._prompt, self.repl))
+		self.write(mass_replace(self._prompt, self.repl, self.args))
+
+	#
+	# Variables
+	#
 
 	def autoset(self):
 		r	= self.repl
 
-		r['{mx}']	= str(self.rfb.lm_x)
-		r['{my}']	= str(self.rfb.lm_y)
-		r['{mb}']	= str(self.rfb.lm_c)
+		r['{mouse.x}']	= str(self.rfb.lm_x)
+		r['{mouse.y}']	= str(self.rfb.lm_y)
+		r['{mouse.b}']	= str(self.rfb.lm_c)
 		r['{tick}']	= str(self.rfb.tick)
 
 		r['{verbose}']	= bool2str(self.verbose)
 		r['{quiet}']	= bool2str(self.quiet)
+		r['{scheduler.depth}']	= bool2str(self.quiet)
 
 		# XXX TODO XXX add more replacements
 
 		return r
+
+	#
+	# Output helpers
+	#
 
 	def send(self, s):
 		if not self.quiet:
@@ -841,8 +923,11 @@ class RfbCommander(object):
 	def out(self, s, *args, **kw):
 		if s is not None:
 			self.send(s)
-		self.log(s, *args,**kw)
-		return self
+		return self.log(s, *args,**kw)
+
+	#
+	# Return values of commands
+	#
 
 	def ok(self, *args, **kw):
 		if args:
@@ -861,9 +946,13 @@ class RfbCommander(object):
 			self.out(*args, **kw)
 		return None			# default return value for "error"
 
+	#
+	# Line processor
+	#
+
 	def processLine(self, line, expand=False):
 		if expand:
-			line	= mass_replace(line, self.autoset())
+			line	= mass_replace(line, self.autoset(), self.args)
 		return self.processArgs(line.split(self.mode))
 
 	def processArgs(self, args):
@@ -873,22 +962,16 @@ class RfbCommander(object):
 		returns False on failure
 		returns None  on error (exception) and set terminaton (bye)
 		"""
-		try:
-			self.log("cmd",args)
-			self.diag(proc=args)
-			return getattr(self,'cmd_'+args[0], self.unknown)(*args[1:])
-		except Exception,e:
-			twisted.python.log.err(None, "line")				#TWISTED
-			if self._prompt:
-				self.writeLine(traceback.format_exc())
-			else:
-				self.bye	= True
-			return None
+		self.log("cmd",args)
+		self.diag(proc=args)
+		return getattr(self,'cmd_'+args[0], self.unknown)(*args[1:])
 
+	#
 	# all cmd_* are supposed to return
 	# True  on success
 	# False on failure
 	# None  on error (exception)
+	#
 
 	def unknown(self, *args):
 		if not self._prompt:
@@ -912,21 +995,31 @@ class RfbCommander(object):
 		self.success = args and ' '.join(args) or None
 		return self.ok()
 
-	@restore_property('quiet')
+#	@restore_property('quiet')
 	def cmd_quiet(self,*args):
 		"""
 		quiet cmd: suppress normal output of cmd
 		"""
+		old		= self.quiet
 		self.quiet	= True
-		return self.processArgs(args)
+		try:
+			v	= yield self.processArgs(args)
+		finally:
+			self.quiet	= old
+		yield v
 
-	@restore_property('verbose')
+#	@restore_property('verbose')
 	def cmd_verbose(self,*args):
 		"""
 		verbose cmd: verbose output of cmd (see: dump)
 		"""
+		old		= self.verbose
 		self.verbose	= True
-		return self.processArgs(args)
+		try:
+			v	= yield self.processArgs(args)
+		finally:
+			self.verbose	= old
+		yield v
 
 	def cmd_failure(self,*args):
 		"""
@@ -948,6 +1041,12 @@ class RfbCommander(object):
 		Also used as "unknown command"
 		"""
 		return self.fail()
+
+	def cmd_fatal(self, *args):
+		"""
+		Raise Python RuntimeError (for debugging purpose only)
+		"""
+		raise RuntimeError(args and ' '.join(args) or None)
 
 	def cmd_bug(self,*arg):
 		"""
@@ -1005,12 +1104,15 @@ class RfbCommander(object):
 		if not var:
 			for k,v in self.repl.iteritems():
 				self.writeLine(' '+k+' '+repr(v))
+			for k,v in self.args.iteritems():
+				self.writeLine(' '+k+' '+repr(v))
 			return self.ok()
 
+		var = '{'+var+'}'
 		if not args:
-			return '{'+var+'}' in self.repl
+			return var in self.args or var in self.repl
 
-		self.repl['{'+var+'}']	= ' '.join(args)
+		self.repl[var]	= ' '.join(args)
 		return self.ok()
 
 	def cmd_unset(self, *args):
@@ -1034,16 +1136,18 @@ class RfbCommander(object):
 		self.mode	= getattr(self, 'MODE_'+mode)
 		return self.ok()
 
-	# FALSCH IMPLEMENTIERT
+	def sleep(self, seconds):
+		self.io.sleep(seconds, self.scheduler, self)
+		yield self.__Nothing
+
 	def cmd_sleep(self, sec):
 		"""
 		sleep sec: sleep the given seconds
 		"""
-		time.sleep(float(sec))
-		return self.ok()
+		yield self.sleep(float(sec))
+		yield self.ok()
 
-	# FALSCH IMPLEMENTIERT
-	@restore_property('mode')
+#	@restore_property('mode')
 	def cmd_sub(self, macro, *args):
 		"""
 		sub MACRO args..:
@@ -1058,60 +1162,68 @@ class RfbCommander(object):
 		.
 		The macro can contain replacement sequences:
 		- {N} is replaced by arg N
-		- {mx} {my} {mb} last mouse x y button
+		- {mouse.x} {mouse.y} {mouse.b} last mouse x y button
 		- {tick} global tick counter
 		- more replacements might show up in future
 		- see also: set
 		"""
 
-		self.mode	= self.MODE_SPC
-
-		repl	= dict(self.repl)
-		for i in range(len(args)):
-			repl['{'+str(i+1)+'}'] = args[i]
-
 		# prevent buggy names
 		if not self.valid_filename.match(macro):
-			return self.fail()
+			yield self.fail()
+			return
 
-		# read the macro file
-		for l in io.open(MACRODIR+macro+MACROEXT):
-			# ignore empty lines and comments
-			if l.strip()=='':	continue
-			if l[0]=='#':		continue
+		oldargs		= self.args
+		oldmode		= self.mode
+		oldstate	= self.state
+		a		= {}
+		for i in range(len(args)):
+			a['{'+str(i+1)+'}'] = args[i]
+		self.args	= a
+		self.mode	= self.MODE_SPC
 
-			# l is unicode and contains \n
-			if l.endswith('\n'): l=l[:-1]
-			# we need UTF-8
-			l	= l.encode('utf8')
+		try:
+			# read the macro file
+			for l in io.open(MACRODIR+macro+MACROEXT):
+				# ignore empty lines and comments
+				if l.strip()=='':	continue
+				if l[0]=='#':		continue
 
-			# parse result
-			st		= self.processLine(l, True)
-			if not st:
-				# pass on errors
-				return st
-			if self.bye:
-				self.bye	= False
-				# exit is success
-				return self.ok()
+				# l is unicode and contains \n
+				if l.endswith('\n'): l=l[:-1]
+				# we need UTF-8
+				l	= l.encode('utf8')
 
-		# EOF fails
-		self.diag(macro=macro, err="EOF reached, no 'exit'")
-		return self.fail()
+				# parse result
+				st		= yield self.processLine(l, True)
+				if not st:
+					# pass on errors
+					yield st
+					return
+				if self.bye:
+					self.bye	= False
+					# exit is success
+					yield self.ok()
+					return
 
-	# FALSCH IMPLEMENTIERT
+			# EOF fails
+			self.diag(macro=macro, err="EOF reached, no 'exit'")
+			yield self.fail()
+
+		finally:
+			self.mode	= oldmode
+			self.args	= oldargs
+			self.state	= oldstate
+
 	def cmd_run(self, macro, *args):
 		"""
-		run MACRO args..: same as "sub MACRO", but followed by "exit"
-		.
-		This is different from "sub MACRO" "exit" in that it can return failure
-		(exit cannot).
+		run MACRO args..: same as "if sub MACRO", but followed by "return"
 		"""
 
 		# XXX TODO XXX how to do tail recursion here so this becomes "goto"?
-		st		= self.cmd_sub(macro, *args)
+		st		= yield self.cmd_sub(macro, *args)
 		self.bye	= True
-		return st
+		yield st
 
 	def cmd_if(self, *args):
 		"""
@@ -1122,13 +1234,14 @@ class RfbCommander(object):
 		.
 		if if command args..: record error state, error is failure everything else is success
 		"""
-		st		= self.processArgs(args)
+		st		= yield self.processArgs(args)
 		self.prevstate	= self.state
 		self.state	= st
 		if st is None:
 			self.bye	= False
-			return self.fail()
-		return self.ok()
+			yield self.fail()
+		else:
+			yield self.ok()
 
 	def cmd_then(self, *args):
 		"""
@@ -1186,19 +1299,19 @@ class RfbCommander(object):
 			a = None if x=='' else int(x)
 			b = None if y=='' else int(y)
 		except Exception,e:
-			a,b	= self.templatemouse(x, y, click)
+			a,b	= yield self.templatemouse(x, y, click)
 
 		self.rfb.pointer(a,b,click)
-		return self.event_drain(False)
+		yield self.drain(False)
 
-	def event_drain(self, refresh):
+	def drain(self, refresh):
 		self.log("drain",refresh)
-		def drained():
+		def drained(**kw):
 			self.rfb.flush(refresh)		# XXX TODO XXX WTF HACK WTF!
-			self.resume()
-		self.pause(drained)
-		self.rfb.event_add(self.resume)
-		return True
+			self.scheduler()
+		self.rfb.event_add(drained)
+		yield self.__Nothing
+		yield True
 
 	def templatemouse(self, x, n, click):
 		tpl	= self.rfb.load_template(x.split('.',1)[0])
@@ -1213,7 +1326,8 @@ class RfbCommander(object):
 		# Mouse button release
 		if not click and r[1] < self.rfb.lm_x < r[1]+r[3]-1 and r[2] < self.rfb.lm_y < r[2]+r[4]-1:
 			# jitter 1 pixel
-			return self.rfb.lm_x+rand(3)-1, self.rfb.lm_y+rand(3)-1
+			yield (self.rfb.lm_x+rand(3)-1, self.rfb.lm_y+rand(3)-1)
+			return
 
 		x	= r[1]+rand(r[3]);
 		y	= r[2]+rand(r[4]);
@@ -1230,12 +1344,12 @@ class RfbCommander(object):
 				tx	= curve(x, self.rfb.lm_x, k, n)
 				ty	= curve(y, self.rfb.lm_y, k, n)
 				self.rfb.pointer(tx, ty)
-				time.sleep(0.01 + 0.01 * rand(10))
+				yield this.sleep(0.01 + 0.01 * rand(10))
 		except Exception,e:
 			pass
 
 		# return the real position
-		return x,y
+		yield (x,y)
 
 	def cmd_learn(self,to):
 		"""
@@ -1263,7 +1377,7 @@ class RfbCommander(object):
 		"""
 		for k in " ".join(args):
 			self.rfb.key(ord(k))
-		return self.event_drain(True)
+		yield self.drain(True)
 
 	def cmd_code(self,*args):
 		"""
@@ -1274,7 +1388,7 @@ class RfbCommander(object):
 			if v == False:
 				v	= int(k, base=0)
 			self.rfb.key(v)
-		return self.event_drain(True)
+		yield self.drain(True)
 
 	def cmd_exit(self):
 		"""
@@ -1283,18 +1397,26 @@ class RfbCommander(object):
 		self.bye = True
 		return self.ok()
 
+	def cmd_return(self):
+		"""
+		return: like 'exit', but returns the if-state (not always success)
+		"""
+		self.bye = True
+		return self.state
+
 	def cmd_next(self):
 		"""
 		next: Wait for next picture flushed out
-
-		This is asynchronous, so does NOT work in MACROs.
+		.
 		It delays reception of next command until the next image is written out.
-
+		.
 		Usually followed by: exit
 		"""
-		self.pause()
-		self.rfb.next(self.resume)
-		return self.ok()
+		def bump():
+			self.scheduler()
+		self.rfb.next(bump)
+		yield self.__Nothing
+		yield self.ok()
 
 	def cmd_flush(self):
 		"""
@@ -1327,27 +1449,26 @@ class RfbCommander(object):
 	def cmd_wait(self,*templates):
 		"""
 		wait count template..: wait count screen updates for one of the given templates to show up
-
-		This is asynchronous, so does NOT work in MACROs.
-		It delays reception of next command until the next image is written out.
-
+		.
+		If count is negative, it saves state picture (like 'state' command)
+		.
 		Note: This waits count frames, not a defined time
 		"""
 		if len(templates)<2:
-			return self.fail()
+			yield self.fail()
+			return
 		timeout = int(templates[0])
 
 		def result(**waiter):
-			self.print_wait(waiter)
-			self.resume()
+			self.scheduler(self.print_wait(waiter))
 
-		self.pause(result)
-		self.rfb.wait(cb=self.resume, t=templates[1:], retries=timeout)
-		return self.ok()
+		self.rfb.wait(cb=result, t=templates[1:], retries=abs(timeout), img=timeout<0)
+		yield self.__Nothing
+		# return value see result()
 
 	def print_wait(self,waiter):
-		if waiter['match']:
-			w = waiter['match']
+		w	= waiter.get('match')
+		if w:
 			self.log("match",w)
 			if w['cond']:
 				self.send('found %s %s %s' % (w['name'], w['dx'], w['dy']))
@@ -1360,28 +1481,6 @@ class RfbCommander(object):
 			self.log("timeout")
 			self.send('timeout')
 			return self.fail()
-
-	def resume(self, *args, **kw):
-		self.log('resume', self.pausing)
-		if self.pausing:
-			return (self.pausing.pop())(*args, **kw)
-		try:
-			self.paused	= False
-			self.io.resume()
-		except:
-			# may have gone away in the meantime
-			self.log("gone away")
-			self.bye	= True
-			return False
-		return True
-
-	def pause(self, fn=None):
-		self.log('pause')
-		if fn:
-			self.pausing.append(fn)
-		self.io.pause()
-		self.paused	= True
-		return self
 
 	def cmd_ping(self):
 		"""
@@ -1516,18 +1615,19 @@ class RfbCommander(object):
 
 	def cmd_collage(self, name, *img):
 		"""
+		NOT YET IMPLEMENTED
+		.
 		collage template images..:
-
+		.
 		Create a collage from the given state images
 		and save it as the state image of the first parameter.
-
+		.
 		The template used is 'collage' followed by name up to the first underscore.
-		The template used has 'collage' plush name up to the first dot.
-
-		Each template is taken from the next picture
+		.
+		The regions are taken from each next picture
 		and placed at the same location on the template.
-
-		The difference parameter is RRGGBBTT
+		.
+		The difference parameter (the first number of each template) is RRGGBBTT
 		RRGGBB are RGB values (color) and TT is transparency.
 		00 is min and 99 is max
 		"""
@@ -1551,39 +1651,77 @@ class RfbCommander(object):
 import twisted										#TWISTED
 
 import twisted.protocols.basic								#TWISTED
-class controlProtocol(twisted.protocols.basic.LineReceiver):				#TWISTED
+class CorrectedLineReceiver(twisted.protocols.basic.LineReceiver):			#TWISTED
+	def sendRaw(self, s):
+		"""
+		send raw data to other side
+
+		Why is this missing in twisted.protocols.basic.LineReceiver?
+		"""
+		self.transport.write(s)
+
+class ControlProtocol(CorrectedLineReceiver):
 	delimiter='\n'									#TWISTED black magic, DO NOT REMOVE
 
 	# Called from factory, but no self.factory here!
 	def __init__(self):
+		# self.factory not present at this time
 		self.cmd	= RfbCommander(self)
 
 	# Called by LineReceiver
+	# Note that this does not honor pause()
+	# due to what I consider that are twisted bugs.
 	def lineReceived(self, line):							#TWISTED
-		self.cmd.readLine(self.factory.rfb, line)	# do it here as factory is not ready on __init__
+		self.cmd.queueLine(self.factory.rfb, line)				#TWISTED black magic, hand over rfb here
+		# We are not allowed to return something else than None here
+		# due to how lineReceived() works
 
 	def writeLine(self, s):
-		self.sendLine(s)							#TWISTED
+		try:
+			self.sendLine(s)						#TWISTED
+		except:
+			# Ignore dead other sides
+			# perhaps it just disconnected early and did not care
+			pass
 
 	def write(self, s):
-		self.transport.write(s)							#TWISTED
+		try:
+			# WTF?  Why is self.sendRaw() missing?
+			self.sendRaw(s)							#TWISTED
+		except:
+			# perhaps it just disconnected early and did not care
+			pass
 
 	def pause(self):
-		self.transport.pauseProducing()						#TWISTED
+		try:
+			self.pauseProducing()						#TWISTED
+			return True
+		except:
+			return False
 
 	def resume(self):
-		self.transport.resumeProducing()					#TWISTED
+		try:
+			self.resumeProducing()						#TWISTED
+			return True
+		except:
+			return False
 
 	def end(self):
-		self.transport.stopProducing()						#TWISTED
-		#self.transport.loseConnection()					#TWISTED
+		try:
+			self.stopProducing()						#TWISTED
+			#self.transport.loseConnection()				#TWISTED
+		except:
+			pass
+
+	def sleep(self, secs, cb, *args, **kw):
+		twisted.internet.reactor.callLater(secs, cb, *args, **kw)		#TWISTED
 
 
-class createControl(twisted.internet.protocol.Factory):					#TWISTED
-	protocol = controlProtocol							#TWISTED black magic, DO NOT REMOVE
+class CreateControl(twisted.internet.protocol.Factory):					#TWISTED
+	protocol = ControlProtocol							#TWISTED black magic, DO NOT REMOVE
 
 	def __init__(self, sockname, rfb):
-		self.rfb = rfb
+		self.rfb = rfb		# becomes ControlProtocol.factory.rfb eventually
 		try:
 			os.unlink(sockname)
 		except:
@@ -1593,7 +1731,7 @@ class createControl(twisted.internet.protocol.Factory):					#TWISTED
 if __name__=='__main__':
 	rfb	= rfbImg("RFB image writer")
 	if rfb.loop:
-		createControl(rfb._preset("RFBIMGSOCK", '.sock'), rfb)			#TWISTED
+		CreateControl(rfb._preset("RFBIMGSOCK", '.sock'), rfb)			#TWISTED
 
 	rfb.run()
 
