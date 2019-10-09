@@ -2,6 +2,7 @@
 >
 > TODOs:
 >
+> - Python 3 compatibility (`python-vnc-viewer` currently is Python 2 only)
 > - Better experience
 > - More easy install
 > - Integrate noVNC, such that you can use it as you like
