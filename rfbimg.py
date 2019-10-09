@@ -1397,12 +1397,16 @@ class RfbCommander(object):
 		self.bye = True
 		return self.ok()
 
-	def cmd_return(self):
+	def cmd_return(self, *args):
 		"""
 		return: like 'exit', but returns the if-state (not always success)
+		return cmd [args..]: like `if cmd args..` followed by `return`
 		"""
+		st	= self.state
+		if len(args):
+			st	= yield self.processArgs(args)
 		self.bye = True
-		return self.state
+		yield st
 
 	def cmd_next(self):
 		"""
