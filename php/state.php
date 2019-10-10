@@ -24,7 +24,7 @@ for ($i=1; ++$i<$l; )
     $f = $pi[$i];
     if ($f==='') die("missing filename: $i");
     if (!file_exists("$base/e/$f.tpl")) die("missing file: $i");
-    $t .= " $f";
+    $t = " $f";
   }
 
 $fd = fsockopen("unix://../sub/$targ/sock");
