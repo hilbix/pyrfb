@@ -960,13 +960,15 @@ function placeChild(ob, chi)
 
 var Assets =
 {
+  generation: 0,
+
   learn: (...a) => Assets.img(...a),
   stat:  (...a) => Assets.img(...a),
   ed:    (...a) => Assets.template(...a),
 
   img:	(ctx, u) =>
     {
-      IMG(i => { i.nr = ++ctx.nr; i.main = ctx.f+'/'+u; ctx.loading(i); return subdir(i.main) })
+      IMG(i => { i.nr = ++ctx.nr; i.main = ctx.f+'/'+u; ctx.loading(i); return subdir(i.main)+'#'+ ++Assets.generation})
       .then(i =>
         {
           LOG('asset', ctx.name, i.nr, i.src);
