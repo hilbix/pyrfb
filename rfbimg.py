@@ -1184,7 +1184,9 @@ class RfbCommander(object):
 
 		try:
 			# read the macro file
-			for l in io.open(MACRODIR+macro+MACROEXT):
+			file	= None
+			file	= io.open(MACRODIR+macro+MACROEXT)
+			for l in file:
 				# ignore empty lines and comments
 				if l.strip()=='':	continue
 				if l[0]=='#':		continue
@@ -1214,6 +1216,7 @@ class RfbCommander(object):
 			self.mode	= oldmode
 			self.args	= oldargs
 			self.state	= oldstate
+			file.close()
 
 	def cmd_run(self, macro, *args):
 		"""
