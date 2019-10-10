@@ -1077,6 +1077,25 @@ class RfbCommander(object):
 				self.writeLine(' '+a)
 		return self.ok()
 
+	def cmd_empty(self, *args):
+		"""
+		empty var..: checks variables for emptieness
+		- fails if a variable is nonempty
+		- errors if a variable does not exist
+		- errors if no arguments
+		- else success (all variables are nonempty)
+		This works in sequence
+		"""
+		if not args:
+			return self.err()
+		for a in args:
+			v='{'+a+'}'
+			if v not in self.repl:
+				return self.err()
+			if self.repl[v] != '':
+				return self.fail()
+		return self.ok()
+
 	def cmd_set(self, var=None, *args):
 		"""
 		set: list all known {var}s
