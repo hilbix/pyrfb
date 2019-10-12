@@ -41,6 +41,13 @@ Prerequisites:
   For example to make it available under `http://127.0.0.1/vnc/` try:  
   `sudo ln --relative -s web /var/www/html/vnc`
 
+> **Important!** For this to work correctly, set `Cache-Control: max-age=0, must-revalidate` on all `*.png` and `*.jpg`.
+>
+> Else caching prevents correct update of the images in certain situations.
+> With this setting above, the images are still cached, but the browser checks if they are stale and need to be reloaded.
+>
+> For more see: https://stackoverflow.com/a/22429796/490291 variant (3)
+
 - Serve PHP files from the `php/` directory.  
   If your web root is PHP enabled, you can do  
   `ln --relative -s php/* web`
