@@ -157,6 +157,9 @@ class Template:
 	def getName(self):
 		return self.name
 
+	def getTpl(self):
+		return self.tpl
+
 	def getRect(self, n):
 		if not self.parsed:	self.parse()
 		D(n, r=self.r, find=self.lf)
@@ -1715,7 +1718,9 @@ class RfbCommander(object):
 		if not tpl:
 			return self.fail()
 
-		reg	= tpl['r']
+		# XXX TODO XXX move this into the Template class
+		# we do not want structural dependencies here ..
+		reg	= tpl.getTpl()['r']
 
 		class V:
 			ruler	= [0,0,0,1,0]	# implicite ruler
