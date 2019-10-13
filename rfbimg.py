@@ -63,6 +63,11 @@ valid_filename = re.compile('^[_a-zA-Z0-9][-_a-zA-Z0-9]*$')
 
 log	= None
 
+# WTF, why isn't there a standard function for this?
+def updateDict(o, *args, **kw):
+	o.update(*args, **kw)
+	return o
+
 def timestamp():
 	t = time.gmtime()
 	return "%04d%02d%02d-%02d%02d%02d" % ( t.tm_year, t.tm_mon, t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec)
@@ -84,9 +89,236 @@ def cacheimage(path, mode='RGB'):
 	cachedimages[path] = (mtime,PIL.Image.open(path).convert(mode),mode)
 	return cachedimages[path][1]
 
+def Image(path, mode):
+	return PIL.Image.open(path).convert(mode)
+
+__CACHE	= {}
+def cached(factory, path, *args, **kw):
+	"""
+	cache a file, re-read if file modification time has changed.
+	The first argument is the factory, the 2nd is the path, additional parameters might follow.
+	factory is the function/class to create path, it gets passed all following args.
+	arg/kw are used for caching, too, so they need to be JSON serializable.
+	"""
+	mtime	= os.stat(path).st_mtime
+	a	= json.dumps((args, kw), sort_keys=True) if args or kw else ''
+	c	= __CACHE.get(path, None)
+	if c:
+		if c[0]==mtime:
+			r	= c[1].get(a, None)
+			if r:
+				return r
+		else:
+			c	= None
+	if c is None:
+		c		= [mtime, {}]
+		__CACHE[path]	= c
+	r	= factory(path, *args, **kw)
+	c[1][a]	= r
+	return r
+
+def cachedImage(path, mode='RGB'):
+	return cached(Image, path, mode)
+
+def cachedTemplate(name):
+	if not valid_filename.match(name):
+		raise RuntimeError('invalid filename: '+repr(name))
+	return cached(Template, TEMPLATEDIR+name+TEMPLATEEXT, name)
+
 def rand(x):
 	"return a random integer from 0 to x-1"
 	return random.randrange(x) if x>0 else 0
+
+def D(*args, **kw):
+	print(" ".join(tuple(str(v) for v in args)+tuple(str(n)+"="+str(v) for n,v in kw.iteritems())))
+
+class Template:
+	"""
+	Searches are regions which are 0 width or 0 height.  Just a dot resets search.
+	- The left top corner of the next region is moved along the given axis
+	- The following regions then are checked relative to the found displacement
+	If 'delta' is negated, search is done opposite direction.
+	"""
+	def __init__(self, path, name):
+		"""
+		Load a single template and extract the searches
+		"""
+		self.path	= path
+		self.name	= name
+		with io.open(path) as f:
+			self.tpl	= json.load(f)
+		self.parsed	= False
+		self.n		= None
+		self.i		= None
+		self.p		= None
+		self.r		= None
+		self.lf		= None
+
+	def getName(self):
+		return self.name
+
+	def getRect(self, n):
+		if not self.parsed:	self.parse()
+		D(n, r=self.r, find=self.lf)
+		if n not in self.r:
+			return None
+		r	= self.r[n]
+		p	= r['p']
+		part	= self.p[p]
+		off	= self.lf[p] if part['c']>1 else 0
+		dx	= part['x'] * off
+		dy	= part['y'] * off
+		x	= r['x'] + dx
+		y	= r['y'] + dy
+		w	= r['w'] - x
+		h	= r['h'] - y
+		d	= r['d']
+		D(d=d, x=x, y=y, w=w, h=h)
+		return (d, x, y, w, h)
+
+	def parse(self):
+		if self.parsed:
+			return self
+
+		t	= self.tpl
+		self.n	= t['img']
+		self.i	= cacheimage(LEARNDIR+self.n)
+		self.p	= []
+		self.r	= {}		# WTF?  No sparse lists?
+
+		sf	= False
+		sx	= 0
+		sy	= 0
+		dx	= 0
+		dy	= 0
+		cnt	= 0
+		part	= []
+
+		def put():
+			if part: self.p.append(dict(x=dx, y=dy, c=cnt+1, p=part))
+
+		for n,r in enumerate(t['r'], start=1):
+			if r[3]==0 or r[4]==0:
+				put()
+				part	= []
+				sf	= True
+				sx	= r[1]
+				sy	= r[2]
+				d	= -1 if r[0]<0 else 1
+				if r[3]!=0:
+					cnt	= r[3]
+					dx	= d
+					dy	= 0
+					if d<0: x += cnt	# cnt == 1 means look for 2 positions
+				elif r[4]!=0:
+					cnt	= r[4]
+					dx	= 0
+					dy	= d
+					if d<0: y += cnt	# cnt == 1 means look for 2 positions
+				else:
+					sx	= 0
+					sy	= 0
+					cnt	= 0
+					sf	= False
+				continue
+
+			if sf:
+				sf	= False
+				sx	-= r[1]
+				sy	-= r[2]
+			i	= self.i.crop((r[1],r[2],r[1]+r[3],r[2]+r[4])).convert('RGB')
+			# cnt == 1 means look for 2 positions
+			v	= dict(n=n, p=len(self.p), x=r[1]+sx, y=r[2]+sy, w=r[1]+r[3]+sx, h=r[2]+r[4]+sy, i=i, d=r[0], px=r[3]*r[4])
+			self.r[n]	= v
+			part.append(v)
+		put()
+
+		self.parsed	= True
+		return self
+
+	def match(self, img, debug=False):
+		"""
+		check if img matches this template
+
+		returns list of found offsets, or None if mismatch
+
+		debug is a debugging function which receives keyword arguments
+		"""
+		if not self.parsed:	self.parse()
+
+		finds	= []
+		for p in self.p:
+			offset	= self.part(p, img, debug)
+			if offset is None:
+				if debug: debug(template=self, found=None)
+				return None
+			finds.append(offset)
+		if debug: debug(template=self, found=finds)
+		self.lf	= finds
+		return finds
+
+	def part(self, p, img, debug=False):
+		"""
+		check for a matching part (internal routine)
+
+		returns found offset (integer) or None if none
+		"""
+		# p is { 'x':dx, 'y':dy, 'c':cnt+1, 'p':part }
+		dx	= p['x']
+		dy	= p['y']
+		x	= 0
+		y	= 0
+		for i in range(p['c']):
+			r	= p['p']
+			# r is [{ 'r':rect, 'c':i, 'm':abs(r[0]), 'px':r[3]*r[4] }]
+			if self.check(r[0], x, y, img, debug):
+				# We got a match, check the remaining rects
+				for r in r[1:]:
+					if not self.check(r, x, y, img, debug):
+						# Fail early in case they do not match
+						return None
+				# Success!  Return the offset/searches done
+				if debug: debug(template=self, part=True, offset=i)
+				return i
+			x += dx
+			y += dy
+		# Fail, as we did not find anything
+		if debug: debug(template=self, part=False)
+		return None
+
+	def check(self, r, dx, dy, img, debug):
+		"""
+		check for a rectanlge to match (internal routine)
+
+		returns True if match, false otherwise
+		"""
+		# r is { 'x':x, 'y', 'w', 'h', 'i':img, 'm':abs(r[0]), 'px':r[3]*r[4] }
+		# IC.difference apparently does not work on RGBX, so we have to convert to RGB first
+		rect	= (r['x']+dx, r['y']+dy, r['w']+dx, r['h']+dy)
+		di	= PIL.ImageChops.difference(r['i'], img.crop(rect).convert('RGB'))
+		bb	= di.getbbox()
+		if bb is None:
+			if debug: debug(template=self, check=True, rect=rect)
+			return True
+		if not r['d']:
+			if debug: debug(template=self, check=False, rect=rect, bb=bb)
+			return False
+
+		st	= PIL.ImageStat.Stat(di.crop(bb))
+		delta	= reduce(lambda x,y:x+y, st.sum2)
+		if delta <= abs(r['d']):
+			if debug: debug(template=self, check=True, rect=rect, delta=delta)
+			return True
+		if debug: debug(template=self, check=False, rect=rect, delta=delta, bb=bb)
+
+		# We have a difference
+		return False
+
+	def __str__(self):
+		return '<template {} parsed={} img={}>'.format(self.name, self.parsed, self.n)
+
+	def __repr__(self):
+		return '<template {} {}>'.format(self.name, self.tpl)
 
 class rfbImg(easyrfb.client):
 
@@ -365,9 +597,6 @@ class rfbImg(easyrfb.client):
 
 
 
-
-
-
 # NEEDS REWRITE START[
 # NEEDS REWRITE START[
 # NEEDS REWRITE START[
@@ -515,75 +744,10 @@ class rfbImg(easyrfb.client):
 # NEEDS REWRITE END]
 # NEEDS REWRITE END]
 
-
-
-
-
-
-	def check_rect(self,template,r,rect,debug,trace):
-		# IC.difference apparently does not work on RGBX, so we have to convert to RGB first
-		bb = PIL.ImageChops.difference(r['img'], self.img.crop(rect).convert('RGB'))
-		st = PIL.ImageStat.Stat(bb)
-		delta = reduce(lambda x,y:x+y, st.sum2)		# /(bb.size[0]*bb.size[1])
-		if delta<=r['max']:
-			if trace:
-				self.log("same",template['name'],rect,delta)
-			return True
-
-		# We have a difference
-		if debug:
-			bb.save('_debug.png')
-			self.log("diff",template['name'],rect,delta,bb.getbbox())
-		return False
-
-	def check_rects(self,template,dx,dy,debug,trace):
-		for r in template['r']:
-			rect = r['rect']
-			if not self.check_rect(template,r,(rect[0]+dx,rect[1]+dy,rect[2]+dx,rect[3]+dy),debug,trace):
-				return False
-			debug = trace
-		# All rects match, we have a match
-		return True
-
-	def check_template(self,template,debug=False):
-		# Always check the center
-		if self.check_rects(template,0,0,debug,debug):
-			template['dx']=0
-			template['dy']=0
-			return True
-
-		# Then check the displacements
-		for s in template['search']:
-			dx = s[0]
-			dy = s[1]
-			x = y = 0
-			self.log("search",template['name'],s)
-			for i in range(s[2]):
-				x += dx
-				y += dy
-				if self.check_rects(template,x,y,False,debug):
-					if debug:
-						self.log("found",template['name'],"offset",x,y)
-					template['dx'] = x
-					template['dy'] = y
-					return True
-		return False
-
-	def load_template(self,template):
-		"""
-		Just load a single template
-		"""
-		if not self.valid_filename.match(template):
-			raise RuntimeError('invalid filename: '+repr(template))
-		return json.load(io.open(TEMPLATEDIR+template+TEMPLATEEXT))
-
 	def prep_templates(self,templates):
 		"""
-		Load a bunch of templates for comparision/searching.
-		- it loads the template's image contents for comparision
-		- it extracts the searches
-		- it calculates the condition (!template)
-		- it tries to optimize rectangle order for faster compare
+		Load a bunch of templates for comparision/searching
+		and extract the condition on each template based on the prefixing `!`
 		"""
 		tpls = []
 		for l in templates:
@@ -605,33 +769,11 @@ class rfbImg(easyrfb.client):
 				# !!template	-> cond=false !template
 				# !!!template	-> cond=true  !template
 				# !!!!template	-> cond=true  !!template
+				# !!!!!template	-> cond=true  !!!template
 				cond = l[1]=='!' and l[2]=='!'
 				f = l[(cond and 2 or 1):]
 			try:
-				t = self.load_template(f)
-				n = t['img']
-				i = cacheimage(LEARNDIR+n)
-				rects = []
-				search = []
-				for r in t['r']:
-					if r[3]==0 or r[4]==0:
-						# Special search, if distance parameter is odd search backwards
-						if r[3]==0:
-							search.append((0, (r[0]&1) and -1 or 1, r[4]))
-						else:
-							search.append(((r[0]&1) and -1 or 1, 0, r[3]))
-						continue
-
-					rect = (r[1],r[2],r[1]+r[3],r[2]+r[4])
-					pixels = r[3]*r[4]
-					spec = { 'r':r, 'name':n, 'img':i.crop(rect), 'rect':rect, 'max':abs(r[0]), 'pixels':r[3]*r[4] }
-					# poor man's sort, keep the smallest rect to the top
-					# (probable speed improvement)
-					if rects and pixels <= rects[0]['pixels']:
-						rects.insert(0,spec)
-					else:
-						rects.append(spec)
-				tpls.append({ 'name':l, 't':t, 'i':i, 'r':rects, 'cond':cond, 'search':search })
+				tpls.append(dict(t=cachedTemplate(f).parse(), cond=cond))
 			except Exception,e:
 				twisted.python.log.err(None, "load")			#TWISTED
 				return None
@@ -650,10 +792,13 @@ class rfbImg(easyrfb.client):
 			waiter['match'] = None
 			return True
 
+#		if debug: debug = lambda **kw: self.diag(**kw)
+
 		for t in tpls:
 			# Check all the templates
-			if self.check_template(t,debug)==t['cond']:
-				waiter['match'] = t
+			f	= t['t'].match(self.img, debug)
+			if (f is None) == (not t['cond']):
+				waiter['match'] = (t, f)
 				if 'img' in waiter:
 					waiter['img'] = self.img.convert('RGB')
 				return True
@@ -916,8 +1061,13 @@ class RfbCommander(object):
 			self.send(repr(kw))
 		return True
 
+	def debug(self):
+		def debug(**kw):
+			self.diag(**kw)
+		return debug
+
 	def log(self, *args, **kw):
-		print(" ".join(tuple(str(v) for v in args)+tuple(str(n)+"="+str(v) for n,v in kw.iteritems())))
+		D(*args, **kw)
 		return self
 
 	def out(self, s, *args, **kw):
@@ -1335,36 +1485,41 @@ class RfbCommander(object):
 		yield self.__Nothing
 		yield True
 
-	def templatemouse(self, x, n, click):
-		tpl	= self.rfb.load_template(x.split('.',1)[0])
-		r	= tpl['r']
-		try:
-			n	= int(x.split('.',1)[1])
-		except Exception,e:
-			n	= 0
-		n	= min(n, len(r))
-		r	= r[max(0,n-1)]
-
-		# Mouse button release
-		if not click and r[1] < self.rfb.lm_x < r[1]+r[3]-1 and r[2] < self.rfb.lm_y < r[2]+r[4]-1:
-			# jitter 1 pixel
-			yield (self.rfb.lm_x+rand(3)-1, self.rfb.lm_y+rand(3)-1)
+	def templatemouse(self, t, n, click):
+		tpl	= self.template(t)
+		if not tpl:
 			return
 
-		x	= r[1]+rand(r[3]);
-		y	= r[2]+rand(r[4]);
+		try:
+			n	= int(t.split('.',1)[1])
+		except Exception,e:
+			n	= 0
+		if not n:	n=1
+		d,x,y,w,h	= tpl.getRect(n)
 
-		self.diag(x=x, y=y, lx=self.rfb.lm_x, ly=self.rfb.lm_y)
+		lx		= self.rfb.lm_x
+		ly		= self.rfb.lm_y
+
+		# Mouse button release
+		if not click and x < lx < x+w-1 and y < ly < y+h-1:
+			# jitter 1 pixel
+			yield (lx+rand(3)-1, ly+rand(3)-1)
+			return
+
+		x	+= rand(w);
+		y	+= rand(h);
+
+		self.diag(x=x, y=y, lx=lx, ly=ly)
 		# move mouse in n pieces
 		try:
 			# We should move relative to a random spline,
 			# but this must do for now
-			n	= min(int(n), (abs(self.rfb.lm_x-x)+abs(self.rfb.lm_y-y))/20)
+			n	= min(int(n), (abs(lx-x)+abs(ly-y))/20)
 			k	= n-1
 			while k>0:
 				k	= k-1
-				tx	= curve(x, self.rfb.lm_x, k, n)
-				ty	= curve(y, self.rfb.lm_y, k, n)
+				tx	= curve(x, lx, k, n)
+				ty	= curve(y, ly, k, n)
 				self.rfb.pointer(tx, ty)
 				yield this.sleep(0.01 + 0.01 * rand(10))
 		except Exception,e:
@@ -1462,17 +1617,17 @@ class RfbCommander(object):
 		- fails if no template matches
 		- prints first matching template
 		"""
-		w = {'t':templates}
-		return len(templates) and self.rfb.check_waiter(w, True) and self.print_wait(w)
+		w = dict(t=templates)
+		return len(templates) and self.rfb.check_waiter(w, self.debug()) and self.print_wait(w)
 
 	def cmd_state(self,*templates):
 		"""
 		state template..: like check, but writes the state (picture) to s/TEMPLATE.img
 		"""
-		w = {'t':templates, 'img':1}
-		return len(templates) and self.rfb.check_waiter(w, True) and self.print_wait(w)
+		w = dict(t=templates, img=1)
+		return len(templates) and self.rfb.check_waiter(w, self.debug()) and self.print_wait(w)
 
-	def cmd_wait(self,*templates):
+	def cmd_wait(self,timeout,*templates):
 		"""
 		wait count template..: wait count screen updates for one of the given templates to show up
 		.
@@ -1480,33 +1635,34 @@ class RfbCommander(object):
 		.
 		Note: This waits count frames, not a defined time
 		"""
-		if len(templates)<2:
+		if not templates:
 			yield self.fail()
 			return
-		timeout = int(templates[0])
 
 		def result(**waiter):
 			self.scheduler(self.print_wait(waiter))
 
-		self.rfb.wait(cb=result, t=templates[1:], retries=abs(timeout), img=timeout<0)
+		timeout = int(timeout)
+		self.rfb.wait(cb=result, t=templates, retries=abs(timeout), img=timeout<0)
 		yield self.__Nothing
 		# return value see result()
 
 	def print_wait(self,waiter):
-		w	= waiter.get('match')
-		if w:
-			self.log("match",w)
-			if w['cond']:
-				self.send('found %s %s %s' % (w['name'], w['dx'], w['dy']))
-			else:
-				self.send('spare %s' % (w['name']))
-			if 'img' in waiter:
-				waiter['img'].save(STATEDIR+w['name']+IMGEXT)
-			return self.ok()
+		m	= waiter.get('match')
+		if not m:
+			return self.fail('timeout')
+		m,f	= m
+		t	= m['t']
+		cond	= m['cond']
+
+		self.log("match",f,cond,t)
+		if cond:
+			self.send('found %s %s' % (t.getName(), str(f)))
 		else:
-			self.log("timeout")
-			self.send('timeout')
-			return self.fail()
+			self.send('spare %s' % (t.getName()))
+		if 'img' in waiter:
+			waiter['img'].save(STATEDIR+t.getName()+IMGEXT)
+		return self.ok()
 
 	def cmd_ping(self):
 		"""
@@ -1523,17 +1679,17 @@ class RfbCommander(object):
 		self.rfb.stop()
 		return self.ok()
 
-	def template(self, prefix, name):
+	def template(self, name, prefix=''):
 		"""
 		load and returns the template named after
 		prefix plus name up to the first underscore
 		"""
-		t	= name.split('.',1)[0]
-		if t and self.valid_filename.match(t):
-			return self.rfb.load_template(prefix+t)
 
-		self.fail('wrong name', name=name, prefix=prefix, t=t)
-		return None
+		try:
+			return cachedTemplate(prefix+(name.split('.',1)[0]))
+		except:
+			self.fail('template error', name=name, prefix=prefix)
+			return None
 
 	def cmd_extract(self, name, *img):
 		"""
@@ -1555,7 +1711,7 @@ class RfbCommander(object):
 		placement of following pictures accordingly.
 		This way you can create multiple column layouts.
 		"""
-		tpl	= self.template('extract', name)
+		tpl	= self.template(name, 'extract')
 		if not tpl:
 			return self.fail()
 
@@ -1657,7 +1813,9 @@ class RfbCommander(object):
 		RRGGBB are RGB values (color) and TT is transparency.
 		00 is min and 99 is max
 		"""
-		t	= self.template('collage', name)
+		t	= self.template(name, 'collage')
+		if not t:
+			return self.fail()
 		r	= t['r']
 		return self.fail()
 		return self.ok()
