@@ -1388,7 +1388,8 @@ class RfbCommander(object):
 			self.mode	= oldmode
 			self.args	= oldargs
 			self.state	= oldstate
-			file.close()
+			if file:
+				file.close()
 
 	def cmd_run(self, macro, *args):
 		"""
