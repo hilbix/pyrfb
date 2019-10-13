@@ -18,6 +18,7 @@ if (!is_dir($base)) die("wrong $targ");
 $l = count($pi);
 if ($l!=3) die("too many macros: $l");
 
+# There is only 1 .. for now
 for ($i=1; ++$i<$l; )
   {
     $f = $pi[$i];
@@ -26,7 +27,10 @@ for ($i=1; ++$i<$l; )
     $t .= " $f";
   }
 
-# Fetch macro arguments from Query-String?
+# fetch arguments from POST data
+$r = file_get_contents("php://input");
+if (ctype_print($r))
+  $t .= " $r";
 
 $fd = fsockopen("unix://../sub/$targ/sock");
 if (!$fd) die("cannot open $targ");
