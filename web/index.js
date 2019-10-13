@@ -746,6 +746,7 @@ var macro =
     this.was	= '';
     this.wasurl	= '';
     this.sel	= {};
+    this.args	= {};
     this.mode	= null;
     emit.register('sel-m', (x,y,s) => this.setup(s));
     this.setup('run');	// assumed, perhaps later we can fix this
@@ -786,22 +787,34 @@ var macro =
     this.mode	= what;
     return this.select();
   }
-, click_run:	function (m) { this.toggle(1, m); }
+, click_run:	function (m)
+  {
+    var old = this.toggle(1, m)[0];
+    var now = this.sel['run'][0];
+    if (old && now && old!=now)
+      {
+        var e = $('mrun');
+        this.args[old]	= e.value;
+        e.value		= this.args[now] || '';
+      }
+  }
 , click_ed:	function (m) { this.toggle(1, m); this.load(m) }
 , click_new:	function (m) { this.toggle(1, m); this.load(m) }
 , click_del:	function (m) { this.toggle(0, m); }
 , getsel:	function () { return this.mode=='new' ? 'ed' : this.mode; }
 , toggle:	function (radio, id)
   {
-    var	s, m=this.getsel();
+    var	s, old, m=this.getsel();
 
-    if (radio || !(s=this.sel[m]))
+    old	= this.sel[m];
+    if (radio && old && old[0]!=id)
       s	= [id];
     else
-      s	= ArrayToggle(s, id);
+      s	= ArrayToggle(old, id);
     this.sel[m]	= s;
     xLOG('mtoggle', id, s);
     this.select();
+    return old;		// only returns old with radio
   }
 , select:	function ()
   {
@@ -878,7 +891,7 @@ var macro =
     var u	= this.getname(this.sel['run'][0]);
     xLOG('run',u);
     return req
-      .P(['macro.php', u], '', $('mdef').value)
+      .P(['macro.php', u], '', $('mrun').value)
       .then(t => { xLOG('ran',u,t); out('macro',u,t); return t; })
   }
 , mdel:		function ()
