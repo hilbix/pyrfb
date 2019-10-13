@@ -261,7 +261,7 @@ for (var i=0; i<edit.r.length; i++)
     y.push(__("li",___("[ ",a," ] ",t)));
   }
 clear("regions",__("div",x));
-clear("regionlist",__("ul",y));
+clear("regionlist",__("ol",y));
 }
 function mkdelregion(i)
 {
