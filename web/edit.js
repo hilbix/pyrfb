@@ -51,13 +51,16 @@ switch (++blinker)
   case 1:
     currentregion.regiondiv.style.opacity = 0.5;
     currentregion.regiondiv.style.background = "red";
+    currentregion.regiondiv.style.borderColor = "black";
     break;
   case 2:
     currentregion.regiondiv.style.background = "blue";
+    currentregion.regiondiv.style.borderColor = "white";
     break;
   default:
     currentregion.regiondiv.style.opacity = 1;
     currentregion.regiondiv.style.background = "transparent";
+    currentregion.regiondiv.style.borderColor = "transparent";
     blinker = 0;
     break;
   }
