@@ -1515,7 +1515,7 @@ class RfbCommander(object):
 		for a in args:
 			if a not in self.repl:
 				return self.err()
-			if self.repl[v] != '':
+			if self.repl[a] != '':
 				return self.fail()
 		return self.ok()
 
