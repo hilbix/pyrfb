@@ -62,6 +62,7 @@ MACROEXT='.macro'
 valid_filename = re.compile('^[_a-zA-Z0-9][-_a-zA-Z0-9]*$')
 
 log	= None
+nropen	= 0
 
 # WTF, why isn't there a standard function for this?
 def updateDict(o, *args, **kw):
@@ -132,6 +133,14 @@ def rand(x):
 def D(*args, **kw):
 	print(" ".join(tuple(str(v) for v in args)+tuple(str(n)+"="+str(v) for n,v in kw.iteritems())))
 
+def myrepr(v):
+	if inspect.isgenerator(v):
+		return 'gen('+v.__name__+')'
+	return repr(v)
+
+def ordered_repr(d):
+	return ' '.join(str(x)+'='+myrepr(d[x]) for x in sorted(dict(**d).keys()))
+
 class Template:
 	"""
 	Searches are regions which are 0 width or 0 height.  Just a dot resets search.
@@ -140,13 +149,16 @@ class Template:
 	If 'delta' is negated, search is done opposite direction.
 	"""
 	def __init__(self, path, name):
+		global	nropen
 		"""
 		Load a single template and extract the searches
 		"""
 		self.path	= path
 		self.name	= name
+		nropen	+= 1
 		with io.open(path) as f:
 			self.tpl	= json.load(f)
+		nropen	-= 1
 		self.parsed	= False
 		self.n		= None
 		self.i		= None
@@ -899,6 +911,13 @@ def bool2str(b):
 def curve(end, start, pos, steps, rnd=5):
 	return rand(rnd+rnd+1)-rnd + end + pos * (start - end) / steps
 
+class Return(object):
+	def __init__(self, val):
+		self.__val	= val
+
+	def val(self):
+		return self.__val
+
 class RfbCommander(object):
 	valid_filename	= valid_filename
 
@@ -921,6 +940,8 @@ class RfbCommander(object):
 		#self.rfb	= io.factory.rfb	# not set yet
 		self.quiet	= False
 		self.verbose	= False
+		self.debugging	= False
+		self.tracing	= False
 		self.mode	= self.MODE_SPC
 		self.paused	= True
 		self.stack	= [self.lineInput()]
@@ -942,29 +963,39 @@ class RfbCommander(object):
 			self.log('depth', max)
 
 	def scheduler(self, v=None):
-#		self.log('scheduler', v)
+		self.trace(_sched='start', val=v)
 		max	= 0
 		while self.stack:
 			g	= self.stack[len(self.stack)-1]
 			try:
+				self.trace(_sched=len(self.stack), send=g, v=v)
 				v	= g.send(v)
 			except StopIteration:
-#				self.log('sched','stop')
+				self.trace(_sched=len(self.stack), stop=g)
 				self.stack.pop()
 				continue
+			while isinstance(v, Return):
+				v	= v.val()
+				g	= self.stack.pop()
+				self.trace(_sched=len(self.stack), fin=g, ret=v)
+				try:
+					g.send(v)
+					raise RuntimeError('Return() not followed by return')
+				except StopIteration:
+					pass
 
 			if v is self.__Nothing:
-#				self.log('sched','ret')
+				self.trace(_sched=len(self.stack), wait=g)
 				self.setmax(max)
 				return
 			if inspect.isgenerator(v):
-#				self.log('sched','gen')
+				self.trace(_sched=len(self.stack), sub=v)
 				self.stack.append(v)
 				if max<len(self.stack): max = len(self.stack)
 				if max>self.max+10: self.setmax(max)
 				v	= None
-#			self.log('sched','v', v)
-#		self.log('scheduler','end')
+#			self.trace(_sched=len(self.stack), val=v)
+		self.trace(_sched='end')
 		self.io.end()
 
 	def lineInput(self):
@@ -983,9 +1014,9 @@ class RfbCommander(object):
 			if not self.io.resume():		# Enable factory, we are available again
 				self.log('gone away')
 				self.bye	= True
-				yield False			# going away unexpected is an error
+				yield Return(False)		# going away unexpected is an error
 				return
-		yield True					# this is what we expect, a clean self.bye (due to 'exit')
+		yield Return(True)				# this is what we expect, a clean self.bye (due to 'exit')
 
 	#
 	# Direct IO Helpers
@@ -1005,6 +1036,7 @@ class RfbCommander(object):
 		else:
 			try:
 				st	= None
+				# XXX TODO XXX Return(..)?
 				st	= yield self.processLine(line, self._prompt)	# only expand on prompts
 			except Exception,e:
 				twisted.python.log.err(None, "line")				#TWISTED
@@ -1061,12 +1093,26 @@ class RfbCommander(object):
 
 	def diag(self, **kw):
 		if self.verbose:
-			self.send(repr(kw))
+			self.send(ordered_repr(kw))
 		return True
 
-	def debug(self):
+	def trace(self, **kw):
+		if self.tracing:
+			r	= ordered_repr(kw)
+			self.log('trace', r)
+			self.send(r)
+		return True
+
+	def debug(self, **kw):
+		if self.debugging:
+			r	= ordered_repr(kw)
+			self.log('debug', r)
+			self.send(r)
+		return True
+
+	def debugFn(self):
 		def debug(**kw):
-			self.diag(**kw)
+			self.debug(**kw)
 		return debug
 
 	def log(self, *args, **kw):
@@ -1116,7 +1162,7 @@ class RfbCommander(object):
 		returns None  on error (exception) and set terminaton (bye)
 		"""
 		self.log("cmd",args)
-		self.diag(proc=args)
+		self.trace(proc=args)
 		return getattr(self,'cmd_'+args[0], self.unknown)(*args[1:])
 
 	#
@@ -1148,31 +1194,59 @@ class RfbCommander(object):
 		self.success = args and ' '.join(args) or None
 		return self.ok()
 
-#	@restore_property('quiet')
 	def cmd_quiet(self,*args):
 		"""
-		quiet cmd: suppress normal output of cmd
+		Suppress normal output of cmd
+		Commandline see 'verbose'.  'verbose' and 'quiet' are independent.
 		"""
-		old		= self.quiet
-		self.quiet	= True
-		try:
-			v	= yield self.processArgs(args)
-		finally:
-			self.quiet	= old
-		yield v
+		yield self.onoff('quiet', *args)
 
-#	@restore_property('verbose')
 	def cmd_verbose(self,*args):
 		"""
+		verbose: get verbose status
+		verbose on: enable verbose
+		verbose off: disable verbose
 		verbose cmd: verbose output of cmd (see: dump)
 		"""
-		old		= self.verbose
-		self.verbose	= True
+		yield self.onoff('verbose', *args)
+
+	def cmd_debug(self, *args):
+		"""
+		Enable debugging output.
+		Commandline see 'verbose'.  'verbose' and 'quiet' are independent.
+		"""
+		yield self.onoff('debugging', *args)
+
+	def cmd_trace(self, *args):
+		"""
+		Enable scheduler tracing.
+		Commandline see 'verbose'.  'verbose' and 'quiet' are independent.
+		"""
+		yield self.onoff('tracing', *args)
+
+	def onoff(self, prop, *args):
+		old	= getattr(self, prop)
+		if len(args)==1:
+			st	= args[0]=='on'
+			if st or args[0]=='off':
+				if not st:
+					self.debug(**{prop:st})
+				setattr(self, prop, st)
+				if st:
+					self.debug(**{prop:st})
+				args	= []
+		if not args:
+			yield Return(old)
+			return
+
+		setattr(self, prop, True)
+		self.debug(**{prop:True})
 		try:
 			v	= yield self.processArgs(args)
 		finally:
-			self.verbose	= old
-		yield v
+			self.debug(**{prop:old})
+			setattr(self, prop, old)
+		yield Return(v)
 
 	def cmd_failure(self,*args):
 		"""
@@ -1310,17 +1384,16 @@ class RfbCommander(object):
 
 	def sleep(self, seconds):
 		self.io.sleep(seconds, self.scheduler, self)
-		yield self.__Nothing
+		yield Return(self.__Nothing)
 
 	def cmd_sleep(self, sec):
 		"""
 		sleep sec: sleep the given seconds
 		"""
 		yield self.sleep(float(sec))
-		yield self.ok()
+		yield Return(self.ok())
 
-#	@restore_property('mode')
-	def cmd_sub(self, macro, *args):
+	def cmd_sub(self, *args):
 		"""
 		sub MACRO args..:
 		- read file o/MACRO.macro line by line
@@ -1339,10 +1412,15 @@ class RfbCommander(object):
 		- more replacements might show up in future
 		- see also: set
 		"""
+		return self.run_sub(False, *args)
+
+	def run_sub(self, run, macro, *args):
+		global	nropen
 
 		# prevent buggy names
 		if not self.valid_filename.match(macro):
-			yield self.fail()
+			if run:		self.bye	= True
+			yield Return(self.fail())
 			return
 
 		oldargs		= self.args
@@ -1357,7 +1435,9 @@ class RfbCommander(object):
 		try:
 			# read the macro file
 			file	= None
+			nropen += 1
 			file	= io.open(MACRODIR+macro+MACROEXT)
+			self.trace(_macro=macro, open=nropen)
 			for l in file:
 				# ignore empty lines and comments
 				if l.strip()=='':	continue
@@ -1372,17 +1452,19 @@ class RfbCommander(object):
 				st		= yield self.processLine(l, True)
 				if not st:
 					# pass on errors
-					yield st
+					if run:		self.bye	= True
+					yield Return(st)
 					return
 				if self.bye:
-					self.bye	= False
+					self.bye	= run
 					# exit is success
-					yield self.ok()
+					yield Return(self.ok())
 					return
 
 			# EOF fails
-			self.diag(macro=macro, err="EOF reached, no 'exit'")
-			yield self.fail()
+			self.diag(_macro=macro, err="EOF reached, no 'exit'")
+			if run:		self.bye	= True
+			yield Return(self.fail())
 
 		finally:
 			self.mode	= oldmode
@@ -1390,16 +1472,14 @@ class RfbCommander(object):
 			self.state	= oldstate
 			if file:
 				file.close()
+				nropen -= 1
+				self.trace(_macro=macro, close=nropen)
 
-	def cmd_run(self, macro, *args):
+	def cmd_run(self, *args):
 		"""
 		run MACRO args..: same as "if sub MACRO", but followed by "return"
 		"""
-
-		# XXX TODO XXX how to do tail recursion here so this becomes "goto"?
-		st		= yield self.cmd_sub(macro, *args)
-		self.bye	= True
-		yield st
+		return self.run_sub(True, *args)
 
 	def cmd_if(self, *args):
 		"""
@@ -1415,9 +1495,9 @@ class RfbCommander(object):
 		self.state	= st
 		if st is None:
 			self.bye	= False
-			yield self.fail()
+			yield Return(self.fail())
 		else:
-			yield self.ok()
+			yield Return(self.ok())
 
 	def cmd_then(self, *args):
 		"""
@@ -1478,7 +1558,7 @@ class RfbCommander(object):
 			a,b	= yield self.templatemouse(x, y, click)
 
 		self.rfb.pointer(a,b,click)
-		yield self.drain(False)
+		yield Return(self.drain(False))
 
 	def drain(self, refresh):
 		self.log("drain",refresh)
@@ -1487,7 +1567,7 @@ class RfbCommander(object):
 			self.scheduler()
 		self.rfb.event_add(drained)
 		yield self.__Nothing
-		yield True
+		yield Return(True)
 
 	def templatemouse(self, t, n, click):
 		tpl	= self.template(t)
@@ -1507,7 +1587,7 @@ class RfbCommander(object):
 		# Mouse button release
 		if not click and x < lx < x+w-1 and y < ly < y+h-1:
 			# jitter 1 pixel
-			yield (lx+rand(3)-1, ly+rand(3)-1)
+			yield Return((lx+rand(3)-1, ly+rand(3)-1))
 			return
 
 		x	+= rand(w);
@@ -1530,7 +1610,7 @@ class RfbCommander(object):
 			pass
 
 		# return the real position
-		yield (x,y)
+		yield Return((x,y))
 
 	def cmd_learn(self,to):
 		"""
@@ -1558,7 +1638,7 @@ class RfbCommander(object):
 		"""
 		for k in " ".join(args):
 			self.rfb.key(ord(k))
-		yield self.drain(True)
+		yield Return(self.drain(True))
 
 	def cmd_code(self,*args):
 		"""
@@ -1569,7 +1649,7 @@ class RfbCommander(object):
 			if v == False:
 				v	= int(k, base=0)
 			self.rfb.key(v)
-		yield self.drain(True)
+		yield Return(self.drain(True))
 
 	def cmd_exit(self):
 		"""
@@ -1587,7 +1667,7 @@ class RfbCommander(object):
 		if len(args):
 			st	= yield self.processArgs(args)
 		self.bye = True
-		yield st
+		yield Return(st)
 
 	def cmd_next(self):
 		"""
@@ -1601,7 +1681,7 @@ class RfbCommander(object):
 			self.scheduler()
 		self.rfb.next(bump)
 		yield self.__Nothing
-		yield self.ok()
+		yield Return(self.ok())
 
 	def cmd_flush(self):
 		"""
@@ -1622,14 +1702,14 @@ class RfbCommander(object):
 		- prints first matching template
 		"""
 		w = dict(t=templates)
-		return len(templates) and self.rfb.check_waiter(w, self.debug()) and self.print_wait(w)
+		return len(templates) and self.rfb.check_waiter(w, self.debugFn()) and self.print_wait(w)
 
 	def cmd_state(self,*templates):
 		"""
 		state template..: like check, but writes the state (picture) to s/TEMPLATE.img
 		"""
 		w = dict(t=templates, img=1)
-		return len(templates) and self.rfb.check_waiter(w, self.debug()) and self.print_wait(w)
+		return len(templates) and self.rfb.check_waiter(w, self.debugFn()) and self.print_wait(w)
 
 	def cmd_wait(self,timeout,*templates):
 		"""
@@ -1640,7 +1720,7 @@ class RfbCommander(object):
 		Note: This waits count frames, not a defined time
 		"""
 		if not templates:
-			yield self.fail()
+			yield Return(self.fail())
 			return
 
 		def result(**waiter):
@@ -1648,7 +1728,7 @@ class RfbCommander(object):
 
 		timeout = int(timeout)
 		self.rfb.wait(cb=result, t=templates, retries=abs(timeout), img=timeout<0)
-		yield self.__Nothing
+		yield Return(self.__Nothing)
 		# return value see result()
 
 	def print_wait(self,waiter):
