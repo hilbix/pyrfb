@@ -39,6 +39,7 @@ import re
 
 import sys
 import time
+import errno
 import random
 import inspect
 import traceback
@@ -49,6 +50,75 @@ import PIL.ImageStat
 import PIL.ImageChops
 import PIL.ImageDraw
 
+# WTF?!? What a bunch of hyper ugly code!  Just for some dead old POSIX locks ..
+# See https://stackoverflow.com/a/46407326/490291
+# Wrap this in a class as we do not want to pollute the global namespace even more
+try:
+	import	fcntl
+	class LOCK:
+		@classmethod
+		def lock_file(klass, io, exclusive=True):
+			fcntl.lockf(io, fcntl.LOCK_EX if exclusive else fcntl.LOCK_SH)
+		@classmethod
+		def unlock_file(klass, io):
+			fcntl.lockf(io, fcntl.LOCK_UN)
+except ImportError:
+	import msvcrt
+	# Well, no, this probably isn't Windows compatible at all
+	class LOCK:
+		@classmethod
+		def filesize(klass, io):
+			pos	= io.tell()
+			io.seek(0, os.SEEK_END)
+			ret	= io.tell()
+			io.seek(pos, os.SEEK_SET)
+			return ret
+		@classmethod
+		def lock_file(klass, io, exclusive=Treu):
+			msvcrt.locking(io.fileno(), msvcrt.LK_LOCK if exclusive else msvcrt.LK_RLOCK, klass.filesize(f))
+		@classmethod
+		def unlock_file(klass, n):
+			msvcrt.locking(io.fileno(), msvcrt.LK_UNLCK, klass.filesize(f))
+
+# WTF why does io.open() does not allow locking semantics?
+# That's a crucial feature!
+# with Open() as file: ..
+nropen	= 0
+class Open:
+	# I really have no idea what happens if you use wrong args/kw
+	def __init__(self, name, write=False, append=False, binary=False, lock=False, utf8=False, *args, **kw):
+		global	nropen
+
+		if append:
+			mode	= 'a+'	# this is always read/write while write==append
+			write	= True
+		elif write:
+			mode	= 'w+'	# this is always read/write
+		else:
+			mode	= 'r'
+		if binary:
+			mode	+= 'b'
+		else:
+			mode	+= 't'
+			if utf8:
+				kw['encoding']	= kw.get('encoding', 'utf-8')
+
+		self.file	= io.open(name, mode, *args, **kw)
+		nropen	+= 1
+		if lock:
+			LOCK.lock_file(self.file, write)
+		self.lock	= lock
+
+	def __enter__(self):
+		return self.file
+
+	def __exit__(self, exc_type=None, exc_value=None, traceback=None):
+		global	nropen
+		if self.lock:
+			LOCK.unlock_file(self.file)
+		self.file.close()
+		nropen	-= 1
+		return exc_type is None
 
 LEARNDIR='l/'
 STATEDIR='s/'
@@ -58,11 +128,52 @@ TEMPLATEEXT='.tpl'
 MACRODIR='o/'
 MACROEXT='.macro'
 
+# Because of https://bugs.python.org/issue13769#msg229882 json.dump() is completely useless.
+# Because of missing parse_string, json.load() is completely useless.
+# Hence we have to re-invent the wheel, again and again and again and again,
+# and instead of using some sane, quick, easy, memory efficient way,
+# we have to do it error-prone, slow, complex, memory inefficient way.
+# WTF, why was that done so badly?
+#
+# And why was the old bullshit taken over into Python3 instead of replacing it by something more sane?
+# (I would expect an easy to wrap python class for decoding.)
+#
+# Das kommt mir doch alles sehr lateinisch vor ..
+# encoding='latin1' -> der Default steht total sinnfrei auf UTF-8, wodurch str-Typen nicht encodiert werden können!
+def ioJSONu(io, **kw):	return io.write(unicode(toJSON(o, **kw)))
+def ioJSON(io, **kw):	return io.write(toJSON(o, **kw))
+def toJSON(o, **kw):	return json.dumps(o, encoding='latin1', **kw)
+def toJSONu(o, **kw):	return unicode(toJSON(o, **kw))				# USE THIS! JSON must return unicode
+def toU(s):		return unicode(s, endcoding='latin')			# USE THIS! str -> unicode
+def fromU(u):		return u.encode('latin')				# USE THIS! unicode -> str
+def fromJSON(j):	return json.loads(j, 'latin1')
+def fromJSONio(io):	return json.load(io, 'latin1')
+def fixJSON(j):		return fixed(fromJSON(j))				# USE THIS!
+def fixJSONio(io):	return fixed(fromJSONio(io))				# USE THIS!
+
+# Because json.load() is missing parse_string, and json.loads(), too,
+# we have to fix it by re-inventing the wheel to be able to call
+# fix_uni() for all and everything:
+def fixed_dict(d):	return { fixed(k):fixed(v) for k,v in d.iteritems() }
+def fixed_list(l):	return [fixed(a) for a in l]
+def fixed_uni(u):
+	"""
+	return (str) if possible, (unicode) else
+	"""
+	try:
+		return fromU(u);
+	except:
+		return u
+def fixed(o):
+	if isinstance(o, dict):		return fixed_dict(o);
+	if isinstance(o, list):		return fixed_list(o);
+	if isinstance(o, unicode):	return fixed_uni(o);
+	return o
+
 # Dots are disallowed for a good reason
 valid_filename = re.compile('^[_a-zA-Z0-9][-_a-zA-Z0-9]*$')
 
 log	= None
-nropen	= 0
 
 # WTF, why isn't there a standard function for this?
 def updateDict(o, *args, **kw):
@@ -102,11 +213,11 @@ def cached(factory, path, *args, **kw):
 	arg/kw are used for caching, too, so they need to be JSON serializable.
 	"""
 	mtime	= os.stat(path).st_mtime
-	a	= json.dumps((args, kw), sort_keys=True) if args or kw else ''
-	c	= __CACHE.get(path, None)
+	a	= json.dumps((args, kw), sort_keys=True, encoding='latin1') if args or kw else ''
+	c	= __CACHE.get(path)
 	if c:
 		if c[0]==mtime:
-			r	= c[1].get(a, None)
+			r	= c[1].get(a)
 			if r:
 				return r
 		else:
@@ -149,16 +260,13 @@ class Template:
 	If 'delta' is negated, search is done opposite direction.
 	"""
 	def __init__(self, path, name):
-		global	nropen
 		"""
 		Load a single template and extract the searches
 		"""
 		self.path	= path
 		self.name	= name
-		nropen	+= 1
-		with io.open(path) as f:
+		with Open(path) as f:
 			self.tpl	= json.load(f)
-		nropen	-= 1
 		self.parsed	= False
 		self.n		= None
 		self.i		= None
@@ -828,13 +936,13 @@ class rfbImg(easyrfb.client):
 			if self.check_waiter(w):
 				# We found something
 				# Remove from list and notify the waiting task
-				del self.waiting[i]
+				del self.waiting[i]	# safe, as we return afterwards
 				w['cb'](**w)
 				# We must return here, else i gets out of sync
 				return
 			w['retries'] -= 1
 			if w['retries']<0:
-				del self.waiting[i]
+				del self.waiting[i]	# safe, as we return afterwards
 				w['match'] = None
 				w['cb'](**w)
 				return
@@ -844,7 +952,7 @@ def try_link(from_, to):
 		os.link(from_, to)
 		return True
 	except OSError,e:
-		if e.errno!=17:
+		if e.errno != errno.EEXIST:
 			raise
 		return False
 
@@ -931,7 +1039,7 @@ def var_replace(o, *d):
 				continue
 
 			for a in d:
-				if v in a:
+				if a and v in a:
 					r.append(a[v])
 					break
 			else:
@@ -1011,8 +1119,10 @@ class RfbCommander(object):
 
 		self.bye	= False
 		self._prompt	= None
+		self.globals	= None
 		self.repl	= {}
 		self.args	= {}
+		self.autovars	= False
 		self.success	= None
 		self.failure	= 'ko'
 		self.state	= None
@@ -1140,14 +1250,15 @@ class RfbCommander(object):
 		if not self._prompt:
 			return
 		# TODO XXX TODO print some stats here
-		self.write(var_replace(self._prompt, self.args, self.repl))
+		self.write(var_replace(self._prompt, self.args, self.repl, self.globals))
 
 	#
 	# Variables
 	#
 
 	def autoset(self):
-		r	= self.repl
+		self.autovars	= True
+		r		= self.repl
 
 		r['mouse.x']		= str(self.rfb.lm_x)
 		r['mouse.y']		= str(self.rfb.lm_y)
@@ -1160,6 +1271,8 @@ class RfbCommander(object):
 
 		r['sys.tick']		= str(self.rfb.tick)
 		r['sys.depth']		= str(len(self.stack))
+
+		r['all']		= ''.join([chr(x) for x in range(256)])
 
 		# XXX TODO XXX add more replacements
 
@@ -1234,7 +1347,7 @@ class RfbCommander(object):
 
 	def processLine(self, line, expand=False):
 		if expand:
-			line	= var_replace(line, self.args, self.autoset())
+			line	= var_replace(line, self.args, self.autoset(), self.globals)
 		return self.processArgs(line.split(self.mode))
 
 	def processArgs(self, args):
@@ -1416,7 +1529,7 @@ class RfbCommander(object):
 		is random and implementation dependent.
 		.
 		You cannot override macro parameters like {0}, {*} or {#} etc.
-		To see all variables, do "prompt" followed by "set"
+		To see all variables, do "prompt" followed by "load" followed by "set"
 		.
 		There is a subtle detail:
 		'set a ' <- note: trailing blank -- sets {a} to the empty string
@@ -1429,16 +1542,26 @@ class RfbCommander(object):
 		else set myvar default
 		"""
 		if not var:
+			flag	= False
+			if self.globals is not None:
+				for k,v in sorted(self.globals.iteritems()):
+					self.writeLine('g{'+k+'} '+repr(v))
+					if k in self.repl and v!=self.repl[k]:
+						flag	= True
+			else:
+				self.writeLine('use "load" to load globals')
+			if not self.autovars:
+				self.writeLine('use "prompt" to get automatic vars')
+			if flag:
+				self.writeLine('note: vars override globals, use "save" to save globals')
 			for k,v in sorted(self.repl.iteritems()):
-				self.writeLine('macro: {'+k+'} '+repr(v))
+				self.writeLine('v{'+k+'} '+repr(v))
 			for k,v in sorted(self.args.iteritems()):
-				self.writeLine('var:   {'+k+'} '+repr(v))
-			return self.ok()
-
-		if not args:
+				self.writeLine('m{'+k+'} '+repr(v))
+		elif not args:
 			return var in self.args or var in self.repl
-
-		self.repl[var]	= ' '.join(args)
+		else:
+			self.repl[var]	= ' '.join(args)
 		return self.ok()
 
 	def cmd_unset(self, *args):
@@ -1450,6 +1573,255 @@ class RfbCommander(object):
 		for var in args:
 			del self.repl[var]
 		return self.ok()
+
+	def globs(self, globs):
+		# fix possibly buggy things
+		print('before', repr(globs))
+		kick	= []
+		fix	= []
+		for a in globs.iterkeys():
+			if a.startswith('global.'): continue
+			if 'global.'+a not in globs:
+				# if 'a' and 'global.a' exist in globals.json, then ignore 'a'
+				fix.append(a)
+			kick.append(a)	# unsafe: del globs[a]
+		for a in fix:
+			globs['global.'+a]	= globs[a]
+		for a in kick:
+			# Deleting keys while iterate over .keys() is safe in Python2 only.
+			# In Python3 this introduces subtle awful random RuntimeErrrors,
+			# so we must do delayed deletion.  But now we can use .iterkeys().
+			# Python3 WTF is breaking good and valid code!?!
+			# However, this probably is even faster, as .iterkeys() should be faster than .keys()
+			del globs[a]
+		print('after', repr(globs))
+		self.globals	= globs
+
+	def cmd_load(self, *args):
+		"""
+		load:		loads all globals
+		load var..:	load the given gobals (again)
+		.
+		Automatic globals always have 'global.' as prefix.
+		if you just load 'x' instead of 'global.x',
+		then 'x' is not considered by 'save'
+		"""
+		name	= STATEDIR+'globals.json'
+		try:
+			with Open(name, lock=True) as f:
+				try:
+					globs	= fixJSONio(f)
+				except ValueError, e:
+					return self.fail('could not read: '+name, e)
+		except (OSError,IOError), e:
+			if e.errno != errno.ENOENT:
+				raise
+			return self.fail('no globals file: '+name)
+
+		self.globs(globs)
+
+		# transfer global to variables
+		for a in args:
+			self.repl[a]	= globs.get(a if a.startswith('global.') else 'global.'+a, '')
+
+		self.send(str(len(globs))+' global(s) loaded')
+		return self.ok()
+
+	def cmd_save(self, *args):
+		"""
+		save:		save all automatic globals which are overridden by 'set'
+		save var..:	save the given globals only.  You must 'set' them first.
+		.
+		'save' automatically considers variables which start with 'global.'
+		To save variable '{x}' as global, use 'save x' which 'load's it as 'global.x' then
+		.
+		An empty global which is saved and unset in variables is removed from globals:
+		'set global.x ' <- note the space, then 'save' then 'unset global.x' then 'save global.x'
+		"""
+		# calculate the globals which have changes
+		changes	= {}
+		g	= self.globals or {}
+		g	= g.copy()		# need to .copy() to allow transactional behavior
+		dels	= []
+		if args:
+			# convenience, allow to "save a" to save {a} as {global.a}
+			for a in args:
+				k	= a if a.startswith('global.') else 'global.'+a
+				v	= self.repl.get(a)
+				if v is None:
+					if k!=a:
+						return self.fail('variable {'+a+'} not set')
+					if g.get(k)!='':
+						return self.fail('cannot delete nonempty global {'+k+'}')
+					dels.append(a)
+					continue
+
+				# "save a" saves global.a
+				k	= a if a.startswith('global.') else 'global.'+a
+
+				# check if global multiply given
+				# like in: save a global.a
+				b	= changes.get(k)
+				if v == b:	continue
+				if b is not None:
+					return self.fail('duplicate nonmatching global given: {'+k+'}')
+
+				# "save a" should fail if {a} and {global.a} are present and differ
+				# as this might introduce very difficult to find bugs later on
+				b	= self.repl.get(k)	# ==v if k==a .. (else broken computer)
+				if b is not None and v!=b:
+					return self.fail('variable mismatch of {'+a+'} and {'+k+'}')
+
+				# no check for g.get(k)==v here
+				# as we else would possibly miss duplicates
+				changes[k]	= v
+
+			# remove changes which do not change the global value from the last load
+			kick	= []
+			for k,v in changes.iteritems():
+				if g.get(k)==v:
+					kick.append(k)
+			for a in kick:
+				del changes[a]
+
+		else:
+			# just transfer every global.X variable to the globals again
+			# set global.X goes into self.repl, not in self.globals!
+			for k,v in self.repl.iteritems():
+				if k.startswith('global.') and v!=g.get(k):
+					changes[k] = v
+
+		if not changes and not dels:
+			return self.ok('nothing to save or unchanged')
+
+		#
+		# We have calculated all needed changes[] now.
+		# Now do the compare + write.
+		#
+
+		with Open(STATEDIR+'globals.json', write=True, lock=True) as f:
+			# get the current global store from disk
+			# It is write locked, so it cannot change until we are ready
+			try:
+				globs	= fixJSONio(f)
+			except ValueError:
+				globs	= {}
+
+			# check, if the changes are really changes to the file
+			# and that the changes are compatible to the last state from "load"
+			kick	= []
+			for k,v in changes.iteritems():
+				a	= globs.get(k)	# value on disk
+				b	= g.get(k)	# value from last load
+
+				g[k]	= v		# remember change in our local environment
+
+				# no global yet or our load is still valid: change is valid
+				if a is None or a==b:	continue
+
+				if a!=v:
+					# We have a conflicting change.
+					# a != b (disk and load differ)
+					# a != v (disk and value differ)
+					# b != v (load and value differ, this is from above how change[] is set up)
+					# Hence our local environment is incompatible to global state
+					return self.fail('Conflict: Global {'+k+'} changed while we changed it, too', glob=a, val=v, orig=g.get(k))
+				# We have a compatible change.
+				kick.append(k)
+			for a in kick:
+				del changes[a]
+
+			kick	= []
+			for a in dels:
+				v	= globs.get(a)
+				if v is None:	continue
+				if v!='':
+					return self.fail('Conflict: Global {'+a+'} not empty, cannot remove', dels=a, val=v)
+				kick.append(a)
+
+			if not changes and not dels:
+				self.globs(g)	# remember the changes locally, too
+				return self.ok('nothing left to save (already saved)')
+
+			for a in kick:
+				del globs[k]
+			for k,v in changes.iteritems():
+				globs[k]	= v
+
+			# XXX  TODO XXX UNSAFE BUG WARNING!
+			#
+			# If we are interrupted here, we have a problem.
+			# However it is extremely difficult to do it correctly in a locking situation.
+			#
+			# Another task waiting for a read-lock will get the current file data after our write-lock
+			# goes away.  So the data must be present there.
+			#
+			# However, if we write another file and only rename() it,
+			# this replaces the file on disk, but not the one which already is openly waiting for lock!
+			# This still refers to the original file (which is deleted now).
+			#
+			# The escape probably is to have a lockfile.  However this then needs two file handles,
+			# one to the lockfile and one to the real file, which is bad for the general case which is good.
+			# We probably want to open thousands of files (cmd 'sub'), hence doubling this number is
+			# extremely bad.  Also to create some dirty second files introduces trainloads of other bug
+			# possibilities, too.
+			#
+			# Hence we want to do it with a single FD in the general case, and only with multiple
+			# files when writing, which is rare (also locked, so only max 1 write needs to have a 2nd FD):
+			#
+			# Read can stay easy:
+			#
+			# - open the file
+			# - lock it for read
+			# - read the file
+			# - unlock and close
+			#
+			# In fact, we do not need locking here at all, as due to the semantics, a file does not
+			# change while it is read.  Hence we can just open the file and read, without locks.
+			#
+			# Write is a bit more complicated:
+			#
+			# - Read in the old file (as it cannot change while reading, we do not need locks here)
+			# - Write out a completely new file
+			# - sync() the new file, so it's data and metadata is savely on disk
+			# - We need to do the sync() without lock, as a sync() might take ages
+			# - Open and lock the old file for write
+			# - Check that the locked file still has the same metadata as the file on disk
+			# - If not, drop the lock and loop to "Open and lock the old file for write".
+			# - read the locked file and compare it with the data from the first step
+			# - If not equal, drop the lock and loop back to the beginning.
+			# - rename() the new file to the old file, which ensures atomic behavior.
+			# - On the new file there is no lock, hence the write lock is dropped.
+			# - And the old file now is deleted on disk
+			# - However some others still might try to get a lock on the old file!
+			# - Drop the lock to the old file
+			# - Now others might get the lock on the old file, even that it is deleted already.
+			#
+			# - The next thing they do (according to this algorithm) is to get the lock
+			# - and then check, that their file reference and the file on disk are the same.
+			# - As this is no more true they will drop the lock and try again.
+			#
+			# Doing it right is *way* too complicated.  But doing it right should be the default!
+			#
+			# Notes:
+			#
+			# - This is true for things like textfiles.
+			# - With copy-on-write files this could be done transactional far more easy.
+			# - We must not alter the old file in the above scenario, as old data might show up
+			#   after some crash with fsck().  Metadata and contents are not always in sync,
+			#   if you do not enforce this.  And we only enforce it on the contents
+			#   of the new file, outside all locks.
+			# - If we write the old file and crash while doing it, there would be the same
+			#   corruption as present here.  The goal was to get rid of exactly this possible
+			#   corruption, so we must not re-introduce it!
+
+			s	= toJSONu(globs, sort_keys=True, separators=(",\n",': '))
+			f.seek(0, io.SEEK_SET)
+			f.truncate()	# unsafe!
+			f.write(s)	# unsafe!
+
+		self.globs(g)	# remember the changes locally, too
+		return self.ok(str(len(changes))+' globals saved')
 
 	def cmd_mode(self, mode):
 		"""
@@ -1490,13 +1862,11 @@ class RfbCommander(object):
 		- {mouse.x} {mouse.y} {mouse.b} last mouse x y button
 		- {sys.tick} global tick counter
 		- {flag.X} where X are diverse flags
-		- to see all do: "prompt" followed by "set"
+		- to see all do: "prompt" followed by "load" followed by "set"
 		"""
 		return self.run_sub(False, *args)
 
 	def run_sub(self, run, macro, *args):
-		global	nropen
-
 		# prevent buggy names
 		if not self.valid_filename.match(macro):
 			if run:		self.bye	= True
@@ -1515,46 +1885,41 @@ class RfbCommander(object):
 
 		try:
 			# read the macro file
-			file	= None
-			nropen += 1
-			file	= io.open(MACRODIR+macro+MACROEXT)
-			self.trace(_macro=macro, open=nropen)
-			for l in file:
-				# ignore empty lines and comments
-				if l.strip()=='':	continue
-				if l[0]=='#':		continue
+			with Open(MACRODIR+macro+MACROEXT) as file:
+				self.trace(_macro=macro, open=nropen)
+				for l in file:
+					# ignore empty lines and comments
+					if l.strip()=='':	continue
+					if l[0]=='#':		continue
 
-				# l is unicode and contains \n
-				if l.endswith('\n'): l=l[:-1]
-				# we need UTF-8
-				l	= l.encode('utf8')
+					# l is unicode and contains \n
+					if l.endswith('\n'): l=l[:-1]
+					# we need UTF-8
+					l	= l.encode('utf8')
 
-				# parse result
-				st		= yield self.processLine(l, True)
-				if not st:
-					# pass on errors
-					if run:		self.bye	= True
-					yield Return(st)
-					return
-				if self.bye:
-					self.bye	= run
-					# exit is success
-					yield Return(self.ok())
-					return
+					# parse result
+					st		= yield self.processLine(l, True)
+					if not st:
+						# pass on errors
+						if run:		self.bye	= True
+						yield Return(st)
+						return
+					if self.bye:
+						self.bye	= run
+						# exit is success
+						yield Return(self.ok())
+						return
 
 			# EOF fails
 			self.diag(_macro=macro, err="EOF reached, no 'exit'")
 			if run:		self.bye	= True
 			yield Return(self.fail())
+			return
 
 		finally:
 			self.mode	= oldmode
 			self.args	= oldargs
 			self.state	= oldstate
-			if file:
-				file.close()
-				nropen -= 1
-				self.trace(_macro=macro, close=nropen)
 
 	def cmd_run(self, *args):
 		"""
@@ -2029,8 +2394,9 @@ class ControlProtocol(CorrectedLineReceiver):
 
 	def writeLine(self, s):
 		try:
-			self.sendLine(s)						#TWISTED
+			self.sendLine(s.encode('utf-8'))				#TWISTED
 		except:
+			print('writeLine exception', s)
 			# Ignore dead other sides
 			# perhaps it just disconnected early and did not care
 			pass
