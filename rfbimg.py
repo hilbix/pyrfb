@@ -866,25 +866,105 @@ def rename_away(to,ext):
 			os.rename(to+ext, n)
 			return
 
-def mass_replace(o, *d):
-	"""
-	mass replace string s
-	by key,value of dict d
-	until string no more changes
-	"""
-	s	= str(o)
-	a	= {}
-	for i in d:
-		a.update(i)
-	for i in range(100):
-		tmp	= s
-		for k,v in a.iteritems():
-			tmp = tmp.replace(k,v)
-		if tmp == s:
-			return s
-		s	= tmp
+# Why isn't that the standard of l.append(v, v, v)?
+def Append(l, *a):
+	l.extend(a)
+	return l
 
-	raise RuntimeError('instable expansion, too many recursions: '+repr(o))
+# Why isn't that the standard of l.extend(a, a, a)?
+def Extend(l, *a):
+	for b in a:
+		l.extend(b)
+	return l
+
+# This now is deterministic O(n)
+# and no more possibly endless recursive/iterative
+def var_replace(o, *d):
+	"""
+	return o with '{var}' sequences replaced by vars given in dicts *d
+	first dict wins.  If var is missing, '{var}' is just not replaced.
+	Also: {} is an escape preventing expansion at this stage.
+	You can nest it with: {{}} which will replace to {}
+	"""
+	r	= []
+	t	= []
+	s	= str(o)
+	p	= 0
+	inhibit	= False
+	for i in range(len(s)):
+		if s[i]=='{':
+			r.append(s[p:i])
+			t.append(r)
+#			print('stack', t)
+			r	= []
+			p	= i+1
+		if s[i]=='}' and t:
+			r.append(s[p:i])
+			v	= ''.join(r)
+			r	= t.pop()
+#			print('unstack', r, v)
+			p	= i+1
+			if v=='':
+				# {} special case
+				# Regardless how deep it shows up,
+				# it inhibits further expansion,
+				# but only a single time.
+				# {{}} is your friend ..
+				inhibit	= True
+				# But it replaces to nothing at this level.
+				# Notes for degenerate cases a='b', b='', c='x':
+				# '{c{{a}}}' => '{c{b}}' => '{c}' gives 'x'
+				# '{c{{b}}}' => '{c{}}' gives '{c}', as further expansion is inhibited
+				continue
+			# We must check for {} first and then for inhibit:
+			# '{{}someting{}}' expands to '{something}'.
+			# but inhibiting above starts after '{{}' has been seen already
+			# so it would inhibit '{}}', so the '{}' still needs to replace to nothing.
+			# For '{{}something{}}' we are at
+			# STACK('{') INHIBIT('{}') 'something' INHIBIT('{}') YOU_ARE_HERE('}')
+			# giving '{something}' and resets inhibit if we are at top level again.
+			# hence '{{}}'  is replaced to '{}', which is exactly what we want.
+			if inhibit:
+				r.append('{'+v+'}')
+				# inhibit stops when we are on top level again
+				inhibit	= len(r)>0
+				continue
+
+			for a in d:
+				if v in a:
+					r.append(a[v])
+					break
+			else:
+				# executed if not found (no 'break' above)
+				r.append('{'+v+'}')
+	# append the remaining part (everything after the last '}'
+	if p<len(s):
+		r.append(s[p:])
+	# now works up the strack backwards open braces seen which have missing closing braces
+	# There are no errors here
+#	print('r', r)
+#	print('t', t)
+	while t:
+		# or r	= Append(t.pop(), *r)
+		# or r	= Extend(t.pop(), r)
+		v	= ''.join(r)
+		r	= t.pop()
+		r.append('{'+v)
+#	print('r', r)
+	return ''.join(r)
+
+#	a	= {}
+#	for i in d:
+#		a.update(i)
+#	for i in range(100):
+#		tmp	= s
+#		for k,v in a.iteritems():
+#			tmp = tmp.replace(k,v)
+#		if tmp == s:
+#			return s
+#		s	= tmp
+#
+#	raise RuntimeError('instable expansion, too many recursions: '+repr(o))
 
 def restore_property(prop):
 	def decorate(fn):
@@ -1060,7 +1140,7 @@ class RfbCommander(object):
 		if not self._prompt:
 			return
 		# TODO XXX TODO print some stats here
-		self.write(mass_replace(self._prompt, self.repl, self.args))
+		self.write(var_replace(self._prompt, self.args, self.repl))
 
 	#
 	# Variables
@@ -1069,14 +1149,17 @@ class RfbCommander(object):
 	def autoset(self):
 		r	= self.repl
 
-		r['{mouse.x}']	= str(self.rfb.lm_x)
-		r['{mouse.y}']	= str(self.rfb.lm_y)
-		r['{mouse.b}']	= str(self.rfb.lm_c)
-		r['{tick}']	= str(self.rfb.tick)
+		r['mouse.x']		= str(self.rfb.lm_x)
+		r['mouse.y']		= str(self.rfb.lm_y)
+		r['mouse.b']		= str(self.rfb.lm_c)
 
-		r['{verbose}']	= bool2str(self.verbose)
-		r['{quiet}']	= bool2str(self.quiet)
-		r['{scheduler.depth}']	= bool2str(self.quiet)
+		r['flag.verbose']	= bool2str(self.verbose)
+		r['flag.quiet']		= bool2str(self.quiet)
+		r['flag.debug']		= bool2str(self.quiet)
+		r['flag.trace']		= bool2str(self.quiet)
+
+		r['sys.tick']		= str(self.rfb.tick)
+		r['sys.depth']		= str(len(self.stack))
 
 		# XXX TODO XXX add more replacements
 
@@ -1151,7 +1234,7 @@ class RfbCommander(object):
 
 	def processLine(self, line, expand=False):
 		if expand:
-			line	= mass_replace(line, self.autoset(), self.args)
+			line	= var_replace(line, self.args, self.autoset())
 		return self.processArgs(line.split(self.mode))
 
 	def processArgs(self, args):
@@ -1316,8 +1399,7 @@ class RfbCommander(object):
 		if not args:
 			return self.err()
 		for a in args:
-			v='{'+a+'}'
-			if v not in self.repl:
+			if a not in self.repl:
 				return self.err()
 			if self.repl[v] != '':
 				return self.fail()
@@ -1333,14 +1415,13 @@ class RfbCommander(object):
 		However the sequence in what {...} is replaced first
 		is random and implementation dependent.
 		.
-		You can set even macro parameters {0} and so on.
+		You cannot override macro parameters like {0}, {*} or {#} etc.
+		To see all variables, do "prompt" followed by "set"
 		.
 		There is a subtle detail:
-		'set a ' <- note the blank
-		sets {a} to the empty string while
-		'set a' <- note the missing blank
-		checks if {a} is known and
-		'set  b' sets {} to b
+		'set a ' <- note: trailing blank -- sets {a} to the empty string
+		'set a' <- note: no blank        -- checks if {a} is known and
+		'set  b' <- note: two blanks     -- sets {} to b
 		.
 		Example:
 		.
@@ -1348,13 +1429,12 @@ class RfbCommander(object):
 		else set myvar default
 		"""
 		if not var:
-			for k,v in self.repl.iteritems():
-				self.writeLine(' '+k+' '+repr(v))
-			for k,v in self.args.iteritems():
-				self.writeLine(' '+k+' '+repr(v))
+			for k,v in sorted(self.repl.iteritems()):
+				self.writeLine('macro: {'+k+'} '+repr(v))
+			for k,v in sorted(self.args.iteritems()):
+				self.writeLine('var:   {'+k+'} '+repr(v))
 			return self.ok()
 
-		var = '{'+var+'}'
 		if not args:
 			return var in self.args or var in self.repl
 
@@ -1368,7 +1448,7 @@ class RfbCommander(object):
 		this fails for the first {var} missing
 		"""
 		for var in args:
-			del self.repl['{'+var+'}']
+			del self.repl[var]
 		return self.ok()
 
 	def cmd_mode(self, mode):
@@ -1406,11 +1486,11 @@ class RfbCommander(object):
 		if if sub macro: do not fail on errors
 		.
 		The macro can contain replacement sequences:
-		- {N} is replaced by arg N
+		- {N} is replaced by arg N, {*} with all args
 		- {mouse.x} {mouse.y} {mouse.b} last mouse x y button
-		- {tick} global tick counter
-		- more replacements might show up in future
-		- see also: set
+		- {sys.tick} global tick counter
+		- {flag.X} where X are diverse flags
+		- to see all do: "prompt" followed by "set"
 		"""
 		return self.run_sub(False, *args)
 
@@ -1428,7 +1508,8 @@ class RfbCommander(object):
 		oldstate	= self.state
 		a		= {}
 		for i in range(len(args)):
-			a['{'+str(i+1)+'}'] = args[i]
+			a[str(i+1)] = args[i]
+		a['*']	= ' '.join(args)
 		self.args	= a
 		self.mode	= self.MODE_SPC
 
