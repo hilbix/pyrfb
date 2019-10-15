@@ -127,6 +127,7 @@ TEMPLATEDIR='e/'
 TEMPLATEEXT='.tpl'
 MACRODIR='o/'
 MACROEXT='.macro'
+GLOBALSFILE='globals.json'
 
 # Because of https://bugs.python.org/issue13769#msg229882 json.dump() is completely useless.
 # Because of missing parse_string, json.load() is completely useless.
@@ -171,7 +172,7 @@ def fixed(o):
 	return o
 
 # Dots are disallowed for a good reason
-valid_filename = re.compile('^[_a-zA-Z0-9][-_a-zA-Z0-9]*$')
+valid_filename = re.compile('^[,_a-zA-Z0-9][-,_a-zA-Z0-9]*$')
 
 log	= None
 
@@ -1582,7 +1583,7 @@ class RfbCommander(object):
 		for a in globs.iterkeys():
 			if a.startswith('global.'): continue
 			if 'global.'+a not in globs:
-				# if 'a' and 'global.a' exist in globals.json, then ignore 'a'
+				# if 'a' and 'global.a' exist in GLOBALSFILE, then ignore 'a'
 				fix.append(a)
 			kick.append(a)	# unsafe: del globs[a]
 		for a in fix:
@@ -1606,13 +1607,12 @@ class RfbCommander(object):
 		if you just load 'x' instead of 'global.x',
 		then 'x' is not considered by 'save'
 		"""
-		name	= STATEDIR+'globals.json'
 		try:
-			with Open(name, lock=True) as f:
+			with Open(GLOBALSFILE, lock=True) as f:
 				try:
 					globs	= fixJSONio(f)
 				except ValueError, e:
-					return self.fail('could not read: '+name, e)
+					return self.fail('could not read: '+GLOBALSFILE, e)
 		except (OSError,IOError), e:
 			if e.errno != errno.ENOENT:
 				raise
@@ -1699,7 +1699,7 @@ class RfbCommander(object):
 		# Now do the compare + write.
 		#
 
-		with Open(STATEDIR+'globals.json', write=True, lock=True) as f:
+		with Open(GLOBALSFILE, write=True, lock=True) as f:
 			# get the current global store from disk
 			# It is write locked, so it cannot change until we are ready
 			try:
