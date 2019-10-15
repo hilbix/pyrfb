@@ -737,7 +737,7 @@ function insertTab(ev)
 var macro =
 { id:		'mac'
 , selclass:	'sel'
-, match:	/^([A-Za-z0-9_].*)\.macro(.*)$/
+, match:	/^([,A-Za-z0-9_].*)\.macro(.*)$/
 , ext:		'.macro'
 , query:	'r=dir&d=oper'
 , init:		function ()
