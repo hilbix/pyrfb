@@ -1153,16 +1153,26 @@ class RfbCommander(object):
 			self.max	= max
 			self.log('depth', max)
 
-	def scheduler(self, v=None):
+	def scheduler(self, v=None, error=None):
 		self.trace(_sched='start', val=v)
 		max	= 0
 		while self.stack:
 			g	= self.stack[len(self.stack)-1]
+			self.trace(_sched=len(self.stack), send=g, v=v)
 			try:
-				self.trace(_sched=len(self.stack), send=g, v=v)
-				v	= g.send(v)
+				if error:
+					v	= error
+					error	= None
+					v	= g.throw(v)
+				else:
+					v	= g.send(v)
 			except StopIteration:
 				self.trace(_sched=len(self.stack), stop=g)
+				self.stack.pop()
+				continue
+			except Exception, e:
+				self.trace(_sched=len(self.stack), exc=e)
+				error	= e
 				self.stack.pop()
 				continue
 			while isinstance(v, Return):
@@ -1188,6 +1198,8 @@ class RfbCommander(object):
 #			self.trace(_sched=len(self.stack), val=v)
 		self.trace(_sched='end')
 		self.io.end()
+		if error:
+			raise error
 
 	def lineInput(self):
 		self.paused	= True				# disable queueLine() sending to us
@@ -1230,7 +1242,7 @@ class RfbCommander(object):
 				# XXX TODO XXX Return(..)?
 				st	= yield self.processLine(line, self._prompt)	# only expand on prompts
 			except Exception,e:
-				twisted.python.log.err(None, "line")				#TWISTED
+				twisted.python.log.err(None, 'exception in readline')	#TWISTED
 				if self._prompt:
 					self.writeLine(traceback.format_exc())
 				else:
@@ -2039,7 +2051,7 @@ class RfbCommander(object):
 		x	+= rand(w);
 		y	+= rand(h);
 
-		self.diag(x=x, y=y, lx=lx, ly=ly)
+#		self.diag(x=x, y=y, lx=lx, ly=ly)
 		# move mouse in n pieces
 		try:
 			# We should move relative to a random spline,
@@ -2451,4 +2463,5 @@ if __name__=='__main__':
 		CreateControl(rfb._preset("RFBIMGSOCK", '.sock'), rfb)			#TWISTED
 
 	rfb.run()
+	print('came back, bye')
 
