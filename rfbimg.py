@@ -85,16 +85,19 @@ except ImportError:
 # with Open() as file: ..
 nropen	= 0
 class Open:
-	# I really have no idea what happens if you use wrong args/kw
-	def __init__(self, name, write=False, append=False, binary=False, lock=False, utf8=False, *args, **kw):
+	# https://stackoverflow.com/a/40635301/490291 WTF!?!
+	def __init__(self, name, write=False, append=False, binary=False, lock=False, utf8=False):
 		global	nropen
 
 		if append:
+			omode	= os.O_CREAT|os.O_RDWR|os.O_APPEND
 			mode	= 'a+'	# this is always read/write while write==append
 			write	= True
 		elif write:
-			mode	= 'w+'	# this is always read/write
+			omode	= os.O_CREAT|os.O_RDWR
+			mode	= 'r+'	# this is always read/write
 		else:
+			omode	= os.O_RDONLY
 			mode	= 'r'
 		if binary:
 			mode	+= 'b'
@@ -103,7 +106,7 @@ class Open:
 			if utf8:
 				kw['encoding']	= kw.get('encoding', 'utf-8')
 
-		self.file	= io.open(name, mode, *args, **kw)
+		self.file	= os.fdopen(os.open(name, omode), mode)
 		nropen	+= 1
 		if lock:
 			LOCK.lock_file(self.file, write)
@@ -988,13 +991,21 @@ def Extend(l, *a):
 
 # This now is deterministic O(n)
 # and no more possibly endless recursive/iterative
-def var_replace(o, *d):
+def var_expand(o, *d):
 	"""
 	return o with '{var}' sequences replaced by vars given in dicts *d
 	first dict wins.  If var is missing, '{var}' is just not replaced.
 	Also: {} is an escape preventing expansion at this stage.
 	You can nest it with: {{}} which will replace to {}
 	"""
+	maxarg	= None
+	for a in d:
+		if a:
+			maxarg	= a.get('#')
+			if maxarg is not None:
+				break
+	maxarg	= int(maxarg) if maxarg else 0
+
 	r	= []
 	t	= []
 	s	= str(o)
@@ -1039,9 +1050,45 @@ def var_replace(o, *d):
 				inhibit	= len(r)>0
 				continue
 
+			# {X}
+			# {X:N}
+			# {X:N:N}
+			sep	= v.rsplit(':', 2)
+			v	= sep[0]
+			y	= int(sep[1]) if len(sep)>1 and sep[1] else -1
+			z	= int(sep[2]) if len(sep)>2 and sep[2] else -1
+			if v=='' or len(sep)>1 and v.isdigit():
+				# {[start]:[end]}
+				# {[start]:[end]:[step]}
+				x	= int(v) if v else 0
+				if x<1: x=1
+				if y<0 or y>maxarg: y=maxarg
+				if z<1: z=1
+				l	= []
+				while x<=y:
+					v	= str(x)
+					for c in d:
+						if c and v in c:
+							l.append(c[v])
+							break
+					x += z
+				# XXX TODO XXX
+				# you cannot detect the difference between
+				# empty argument {3:3}
+				# and missing argument {3:2}
+				# both are empty.  Is there some solution?
+				r.append(' '.join(l))
+				continue
+
+			# {var}
+			# {var:start}
+			# {var:start:end}
 			for a in d:
 				if a and v in a:
-					r.append(a[v])
+					x	= a[v]
+					if y<0:	y=0
+					if z<0:	z=len(x)
+					r.append(x[y:z])
 					break
 			else:
 				# executed if not found (no 'break' above)
@@ -1259,11 +1306,14 @@ class RfbCommander(object):
 		else:
 			self.prompt()
 
+	def expand(self, s):
+		return var_expand(s, self.args, self.repl, self.globals)
+
 	def prompt(self):
 		if not self._prompt:
 			return
 		# TODO XXX TODO print some stats here
-		self.write(var_replace(self._prompt, self.args, self.repl, self.globals))
+		self.write(self.expand(self._prompt))
 
 	#
 	# Variables
@@ -1360,7 +1410,7 @@ class RfbCommander(object):
 
 	def processLine(self, line, expand=False):
 		if expand:
-			line	= var_replace(line, self.args, self.autoset(), self.globals)
+			line	= self.expand(line)
 		return self.processArgs(line.split(self.mode))
 
 	def processArgs(self, args):
@@ -1541,7 +1591,7 @@ class RfbCommander(object):
 		However the sequence in what {...} is replaced first
 		is random and implementation dependent.
 		.
-		You cannot override macro parameters like {0}, {*} or {#} etc.
+		You cannot override macro parameters like {0}, {:3}, {3:}, {:} or {#} etc.
 		To see all variables, do "prompt" followed by "load" followed by "set"
 		.
 		There is a subtle detail:
@@ -1572,7 +1622,8 @@ class RfbCommander(object):
 			for k,v in sorted(self.args.iteritems()):
 				self.writeLine('m{'+k+'} '+repr(v))
 		elif not args:
-			return var in self.args or var in self.repl
+			# must return bool, never None
+			return (self.globals and var in self.globals) or var in self.args or var in self.repl
 		else:
 			self.repl[var]	= ' '.join(args)
 		return self.ok()
@@ -1628,7 +1679,7 @@ class RfbCommander(object):
 		except (OSError,IOError), e:
 			if e.errno != errno.ENOENT:
 				raise
-			return self.fail('no globals file: '+name)
+			return self.fail('no globals file: '+GLOBALSFILE)
 
 		self.globs(globs)
 
@@ -1751,13 +1802,15 @@ class RfbCommander(object):
 					return self.fail('Conflict: Global {'+a+'} not empty, cannot remove', dels=a, val=v)
 				kick.append(a)
 
-			if not changes and not dels:
+			if not changes and not kick:
 				self.globs(g)	# remember the changes locally, too
 				return self.ok('nothing left to save (already saved)')
 
 			for a in kick:
+				self.diag(kick=k)
 				del globs[k]
 			for k,v in changes.iteritems():
+				self.diag(key=k, val=v)
 				globs[k]	= v
 
 			# XXX  TODO XXX UNSAFE BUG WARNING!
@@ -1827,6 +1880,7 @@ class RfbCommander(object):
 			#   corruption as present here.  The goal was to get rid of exactly this possible
 			#   corruption, so we must not re-introduce it!
 
+			self.diag(glob=globs)
 			s	= toJSONu(globs, sort_keys=True, separators=(",\n",': '))
 			f.seek(0, io.SEEK_SET)
 			f.truncate()	# unsafe!
@@ -1891,7 +1945,8 @@ class RfbCommander(object):
 		a		= {}
 		for i in range(len(args)):
 			a[str(i+1)] = args[i]
-		a['*']	= ' '.join(args)
+		a['#']	= str(len(args))
+#		a['*']	= ' '.join(args)
 		self.args	= a
 		self.mode	= self.MODE_SPC
 
