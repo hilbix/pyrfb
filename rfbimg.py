@@ -1821,7 +1821,7 @@ class RfbCommander(object):
 			f.write(s)	# unsafe!
 
 		self.globs(g)	# remember the changes locally, too
-		return self.ok(str(len(changes))+' globals saved')
+		return self.ok(str(len(changes))+' global(s) saved')
 
 	def cmd_mode(self, mode):
 		"""
