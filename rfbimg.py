@@ -42,13 +42,13 @@ import time
 import errno
 import random
 import inspect
-import traceback
 import functools
+import traceback
 
 import PIL.Image
+import PIL.ImageDraw
 import PIL.ImageStat
 import PIL.ImageChops
-import PIL.ImageDraw
 
 # WTF?!? What a bunch of hyper ugly code!  Just for some dead old POSIX locks ..
 # See https://stackoverflow.com/a/46407326/490291
@@ -1337,7 +1337,26 @@ class RfbCommander(object):
 		r['sys.tick']		= str(self.rfb.tick)
 		r['sys.depth']		= str(len(self.stack))
 
-		r['all']		= ''.join([chr(x) for x in range(256)])
+		tm			= time.gmtime()
+		r['date.y']		= str(tm.tm_year)
+		r['date.m']		= str(tm.tm_mon)
+		r['date.mm']		= str(tm.tm_mon).zfill(2)
+		r['date.d']		= str(tm.tm_mday)
+		r['date.dd']		= str(tm.tm_mday).zfill(2)
+#		r['date.w']		= str(tm.tm_week)		# 1-52
+#		r['date.ww']		= str(tm.tm_week).zfill(2)	# /1-52
+		r['date.wd']		= str(tm.tm_wday+1)		# 1-7 where 7=sun
+		r['date.yd']		= str(tm.tm_yday)		# 1-366
+		r['date.ydd']		= str(tm.tm_yday).zfill(3)
+		r['time.h']		= str(tm.tm_hour)
+		r['time.hh']		= str(tm.tm_hour).zfill(2)
+		r['time.m']		= str(tm.tm_min)
+		r['time.mm']		= str(tm.tm_min).zfill(2)
+		r['time.s']		= str(tm.tm_sec)
+		r['time.ss']		= str(tm.tm_sec).zfill(2)
+
+# this was for debugging saves to JSON
+#		r['all']		= ''.join([chr(x) for x in range(256)])
 
 		# XXX TODO XXX add more replacements
 
