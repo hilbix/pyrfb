@@ -286,7 +286,7 @@ class Template:
 
 	def getRect(self, n):
 		if not self.parsed:	self.parse()
-		D(n, r=self.r, find=self.lf)
+#		D(n, r=self.r, find=self.lf)
 		if n not in self.r:
 			return None
 		r	= self.r[n]
@@ -300,7 +300,7 @@ class Template:
 		w	= r['w'] - x
 		h	= r['h'] - y
 		d	= r['d']
-		D(d=d, x=x, y=y, w=w, h=h)
+#		D(d=d, x=x, y=y, w=w, h=h)
 		return (d, x, y, w, h)
 
 	def parse(self):
@@ -1219,6 +1219,8 @@ class RfbCommander(object):
 				continue
 			except Exception, e:
 				self.trace(_sched=len(self.stack), exc=e)
+				if error is None:
+					print(traceback.format_exc())
 				error	= e
 				self.stack.pop()
 				continue
@@ -1411,6 +1413,7 @@ class RfbCommander(object):
 	def processLine(self, line, expand=False):
 		if expand:
 			line	= self.expand(line)
+		print('line', line)
 		return self.processArgs(line.split(self.mode))
 
 	def processArgs(self, args):
@@ -1563,21 +1566,41 @@ class RfbCommander(object):
 				self.writeLine(' '+a)
 		return self.ok()
 
+	def var(self, k):
+		for d in [self.args, self.repl, self.globals]:
+			if d:
+				v	= d.get(k)
+				if v is not None:
+					return v
+		return None
+
+	def cmd_equal(self, v, *args):
+		"""
+		equal var..: success if all variables exist and are all equal
+		"""
+		if not args:
+			return self.err()
+		v	= self.var(v)
+		if v is None:
+			return self.fail()
+		for a in args:
+			if self.var(a) != v:
+				return self.fail()
+		return self.ok()
+
 	def cmd_empty(self, *args):
 		"""
 		empty var..: checks variables for emptieness
 		- fails if a variable is nonempty
-		- errors if a variable does not exist
 		- errors if no arguments
-		- else success (all variables are nonempty)
+		- else success (all variables are empty or do not exist)
 		This works in sequence
 		"""
 		if not args:
 			return self.err()
 		for a in args:
-			if a not in self.repl:
-				return self.err()
-			if self.repl[a] != '':
+			v	= self.var(a)
+			if v is not None and v != '':
 				return self.fail()
 		return self.ok()
 
@@ -1623,7 +1646,7 @@ class RfbCommander(object):
 				self.writeLine('m{'+k+'} '+repr(v))
 		elif not args:
 			# must return bool, never None
-			return (self.globals and var in self.globals) or var in self.args or var in self.repl
+			return self.var(var) is not None
 		else:
 			self.repl[var]	= ' '.join(args)
 		return self.ok()
@@ -1994,6 +2017,14 @@ class RfbCommander(object):
 		"""
 		return self.run_sub(True, *args)
 
+	def cmd_not(self, *args):
+		"""
+		not cmd args..: fails on success, else succeeds (even on error)
+		"""
+		st		= yield self.processArgs(args)
+		self.bye	= False
+		yield Return((self.fail()) if st else (self.ok()))
+
 	def cmd_if(self, *args):
 		"""
 		if command args..:
@@ -2006,8 +2037,8 @@ class RfbCommander(object):
 		st		= yield self.processArgs(args)
 		self.prevstate	= self.state
 		self.state	= st
+		self.bye	= False
 		if st is None:
-			self.bye	= False
 			yield Return(self.fail())
 		else:
 			yield Return(self.ok())
