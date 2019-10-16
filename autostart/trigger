@@ -1,0 +1,21 @@
+#!/bin/bash
+
+cd "`dirname -- "$0"`/.." || exit
+
+trig()
+{
+printf '%(%Y%m%d-%H%M%S)T' || exit
+v="$(./sendsock.py "$1" 'sub trig')"
+printf ' %q:%q %q\n' "$1" "$?" "$v" || exit
+read -t60 t && exit
+}
+
+while	:
+do
+	for a in sub/*
+	do
+		[ -d "$a" ] || continue
+		trig "${a##*/}"
+	done
+done
+
