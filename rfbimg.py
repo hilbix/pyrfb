@@ -30,6 +30,9 @@
 #	EASYRFBSHARED=1	use shared session (default)
 #	EASYRFBPASS=	VNC password, default: no password (Untested with passwords)
 
+MAXSTACK	= 10000
+MAXMACROS	= 100000
+
 import easyrfb
 import json
 
@@ -1187,7 +1190,8 @@ class RfbCommander(object):
 		self.paused	= True
 		self.stack	= [self.lineInput()]
 		self.lines	= []
-#		self.max	= 0
+		#self.max	= 0
+		self.macnt	= 0
 		self.scheduler()
 
 	def queueLine(self, rfb, line):
@@ -1251,6 +1255,11 @@ class RfbCommander(object):
 #				self.setmax(max)
 				return
 			if inspect.isgenerator(v):
+				if len(self.stack)>MAXSTACK:
+					raise RuntimeError('stackoverflow, too many recursions: '+str(len(self.stack)))
+				if self.macnt>MAXMACROS:
+					raise RuntimeError('macro limit exceeded: '+str(self.macnt))
+
 				self.trace(_sched=len(self.stack), macro=v)
 				self.stack.append(v)
 #				if max<len(self.stack): max = len(self.stack)
@@ -1297,6 +1306,7 @@ class RfbCommander(object):
 		self.io.writeLine(s)
 
 	def readLine(self, line):
+		self.macnt	= 0		# reset macro counter on each line processed
 		if self._prompt and line.strip()=='':
 			# hack: Do not error on empty lines when prompting
 			# hack: and do the autoset which usually is done in .processLine
@@ -1354,6 +1364,7 @@ class RfbCommander(object):
 		r['flag.trace']		= bool2str(self.quiet)
 
 		r['sys.tick']		= str(self.rfb.tick)
+		r['sys.macros']		= str(len(self.macnt))
 		r['sys.depth']		= str(len(self.stack))
 
 		tm			= time.gmtime()
@@ -2099,8 +2110,7 @@ class RfbCommander(object):
 	def run_do(self, macro, *args):
 		# prevent buggy names
 		if not self.valid_filename.match(macro):
-			yield Return(self.fail())
-			return
+			yield Return(self.fail()); return
 
 		oldargs		= self.args
 		oldmode		= self.mode
@@ -2118,6 +2128,8 @@ class RfbCommander(object):
 			# read in the complete macro file
 			with Open(MACRODIR+macro+MACROEXT) as file:
 				data	= file.readlines()
+
+			self.macnt	+= 1
 
 			for l in data:
 				# ignore empty lines and comments
