@@ -29,17 +29,15 @@ Variables replace the string `{varname}` by their value.
 ## Conditionals
 
 - `if cmd args..` remembers the state of `cmd`, fails only on errors seen
+  - fail means, the macro is terminated
 - `then cmd args..` is executed, if if-state was success
 - `else cmd args..` is executed, if if-state was failure
 - `err cmd args..` is executed, if if-state was error
-
-Note:
-
-- `if if cmd args..` catches errors of the command, too
+  - usually cannot happen as the macro terminates if `if` fails
 
 ## Macro
 
-- `sub MACRO arg..` runs the MACRO (see `sub/NR/web/o/MACRO.macro`)
+- `do MACRO arg..` runs the MACRO (see `sub/NR/web/o/MACRO.macro`)
   - this sets the variables `{1}`, `{2}` and so on to the first, second etc. argument
   - this is like `gosub` in Basic
   - Macros terminate at the first failure.  Use `if` to catch failures.
