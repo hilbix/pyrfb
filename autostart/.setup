@@ -97,6 +97,7 @@ do
 	: try to remove the associated thingies, but never cause harm;
 	rmsoftlink "../web/$nr" "../sub/$nr/web";
 	rmsoftlink "websock-$nr.sh" .websock;
+	rmsoftlink "trigger-$nr.sh" .trigger;
 
 	: finally really remove the softlink;
 	rmsoftlink "$a" .loop;
@@ -117,6 +118,7 @@ do
 
 	mksoftlink "../web/$nr" "../sub/$nr/web";
 	mksoftlink "websock-$nr.sh" .websock;
+	mksoftlink "trigger-$nr.sh" .trigger;
 	mksoftlink "$a" .loop;
 done;
 
