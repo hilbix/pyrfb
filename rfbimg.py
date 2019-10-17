@@ -1147,12 +1147,15 @@ def bool2str(b):
 def curve(end, start, pos, steps, rnd=5):
 	return rand(rnd+rnd+1)-rnd + end + pos * (start - end) / steps
 
-class Return(object):
+class Val(object):
 	def __init__(self, val):
 		self.__val	= val
 
 	def val(self):
 		return self.__val
+
+class Return(Val):	pass
+class Bye(Val):		pass
 
 class RfbCommander(object):
 	valid_filename	= valid_filename
@@ -1215,6 +1218,7 @@ class RfbCommander(object):
 			except StopIteration:
 				self.trace(_sched=len(self.stack), stop=g)
 				self.stack.pop()
+				self.log(warning='Return() was not used', generator=g)
 				continue
 			except Exception, e:
 				self.trace(_sched=len(self.stack), exc=e)
@@ -1223,13 +1227,22 @@ class RfbCommander(object):
 				error	= e
 				self.stack.pop()
 				continue
+
+			# In Python3.3 we could use "return generator()" instead of "yield generator(); return"
+			# But scheduler() will first fully execute "generator()" until the "return" is done.
+			# Workaround is to use "yield Return(generator()); return" which is not all too bad
 			while isinstance(v, Return):
 				v	= v.val()
 				g	= self.stack.pop()
 				self.trace(_sched=len(self.stack), fin=g, ret=v)
 				try:
-					g.send(v)
-					raise RuntimeError('Return() not followed by return')
+					g.send(None)
+					# Must not come here
+					e	= RuntimeError('Return() not followed by return')
+					try:
+						g.throw(e)
+					finally:
+						raise e
 				except StopIteration:
 					pass
 
@@ -1269,8 +1282,8 @@ class RfbCommander(object):
 			if not self.io.resume():		# Enable factory, we are available again
 				self.log('gone away')
 				self.bye	= True
-				yield Return(False)		# going away unexpected is an error
-				return
+				yield Return(False); return	# going away unexpected is an error
+
 		yield Return(True)				# this is what we expect, a clean self.bye (due to 'exit')
 
 	#
@@ -1288,11 +1301,11 @@ class RfbCommander(object):
 			# hack: Do not error on empty lines when prompting
 			# hack: and do the autoset which usually is done in .processLine
 			self.autoset()
+			st	= self.ok()
 		else:
 			try:
 				st	= None
-				# XXX TODO XXX Return(..)?
-				st	= yield self.processLine(line, self._prompt)	# only expand on prompts
+				st	= self.get_bye((yield self.processLine(line, self._prompt)))	# only expand on prompts
 			except Exception,e:
 				twisted.python.log.err(None, 'exception in readline')	#TWISTED
 				if self._prompt:
@@ -1303,6 +1316,9 @@ class RfbCommander(object):
 				self.out(self.success, st, line)
 			else:
 				self.fail(self.failure, st, line)
+
+		# quiesce scheduler() warning about missing Return()
+		yield Return(st)
 
 		if self.bye:
 			self.log("bye")
@@ -1435,7 +1451,7 @@ class RfbCommander(object):
 	def processLine(self, line, expand=False):
 		if expand:
 			line	= self.expand(line)
-		print('line', line)
+#		print('line', line)
 		return self.processArgs(line.split(self.mode))
 
 	def processArgs(self, args):
@@ -1522,8 +1538,7 @@ class RfbCommander(object):
 					self.debug(**{prop:st})
 				args	= []
 		if not args:
-			yield Return(old)
-			return
+			yield Return(old); return
 
 		setattr(self, prop, True)
 		self.debug(**{prop:True})
@@ -2052,7 +2067,7 @@ class RfbCommander(object):
 
 	def sleep(self, seconds):
 		self.io.sleep(seconds, self.scheduler)
-		yield Return(self.__Nothing)
+		return self.__Nothing
 
 	def cmd_sleep(self, sec):
 		"""
@@ -2079,12 +2094,11 @@ class RfbCommander(object):
 		- {flag.X} where X are diverse flags
 		- to see all do: "prompt" followed by "load" followed by "set"
 		"""
-		return self.run_do(False, *args)
+		return self.run_do(*args)
 
-	def run_do(self, run, macro, *args):
+	def run_do(self, macro, *args):
 		# prevent buggy names
 		if not self.valid_filename.match(macro):
-			if run:		self.bye	= True
 			yield Return(self.fail())
 			return
 
@@ -2116,23 +2130,20 @@ class RfbCommander(object):
 				l	= l.encode('utf8')
 
 				# parse line
-				st		= yield self.processLine(l, True)
+				st		= self.get_bye((yield self.processLine(l, True)))
 				if not st:
 					# pass on errors
 					break
 				if self.bye:
 					# "exit" is success (st==True)
 					self.bye	= False
-					st		= self.ok()
 					break
 			else:
 				# EOF fails
 				self.diag(_macro=macro, err="EOF reached, no 'exit'")
 				st	= self.fail()
 
-			if run:		self.bye	= True
 			yield Return(st)
-			return
 
 		finally:
 			self.mode	= oldmode
@@ -2143,7 +2154,13 @@ class RfbCommander(object):
 		"""
 		run MACRO args..: same as "if do MACRO", but followed by "return"
 		"""
-		return self.run_do(True, *args)
+		return Bye(self.run_do(*args))
+
+	def get_bye(self, v):
+		while isinstance(v, Bye):
+			v	= v.val()
+			self.bye= True
+		return v
 
 	def cmd_not(self, *args):
 		"""
@@ -2153,9 +2170,9 @@ class RfbCommander(object):
 		.
 		not return:	returns the inverse STATE (error/fail become success)
 		"""
-		st		= yield self.processArgs(args)
+		st		= self.get_bye((yield self.processArgs(args)))
 		self.bye	= False
-		yield Return((self.fail()) if st else (self.ok()))
+		yield Return(self.fail() if st else self.ok())
 
 	def cmd_if(self, *args):
 		"""
@@ -2177,14 +2194,11 @@ class RfbCommander(object):
 		if return
 		- technically the same as before
 		"""
-		st		= yield self.processArgs(args)
+		st		= self.get_bye((yield self.processArgs(args)))
+		self.bye	= false
 		self.prevstate	= self.state
 		self.state	= st
-		self.bye	= False
-		if st is None:
-			yield Return(self.fail())
-		else:
-			yield Return(self.ok())
+		yield Return(self.fail() if st is None else self.ok())
 
 	def cmd_then(self, *args):
 		"""
@@ -2274,8 +2288,7 @@ class RfbCommander(object):
 		# Mouse button release
 		if not click and x < lx < x+w-1 and y < ly < y+h-1:
 			# jitter 1 pixel
-			yield Return((lx+rand(3)-1, ly+rand(3)-1))
-			return
+			yield Return((lx+rand(3)-1, ly+rand(3)-1)); return
 
 		x	+= rand(w);
 		y	+= rand(h);
@@ -2342,19 +2355,14 @@ class RfbCommander(object):
 		"""
 		exit: end conversation / return from macro
 		"""
-		self.bye = True
-		return self.ok()
+		return Bye(self.ok())
 
 	def cmd_return(self, *args):
 		"""
 		return: like 'exit', but returns the current if-STATE (not always success)
 		return cmd [args..]: unlike `if cmd args..` followed by `return`
 		"""
-		st	= self.state
-		if len(args):
-			st	= yield self.processArgs(args)
-		self.bye = True
-		yield Return(st)
+		return Bye(self.processArgs(args) if len(args) else self.state)
 
 	def cmd_next(self):
 		"""
@@ -2405,8 +2413,7 @@ class RfbCommander(object):
 		Note: This waits count frames, not a defined time
 		"""
 		if not templates:
-			yield Return(self.fail())
-			return
+			yield Return(self.fail()); return
 
 		def result(**waiter):
 			self.scheduler(self.print_wait(waiter))
