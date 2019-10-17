@@ -1864,7 +1864,7 @@ class RfbCommander(object):
 
 	def globs(self, globs):
 		# fix possibly buggy things
-		print('before', repr(globs))
+#		print('before', repr(globs))
 		kick	= []
 		fix	= []
 		for a in globs.iterkeys():
@@ -1882,7 +1882,7 @@ class RfbCommander(object):
 			# Python3 WTF is breaking good and valid code!?!
 			# However, this probably is even faster, as .iterkeys() should be faster than .keys()
 			del globs[a]
-		print('after', repr(globs))
+#		print('after', repr(globs))
 		self.globals	= globs
 
 	def cmd_load(self, *args):
