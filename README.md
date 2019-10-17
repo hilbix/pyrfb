@@ -1,4 +1,4 @@
-> It works, but is in it's very early stages.
+> It works, but is in it's very early stages.  Everything still is subject to change!
 >
 > TODOs:
 >
