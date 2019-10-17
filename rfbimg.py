@@ -1838,7 +1838,7 @@ class RfbCommander(object):
 
 	def cmd_expand(self, var, *args):
 		"""
-		expand var:		echo the expanded value of the variable (without NL)
+		expand var:		echo the expanded value of the variable
 		- errors if var is undef
 		expand var val..:	expand the value and set it to var.
 		- succeeds if expansion is nonempty, else fails
