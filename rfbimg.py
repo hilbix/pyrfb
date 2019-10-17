@@ -1184,7 +1184,7 @@ class RfbCommander(object):
 		self.paused	= True
 		self.stack	= [self.lineInput()]
 		self.lines	= []
-		self.max	= 0
+#		self.max	= 0
 		self.scheduler()
 
 	def queueLine(self, rfb, line):
@@ -1195,14 +1195,13 @@ class RfbCommander(object):
 			# assert that TOS is generator of lineInput?
 			self.scheduler()
 
-	def setmax(self, max):
-		if self.max < max:
-			self.max	= max
-			self.log('depth', max)
+#	def setmax(self, max):
+#		if self.max < max:
+#			self.max	= max
+#			self.log('depth', max)
 
 	def scheduler(self, v=None, error=None):
-		self.trace(_sched='start', val=v)
-		max	= 0
+#		self.trace(_sched='start', val=v)
 		while self.stack:
 			g	= self.stack[len(self.stack)-1]
 			self.trace(_sched=len(self.stack), send=g, v=v)
@@ -1236,15 +1235,19 @@ class RfbCommander(object):
 
 			if v is self.__Nothing:
 				self.trace(_sched=len(self.stack), wait=g)
-				self.setmax(max)
+#				self.setmax(max)
 				return
 			if inspect.isgenerator(v):
 				self.trace(_sched=len(self.stack), macro=v)
 				self.stack.append(v)
-				if max<len(self.stack): max = len(self.stack)
-				if max>self.max+10: self.setmax(max)
+#				if max<len(self.stack): max = len(self.stack)
+#				if max>self.max+10: self.setmax(max)
 				v	= None
 #			self.trace(_sched=len(self.stack), val=v)
+			# Postpone the next iteration
+			self.io.sleep(0, self.scheduler, v)
+			return
+
 		self.trace(_sched='end')
 		self.io.end()
 		if error:
@@ -2048,7 +2051,7 @@ class RfbCommander(object):
 		return self.ok()
 
 	def sleep(self, seconds):
-		self.io.sleep(seconds, self.scheduler, self)
+		self.io.sleep(seconds, self.scheduler)
 		yield Return(self.__Nothing)
 
 	def cmd_sleep(self, sec):
@@ -2361,9 +2364,7 @@ class RfbCommander(object):
 		.
 		Usually followed by: exit
 		"""
-		def bump():
-			self.scheduler()
-		self.rfb.next(bump)
+		self.rfb.next(self.scheduler)
 		yield self.__Nothing
 		yield Return(self.ok())
 
