@@ -1207,27 +1207,34 @@ class RfbCommander(object):
 #			self.max	= max
 #			self.log('depth', max)
 
+	def throw(self, v, *args):
+		e	= RuntimeError(' '.join([str(a) for a in args]))
+		self.io.sleep(0, self.scheduler, v, e)
+		raise e
+
 	def scheduler(self, v=None, error=None):
 #		self.trace(_sched='start', val=v)
 		while self.stack:
 			g	= self.stack[len(self.stack)-1]
 			self.trace(_sched=len(self.stack), send=g, v=v)
 			try:
-				if error:
-					v	= error
+				err	= error
+				if err:
 					error	= None
-					v	= g.throw(v)
+					# keep v if next gives StopIteration
+					v	= g.throw(err)
 				else:
 					v	= g.send(v)
 			except StopIteration:
 				self.trace(_sched=len(self.stack), stop=g)
 				self.stack.pop()
-				self.log(warning='Return() was not used', generator=g)
+				if not err:		# StopIteration on .throw() is OK
+					self.log(warn='Return() was not used', generator=g)
 				continue
 			except Exception, e:
 				self.trace(_sched=len(self.stack), exc=e)
-				if error is None:
-					print(traceback.format_exc())
+				if not err:		# skip error sequences, just tell the head
+					self.io.log_err(e, 'scheduler exception from '+repr(g))
 				error	= e
 				self.stack.pop()
 				continue
@@ -1242,31 +1249,32 @@ class RfbCommander(object):
 				try:
 					g.send(None)
 					# Must not come here
-					e	= RuntimeError('Return() not followed by return')
-					try:
-						g.throw(e)
-					finally:
-						raise e
+					self.throw(v, 'Return() not followed by return:', repr(g))
+					# never reached
+
 				except StopIteration:
 					pass
 
 			if v is self.__Nothing:
+				# We are delaying (waiting for event etc.)
+				# This is why we see __Nothing
+				# (perhaps we should get a callback or something .. but)
 				self.trace(_sched=len(self.stack), wait=g)
-#				self.setmax(max)
 				return
+
 			if inspect.isgenerator(v):
-				if len(self.stack)>MAXSTACK:
-					raise RuntimeError('stackoverflow, too many recursions: '+str(len(self.stack)))
-				if self.macnt>MAXMACROS:
-					raise RuntimeError('macro limit exceeded: '+str(self.macnt))
+				# We got passed something to do
+				# Push it onto the stack and run it next iteration
+
+				if len(self.stack)>MAXSTACK:	self.throw(v, 'stackoverflow, too many recursions:', len(self.stack))
+				if self.macnt>MAXMACROS:	self.throw(v, 'macro limit exceeded:', self.macnt)
 
 				self.trace(_sched=len(self.stack), macro=v)
 				self.stack.append(v)
-#				if max<len(self.stack): max = len(self.stack)
-#				if max>self.max+10: self.setmax(max)
 				v	= None
-#			self.trace(_sched=len(self.stack), val=v)
-			# Postpone the next iteration
+
+			# Postpone the next iteration.
+			# XXX TODO XXX do not use 'sleep' here
 			self.io.sleep(0, self.scheduler, v)
 			return
 
@@ -1286,6 +1294,7 @@ class RfbCommander(object):
 			self.io.pause()				# Stop factory, we are busy
 			line	= self.lines.pop(0)
 			self.log('do', line)
+			self.macnt	= 0			# reset macro counter on each line processed
 			v	= yield self.readLine(line)
 			self.log('done', line, v)
 			if not self.io.resume():		# Enable factory, we are available again
@@ -1306,7 +1315,6 @@ class RfbCommander(object):
 		self.io.writeLine(s)
 
 	def readLine(self, line):
-		self.macnt	= 0		# reset macro counter on each line processed
 		if self._prompt and line.strip()=='':
 			# hack: Do not error on empty lines when prompting
 			# hack: and do the autoset which usually is done in .processLine
@@ -1317,7 +1325,7 @@ class RfbCommander(object):
 				st	= None
 				st	= self.get_bye((yield self.processLine(line, self._prompt)))	# only expand on prompts
 			except Exception,e:
-				twisted.python.log.err(None, 'exception in readline')	#TWISTED
+				self.io.log_err(e, 'exception in readline')
 				if self._prompt:
 					self.writeLine(traceback.format_exc())
 				else:
@@ -2649,6 +2657,9 @@ class ControlProtocol(CorrectedLineReceiver):
 		self.cmd.queueLine(self.factory.rfb, line)				#TWISTED black magic, hand over rfb here
 		# We are not allowed to return something else than None here
 		# due to how lineReceived() works
+
+	def log_err(self, e, cause):
+		twisted.python.log.err(None, cause)					#TWISTED
 
 	def writeLine(self, s):
 		try:
