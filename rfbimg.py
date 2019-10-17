@@ -1281,38 +1281,47 @@ class RfbCommander(object):
 
 	def topLevelInput(self):
 		return self.lineInput(True)
+		#self.log('bye')
+		#self.io.end() is in scheduler()
 
 	def lineInput(self, prompt=False):
-		self.paused	= True					# disable queueLine() sending to us
+		self.paused	= True						# disable queueLine() sending to us
 		hold		= False
-		while not self.bye:
-			if not self.lines:
-				if hold and not self.io.resume():	# Enable factory, as we are available again
-					self.log('gone away')
-					self.bye	= True
-					yield Return(False)		# going away unexpectedly is an error
-					return
-				hold	= False
+		ret		= True
+		try:
+			while not self.bye:
+				if not self.lines:
+					if hold:
+						hold	= False
+						if self.io.resume():		# Enable factory, as we are available again
+							continue		# this possibly pulls in new lines
+						self.log('gone away')
+						self.bye	= True
+						ret		= False		# going away unexpectedly is an error
+						break
 
-				if prompt:	yield self.prompt()	# send prompt if something needed
+					if prompt:
+						yield self.prompt()		# send prompt if something needed
+						if self.lines:	continue	# this might reveal some more lines
 
-				self.paused	= False			# enable queueLine() directly sending to us
-				yield self.__Nothing			# wait for next line
-				self.paused	= True			# disable queueLine() sending until allowed again
-				continue
+					# The next 3 commands must be in exactly this sequence to avoid races
+					self.paused	= False			# enable queueLine() directly sending to us
+					yield self.__Nothing			# wait for next line
+					self.paused	= True			# disable queueLine() sending until allowed again
+					continue
 
-			if not hold:	self.io.pause()			# Stop factory, we are busy
-			hold		= True
+				if not hold:
+					hold	= True
+					self.io.pause()				# Stop factory, we are busy
 
-			line		= self.lines.pop(0)
-			v		= yield self.readLine(line, self._prompt and prompt)
-			self.log(Done=line, Ret=v, bye=self.bye)
+				line		= self.lines.pop(0)
+				v		= yield self.readLine(line, self._prompt and prompt)
+				self.log(Done=line, Ret=v, bye=self.bye)
+		finally:
+			if hold:
+				self.io.resume()				# Enable factory, as we are available again
 
-		self.log('bye')
-		#self.io.end() is now in scheduler()
-		# this perhaps can be a sub-read or something
-
-		yield Return(True)					# this is what we expect, a clean self.bye (due to 'exit')
+		yield Return(ret)						# this is what we expect, a clean self.bye (due to 'exit')
 
 	#
 	# Direct IO Helpers
@@ -1647,7 +1656,7 @@ class RfbCommander(object):
 		v	= self.var(k)
 		try:
 			return int(v)
-		except ValueError:
+		except TypeError:
 			return 0
 
 	def let(self, k, fn, *args):
@@ -1661,7 +1670,7 @@ class RfbCommander(object):
 				ret	= self.err()
 				break
 		self.repl[k]	= str(v)
-		return self.ok()
+		return ret
 
 	def true(self, v, fn, *args):
 		for a in args:
