@@ -1239,7 +1239,7 @@ class RfbCommander(object):
 				self.setmax(max)
 				return
 			if inspect.isgenerator(v):
-				self.trace(_sched=len(self.stack), sub=v)
+				self.trace(_sched=len(self.stack), macro=v)
 				self.stack.append(v)
 				if max<len(self.stack): max = len(self.stack)
 				if max>self.max+10: self.setmax(max)
@@ -1462,7 +1462,9 @@ class RfbCommander(object):
 		"""
 		prompt: set prompt and do not terminate on errors (can no more switched off)
 		.
-		Note: This also makes {var}s usable, see: set
+		This also makes {var}s usable, see: set
+		And it fundamentally changes how "unknown" commands are processed.
+		Without prompt they set exit state, while with prompt they don't and just fail.
 		"""
 		self._prompt = ' '.join(args)+'> '
 		self.send(__file__ + ' ' + sys.version.split('\n',1)[0].strip())
@@ -1592,6 +1594,109 @@ class RfbCommander(object):
 				if v is not None:
 					return v
 		return None
+
+	def nvar(self, k):
+		v	= self.var(k)
+		try:
+			return int(v)
+		except ValueError:
+			return 0
+
+	def let(self, k, fn, *args):
+		v	= self.nvar(k)
+		ret	= v != 0
+		for a in args:
+			try:
+				v	= fn(v, int(a))
+				ret	= v != 0
+			except:
+				ret	= self.err()
+				break
+		self.repl[k]	= str(v)
+		return self.ok()
+
+	def true(self, v, fn, *args):
+		for a in args:
+			try:
+				v	= fn(v, a)
+				if not v:
+					break
+			except:
+				return self.err()
+		# if no args then the initial v defines the return value
+		return self.ok() if v else self.fail()
+
+	def cmd_let(self, v, *args):
+		"""
+		let var N..:	set var to the last numeric value N, stops at the first nonnumeric one
+		- errors if some N is non-numeric
+		- fails if var is 0 afterwards
+		- else succeeds
+		- undef/empty/nonnumeric variables are silently changed to 0 first
+		.
+		let var:	makes var 0 if it is undefined, empty or nonnumeric
+		let var a:	as before, but errors
+		let var 0:	makes var 0 and fails
+		let var 0 a:	makes var 0 and errors
+		let var 0 1:	makes var 1 and succeeds
+		let var 0 1 a:	makes var 1 and errors
+		"""
+		return self.let(v, lambda x,y: y, *args)
+
+	def cmd_add(self, v, *args):
+		"""
+		add var N..:	add all the N to var
+		- the return value is the same as in "let"
+		"""
+		return self.let(v, lambda x,y: x+y, *args)
+
+	def cmd_sub(self, v, *args):
+		"""
+		sub var N..:	like add, but subtracs
+		"""
+		return self.let(v, lambda x,y: x-y, *args)
+
+	def cmd_mul(self, v, *args):
+		"""
+		mul var N..:	like add, but multiplies
+		"""
+		return self.let(v, lambda x,y: x*y, *args)
+
+	def cmd_div(self, v, *args):
+		"""
+		div var N..:	like add, but divides
+		- if N is 0 this errors
+		"""
+		return self.let(v, lambda x,y: x/y, *args)
+
+	def cmd_mod(self, v, *args):
+		"""
+		mod var N..:	like div, but does the remainder
+		"""
+		return self.let(v, lambda x,y: x%y, *args)
+
+	def cmd_nat(self, *args):
+		"""
+		nat var..:	return true if all vars are natural numbers
+		- errors if some var is undef/empty/nonnumeric
+		- fails if any number is <= 0
+		- success if all vars are numbers and higher than 0
+		"""
+		return self.true(true, lambda x,y: int(self.var(y))>0, *args)
+
+	def cmd_cmp(self, v, *args):
+		"""
+		cmp val var..: compare the given variables against the given val
+		- errors if any var is unset or no var is given
+		- fails if any var is not the given value
+		- succeeds if all vars are the given value
+		"""
+		def cmp(x,y):
+			k	= self.var(y)
+			if k is None:
+				raise KeyError(y)
+			return k == v
+		return self.true(false, cmp, *args)
 
 	def cmd_equal(self, v, *args):
 		"""
@@ -1953,17 +2058,16 @@ class RfbCommander(object):
 		yield self.sleep(float(sec))
 		yield Return(self.ok())
 
-	def cmd_sub(self, *args):
+	def cmd_do(self, *args):
 		"""
-		sub MACRO args..:
+		do MACRO args..:
 		- read file o/MACRO.macro line by line
 		- returns success on "exit"
 		- returns fail on EOF (possibly truncated file)
 		- returns failure on the first failing command
 		- returns error on error (which sets termination)
 		.
-		if sub macro:    do not fail on fails
-		if if sub macro: do not fail on errors
+		if do macro:    does not terminate on fails or errors
 		.
 		The macro can contain replacement sequences:
 		- {N} is replaced by arg N, {*} with all args
@@ -1972,9 +2076,9 @@ class RfbCommander(object):
 		- {flag.X} where X are diverse flags
 		- to see all do: "prompt" followed by "load" followed by "set"
 		"""
-		return self.run_sub(False, *args)
+		return self.run_do(False, *args)
 
-	def run_sub(self, run, macro, *args):
+	def run_do(self, run, macro, *args):
 		# prevent buggy names
 		if not self.valid_filename.match(macro):
 			if run:		self.bye	= True
@@ -1984,45 +2088,47 @@ class RfbCommander(object):
 		oldargs		= self.args
 		oldmode		= self.mode
 		oldstate	= self.state
-		a		= {}
-		for i in range(len(args)):
-			a[str(i+1)] = args[i]
-		a['#']	= str(len(args))
-#		a['*']	= ' '.join(args)
-		self.args	= a
-		self.mode	= self.MODE_SPC
 
 		try:
-			# read the macro file
+			a		= {}
+			for i in range(len(args)):
+				a[str(i+1)] = args[i]
+			a['#']	= str(len(args))
+#			a['*']	= ' '.join(args)
+			self.args	= a
+			self.mode	= self.MODE_SPC
+
+			# read in the complete macro file
 			with Open(MACRODIR+macro+MACROEXT) as file:
-				self.trace(_macro=macro, open=nropen)
-				for l in file:
-					# ignore empty lines and comments
-					if l.strip()=='':	continue
-					if l[0]=='#':		continue
+				data	= file.readlines()
 
-					# l is unicode and contains \n
-					if l.endswith('\n'): l=l[:-1]
-					# we need UTF-8
-					l	= l.encode('utf8')
+			for l in data:
+				# ignore empty lines and comments
+				if l.strip()=='':	continue
+				if l[0]=='#':		continue
 
-					# parse result
-					st		= yield self.processLine(l, True)
-					if not st:
-						# pass on errors
-						if run:		self.bye	= True
-						yield Return(st)
-						return
-					if self.bye:
-						self.bye	= run
-						# exit is success
-						yield Return(self.ok())
-						return
+				# l is unicode and contains \n
+				if l.endswith('\n'): l=l[:-1]
+				# we need UTF-8
+				l	= l.encode('utf8')
 
-			# EOF fails
-			self.diag(_macro=macro, err="EOF reached, no 'exit'")
+				# parse line
+				st		= yield self.processLine(l, True)
+				if not st:
+					# pass on errors
+					break
+				if self.bye:
+					# "exit" is success (st==True)
+					self.bye	= False
+					st		= self.ok()
+					break
+			else:
+				# EOF fails
+				self.diag(_macro=macro, err="EOF reached, no 'exit'")
+				st	= self.fail()
+
 			if run:		self.bye	= True
-			yield Return(self.fail())
+			yield Return(st)
 			return
 
 		finally:
@@ -2032,13 +2138,17 @@ class RfbCommander(object):
 
 	def cmd_run(self, *args):
 		"""
-		run MACRO args..: same as "if sub MACRO", but followed by "return"
+		run MACRO args..: same as "if do MACRO", but followed by "return"
 		"""
-		return self.run_sub(True, *args)
+		return self.run_do(True, *args)
 
 	def cmd_not(self, *args):
 		"""
 		not cmd args..: fails on success, else succeeds (even on error)
+		- resets exit state (like 'if' does, too)
+		- does not record the STATE (use 'if' for this)
+		.
+		not return:	returns the inverse STATE (error/fail become success)
 		"""
 		st		= yield self.processArgs(args)
 		self.bye	= False
@@ -2047,11 +2157,22 @@ class RfbCommander(object):
 	def cmd_if(self, *args):
 		"""
 		if command args..:
+		- resets exit state (like 'not' does)
 		- record success/failure of command as STATE
-		- returns failure on error
+		- returns failure on error (this usually terminates a macro and let it return failure)
 		- else returns success
 		.
-		if if command args..: record error state, error is failure everything else is success
+		if exit: just success (the "exit" has no effect else than returning success)
+		if return command args..: This does not return, the "return" just is redundant
+		if unknown: returns failure, sets err STATE, but does not exit (unlike "unknown" does)
+		- note that "unknown" only exits if no "prompt" is active
+		if if command args..: always succeeds
+		- "then" executed if command has success or failure
+		- "else" executed if command errored
+		- "err" cannot be executed afterwards
+		if command args..
+		if return
+		- technically the same as before
 		"""
 		st		= yield self.processArgs(args)
 		self.prevstate	= self.state
@@ -2064,19 +2185,19 @@ class RfbCommander(object):
 
 	def cmd_then(self, *args):
 		"""
-		then command args..: run command only of STATE (see: if) is success
+		then command args..: run command only when STATE (see: if) is success
 		"""
 		return self.processArgs(args) if self.state else self.ok()
 
 	def cmd_else(self, *args):
 		"""
-		else command args..: run command only of STATE (see: if) is failure
+		else command args..: run command only when STATE (see: if) is failure
 		"""
 		return self.processArgs(args) if (self.state == False) else self.ok()
 
 	def cmd_err(self, *args):
 		"""
-		err command args..: run command only of STATE (see: if) is error
+		err command args..: run command only when STATE (see: if) is error
 		"""
 		return self.processArgs(args) if (self.state is None) else self.ok()
 
@@ -2216,15 +2337,15 @@ class RfbCommander(object):
 
 	def cmd_exit(self):
 		"""
-		exit: end conversation / return from sub or macro
+		exit: end conversation / return from macro
 		"""
 		self.bye = True
 		return self.ok()
 
 	def cmd_return(self, *args):
 		"""
-		return: like 'exit', but returns the if-state (not always success)
-		return cmd [args..]: like `if cmd args..` followed by `return`
+		return: like 'exit', but returns the current if-STATE (not always success)
+		return cmd [args..]: unlike `if cmd args..` followed by `return`
 		"""
 		st	= self.state
 		if len(args):
