@@ -30,8 +30,8 @@
 #	EASYRFBSHARED=1	use shared session (default)
 #	EASYRFBPASS=	VNC password, default: no password (Untested with passwords)
 
-MAXSTACK	= 10#000
-MAXMACROS	= 10#0000
+MAXSTACK	= 10000
+MAXMACROS	= 100000
 
 import easyrfb
 import json
