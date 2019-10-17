@@ -1188,7 +1188,7 @@ class RfbCommander(object):
 		self.tracing	= False
 		self.mode	= self.MODE_SPC
 		self.paused	= True
-		self.stack	= [self.lineInput()]
+		self.stack	= [self.topLevelInput()]
 		self.lines	= []
 		#self.max	= 0
 		self.macnt	= 0
@@ -1283,26 +1283,41 @@ class RfbCommander(object):
 		if error:
 			raise error
 
-	def lineInput(self):
-		self.paused	= True				# disable queueLine() sending to us
+	def topLevelInput(self):
+		st	= yield self.lineInput(True)
+		yield Return(st)
+
+	def lineInput(self, prompt=False):
+		self.paused	= True					# disable queueLine() sending to us
+		hold		= False
 		while not self.bye:
 			if not self.lines:
-				self.paused	= False		# enable queueLine() sending to us
-				yield self.__Nothing
-				self.paused	= True		# disable queueLine() until allowed again
-				continue
-			self.io.pause()				# Stop factory, we are busy
-			line	= self.lines.pop(0)
-			self.log('do', line)
-			self.macnt	= 0			# reset macro counter on each line processed
-			v	= yield self.readLine(line)
-			self.log('done', line, v)
-			if not self.io.resume():		# Enable factory, we are available again
-				self.log('gone away')
-				self.bye	= True
-				yield Return(False); return	# going away unexpected is an error
+				if hold and not self.io.resume():	# Enable factory, as we are available again
+					self.log('gone away')
+					self.bye	= True
+					yield Return(False)		# going away unexpectedly is an error
+					return
+				hold	= False
 
-		yield Return(True)				# this is what we expect, a clean self.bye (due to 'exit')
+				if prompt:	yield self.prompt()	# send prompt if something needed
+
+				self.paused	= False			# enable queueLine() directly sending to us
+				yield self.__Nothing			# wait for next line
+				self.paused	= True			# disable queueLine() sending until allowed again
+				continue
+
+			if not hold:	self.io.pause()			# Stop factory, we are busy
+			hold		= True
+
+			line		= self.lines.pop(0)
+			v		= yield self.readLine(line, self._prompt and prompt)
+			self.log('done:', line, 'ret:', v)
+
+		self.log("bye")
+		#self.io.end() is now in scheduler()
+		# this perhaps can be a sub-read or something
+
+		yield Return(True)					# this is what we expect, a clean self.bye (due to 'exit')
 
 	#
 	# Direct IO Helpers
@@ -1314,19 +1329,21 @@ class RfbCommander(object):
 	def writeLine(self, s):
 		self.io.writeLine(s)
 
-	def readLine(self, line):
-		if self._prompt and line.strip()=='':
+	def readLine(self, line, prompt):
+		if prompt and line.strip()=='':
 			# hack: Do not error on empty lines when prompting
 			# hack: and do the autoset which usually is done in .processLine
 			self.autoset()
 			st	= self.ok()
 		else:
+			self.log('line:', line)
+			self.macnt	= 0							# reset macro counter on each line processed
+			st		= None
 			try:
-				st	= None
-				st	= self.get_bye((yield self.processLine(line, self._prompt)))	# only expand on prompts
+				st	= self.get_bye((yield self.processLine(line, prompt)))	# only expand on prompts
 			except Exception,e:
 				self.io.log_err(e, 'exception in readline')
-				if self._prompt:
+				if prompt:
 					self.writeLine(traceback.format_exc())
 				else:
 					self.bye	= True
@@ -1334,25 +1351,23 @@ class RfbCommander(object):
 				self.out(self.success, st, line)
 			else:
 				self.fail(self.failure, st, line)
+				if prompt and self.macnt>0:
+					self.bye	= False
 
 		# quiesce scheduler() warning about missing Return()
 		yield Return(st)
-
-		if self.bye:
-			self.log("bye")
-			#self.io.end() is now in scheduler()
-			# this perhaps can be a sub-read or something
-		else:
-			self.prompt()
 
 	def expand(self, s):
 		return var_expand(s, self.args, self.repl, self.globals)
 
 	def prompt(self):
 		if not self._prompt:
+			yield Return(False)
 			return
+
 		# TODO XXX TODO print some stats here
 		self.write(self.expand(self._prompt))
+		yield Return(True)			# push output to user
 
 	#
 	# Variables
@@ -1470,7 +1485,7 @@ class RfbCommander(object):
 	def processLine(self, line, expand=False):
 		if expand:
 			line	= self.expand(line)
-#		print('line', line)
+#		print('process', line)
 		return self.processArgs(line.split(self.mode))
 
 	def processArgs(self, args):
@@ -2125,6 +2140,8 @@ class RfbCommander(object):
 		oldstate	= self.state
 
 		try:
+			self.macnt	+= 1
+
 			a		= {}
 			for i in range(len(args)):
 				a[str(i+1)] = args[i]
@@ -2136,8 +2153,6 @@ class RfbCommander(object):
 			# read in the complete macro file
 			with Open(MACRODIR+macro+MACROEXT) as file:
 				data	= file.readlines()
-
-			self.macnt	+= 1
 
 			for l in data:
 				# ignore empty lines and comments
