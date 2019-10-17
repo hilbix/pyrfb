@@ -30,8 +30,8 @@
 #	EASYRFBSHARED=1	use shared session (default)
 #	EASYRFBPASS=	VNC password, default: no password (Untested with passwords)
 
-MAXSTACK	= 10000
-MAXMACROS	= 100000
+MAXSTACK	= 10#000
+MAXMACROS	= 10#0000
 
 import easyrfb
 import json
@@ -249,7 +249,7 @@ def rand(x):
 	return random.randrange(x) if x>0 else 0
 
 def D(*args, **kw):
-	print(" ".join(tuple(str(v) for v in args)+tuple(str(n)+"="+str(v) for n,v in kw.iteritems())))
+	print(" ".join(tuple(str(v) for v in args)+tuple(str(n)+"="+repr(v) for n,v in sorted(kw.iteritems()))))
 
 def myrepr(v):
 	if inspect.isgenerator(v):
@@ -1207,11 +1207,6 @@ class RfbCommander(object):
 #			self.max	= max
 #			self.log('depth', max)
 
-	def throw(self, v, *args):
-		e	= RuntimeError(' '.join([str(a) for a in args]))
-		self.io.sleep(0, self.scheduler, v, e)
-		raise e
-
 	def scheduler(self, v=None, error=None):
 #		self.trace(_sched='start', val=v)
 		while self.stack:
@@ -1234,7 +1229,7 @@ class RfbCommander(object):
 			except Exception, e:
 				self.trace(_sched=len(self.stack), exc=e)
 				if not err:		# skip error sequences, just tell the head
-					self.io.log_err(e, 'scheduler exception from '+repr(g))
+					self.io.log_err(None, 'scheduler exception from '+repr(g))
 				error	= e
 				self.stack.pop()
 				continue
@@ -1266,16 +1261,17 @@ class RfbCommander(object):
 				# We got passed something to do
 				# Push it onto the stack and run it next iteration
 
-				if len(self.stack)>MAXSTACK:	self.throw(v, 'stackoverflow, too many recursions:', len(self.stack))
-				if self.macnt>MAXMACROS:	self.throw(v, 'macro limit exceeded:', self.macnt)
-
-				self.trace(_sched=len(self.stack), macro=v)
-				self.stack.append(v)
-				v	= None
+				if len(self.stack)>=MAXSTACK:
+					error	= RuntimeError('stackoverflow, too many recursions: '+str(len(self.stack)))
+					self.io.log_err(error, 'scheduler exception')
+				else:
+					self.trace(_sched=len(self.stack), macro=v)
+					self.stack.append(v)
+					v	= None
 
 			# Postpone the next iteration.
 			# XXX TODO XXX do not use 'sleep' here
-			self.io.sleep(0, self.scheduler, v)
+			self.io.sleep(0, self.scheduler, v, error)
 			return
 
 		self.trace(_sched='end')
@@ -1284,8 +1280,7 @@ class RfbCommander(object):
 			raise error
 
 	def topLevelInput(self):
-		st	= yield self.lineInput(True)
-		yield Return(st)
+		return self.lineInput(True)
 
 	def lineInput(self, prompt=False):
 		self.paused	= True					# disable queueLine() sending to us
@@ -1311,9 +1306,9 @@ class RfbCommander(object):
 
 			line		= self.lines.pop(0)
 			v		= yield self.readLine(line, self._prompt and prompt)
-			self.log('done:', line, 'ret:', v)
+			self.log(Done=line, Ret=v, bye=self.bye)
 
-		self.log("bye")
+		self.log('bye')
 		#self.io.end() is now in scheduler()
 		# this perhaps can be a sub-read or something
 
@@ -1336,17 +1331,17 @@ class RfbCommander(object):
 			self.autoset()
 			st	= self.ok()
 		else:
-			self.log('line:', line)
+			self.log(line=line)
 			self.macnt	= 0							# reset macro counter on each line processed
 			st		= None
 			try:
 				st	= self.get_bye((yield self.processLine(line, prompt)))	# only expand on prompts
 			except Exception,e:
 				self.io.log_err(e, 'exception in readline')
+				self.bye		= True	# Really?
 				if prompt:
+					self.bye	= False
 					self.writeLine(traceback.format_exc())
-				else:
-					self.bye	= True
 			if st:
 				self.out(self.success, st, line)
 			else:
@@ -1387,7 +1382,7 @@ class RfbCommander(object):
 		r['flag.trace']		= bool2str(self.quiet)
 
 		r['sys.tick']		= str(self.rfb.tick)
-		r['sys.macros']		= str(len(self.macnt))
+		r['sys.macros']		= str(self.macnt)
 		r['sys.depth']		= str(len(self.stack))
 
 		tm			= time.gmtime()
@@ -1519,7 +1514,8 @@ class RfbCommander(object):
 		And it fundamentally changes how "unknown" commands are processed.
 		Without prompt they set exit state, while with prompt they don't and just fail.
 		"""
-		self._prompt = ' '.join(args)+'> '
+		self._prompt = ' '.join(args) if args else '> '
+		self.repl['prompt']=self._prompt
 		self.send(__file__ + ' ' + sys.version.split('\n',1)[0].strip())
 		return self.ok()
 
@@ -1837,6 +1833,26 @@ class RfbCommander(object):
 			del self.repl[var]
 		return self.ok()
 
+	def fillstate(self, v, ok=[], fail=[], err=[], **kw):
+		return self.err(*err, **kw) if v==None else self.fail(*fail, **kw) if v=='' else self.ok(*ok, **kw)
+
+	def cmd_expand(self, var, *args):
+		"""
+		expand var:		echo the expanded value of the variable (without NL)
+		- errors if var is undef
+		expand var val..:	expand the value and set it to var.
+		- succeeds if expansion is nonempty, else fails
+		"""
+		if args:
+			v	= self.expand(' '.join(args))
+			self.repl[var]	= v
+		else:
+			v	= self.var(var)
+			if v is not None:
+				v	= self.expand(v)
+				self.writeLine(v)
+		return self.fillstate(v)
+
 	def globs(self, globs):
 		# fix possibly buggy things
 		print('before', repr(globs))
@@ -2140,6 +2156,8 @@ class RfbCommander(object):
 		oldstate	= self.state
 
 		try:
+			if self.macnt>=MAXMACROS:
+				raise RuntimeError('macro limit exceeded:', self.macnt)
 			self.macnt	+= 1
 
 			a		= {}
@@ -2230,7 +2248,7 @@ class RfbCommander(object):
 		- technically the same as before
 		"""
 		st		= self.get_bye((yield self.processArgs(args)))
-		self.bye	= false
+		self.bye	= False
 		self.prevstate	= self.state
 		self.state	= st
 		yield Return(self.fail() if st is None else self.ok())
@@ -2238,34 +2256,43 @@ class RfbCommander(object):
 	def cmd_then(self, *args):
 		"""
 		then command args..: run command only when STATE (see: if) is success
+		- returns state of command, succeeds when no command is executed
 		"""
 		return self.processArgs(args) if self.state else self.ok()
 
 	def cmd_else(self, *args):
 		"""
 		else command args..: run command only when STATE (see: if) is failure
+		- returns state of command, succeeds when no command is executed
 		"""
 		return self.processArgs(args) if (self.state == False) else self.ok()
 
 	def cmd_err(self, *args):
 		"""
 		err command args..: run command only when STATE (see: if) is error
+		- returns state of command, succeeds when no command is executed
 		"""
 		return self.processArgs(args) if (self.state is None) else self.ok()
 
 	def cmd_echo(self, *args):
 		"""
-		echo args..: echo the given args
+		echo args..: echo the given args with a linefeed.  Always succeeds.
+		"""
+		self.writeLine(' '.join(args) if args else '')
+		return self.ok()
+
+	def cmd_print(self, *args):
+		"""
+		print args..: like echo, but outputs no linefeed.  Always succeeds.
 		"""
 		if args:
-			self.writeLine(' '.join(args))
+			self.write(' '.join(args))
 		return self.ok()
 
 	def cmd_dump(self, *args):
 		"""
-		dump args..: print repr of args
-		.
-		Note: needs "verbose" like in: verbose dump {mx}
+		dump args..: print python repr of args
+		- needs "verbose" like in: verbose dump something
 		"""
 		return self.diag(args=args)
 
@@ -2674,7 +2701,7 @@ class ControlProtocol(CorrectedLineReceiver):
 		# due to how lineReceived() works
 
 	def log_err(self, e, cause):
-		twisted.python.log.err(None, cause)					#TWISTED
+		twisted.python.log.err(e, cause)					#TWISTED
 
 	def writeLine(self, s):
 		try:
