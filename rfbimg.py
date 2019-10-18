@@ -325,7 +325,7 @@ class Template:
 		part	= []
 
 		def put():
-			if part: self.p.append(dict(x=dx, y=dy, c=cnt+1, p=part))
+			if part: self.p.append(dict(n=len(self.p), x=dx, y=dy, c=cnt+1, p=part))
 
 		for n,r in enumerate(t['r'], start=1):
 			if r[3]==0 or r[4]==0:
@@ -380,10 +380,11 @@ class Template:
 		for p in self.p:
 			offset	= self.part(p, img, debug)
 			if offset is None:
-				if debug: debug(template=self, found=None)
+				if debug: debug(Template=self.name, _part=p['n'], found=None)
 				return None
 			finds.append(offset)
-		if debug: debug(template=self, found=finds)
+			if debug: debug(Template=self.name, _part=p['n'], offset=offset)
+		if debug: debug(Template=self, found=finds)
 		self.lf	= finds
 		return finds
 
@@ -398,22 +399,23 @@ class Template:
 		dy	= p['y']
 		x	= 0
 		y	= 0
+		if debug: debug(Template=self.name, _part=p['n'], r=p['p'][0], c=p['c'])
 		for i in range(p['c']):
 			r	= p['p']
-			# r is [{ 'r':rect, 'c':i, 'm':abs(r[0]), 'px':r[3]*r[4] }]
-			if self.check(r[0], x, y, img, debug):
+			# r is [{ 'x':x, 'y', 'w', 'h', 'i':img, 'm':abs(r[0]), 'px':r[3]*r[4] }]
+			if self.check(r[0], x, y, img, False):
 				# We got a match, check the remaining rects
+				if debug: debug(Template=self.name, _part=p['n'], x=x, y=y)
 				for r in r[1:]:
 					if not self.check(r, x, y, img, debug):
+#						if debug: debug(Template=self.name, _part=p['n'], mismatch=r)
 						# Fail early in case they do not match
 						return None
 				# Success!  Return the offset/searches done
-				if debug: debug(template=self, part=True, offset=i)
 				return i
 			x += dx
 			y += dy
 		# Fail, as we did not find anything
-		if debug: debug(template=self, part=False)
 		return None
 
 	def check(self, r, dx, dy, img, debug):
@@ -428,20 +430,17 @@ class Template:
 		di	= PIL.ImageChops.difference(r['i'], img.crop(rect).convert('RGB'))
 		bb	= di.getbbox()
 		if bb is None:
-			if debug: debug(template=self, check=True, rect=rect)
+			if debug: debug(Template=self.name, check=True, rect=rect)
 			return True
-		if not r['d']:
-			if debug: debug(template=self, check=False, rect=rect, bb=bb)
+		if not r['d'] and not debug:
 			return False
 
 		st	= PIL.ImageStat.Stat(di.crop(bb))
 		delta	= reduce(lambda x,y:x+y, st.sum2)
 		if delta <= abs(r['d']):
-			if debug: debug(template=self, check=True, rect=rect, delta=delta)
+			if debug: debug(Template=self.name, check=True, rect=rect, delta=delta)
 			return True
-		if debug: debug(template=self, check=False, rect=rect, delta=delta, bb=bb)
-
-		# We have a difference
+		if debug: debug(Template=self.name, check=False, rect=rect, delta=delta)
 		return False
 
 	def __str__(self):
@@ -2031,10 +2030,10 @@ class RfbCommander(object):
 				return self.ok('nothing left to save (already saved)')
 
 			for a in kick:
-				self.diag(kick=k)
+				self.debug(kick=k)
 				del globs[k]
 			for k,v in changes.iteritems():
-				self.diag(key=k, val=v)
+				self.debug(key=k, val=v)
 				globs[k]	= v
 
 			# XXX  TODO XXX UNSAFE BUG WARNING!
@@ -2104,7 +2103,7 @@ class RfbCommander(object):
 			#   corruption as present here.  The goal was to get rid of exactly this possible
 			#   corruption, so we must not re-introduce it!
 
-			self.diag(glob=globs)
+			self.debug(glob=globs)
 			s	= toJSONu(globs, sort_keys=True, separators=(",\n",': '))
 			f.seek(0, io.SEEK_SET)
 			f.truncate()	# unsafe!
@@ -2165,8 +2164,9 @@ class RfbCommander(object):
 		oldstate	= self.state
 
 		try:
-			if self.macnt>=MAXMACROS:
-				raise RuntimeError('macro limit exceeded:', self.macnt)
+			nr	= self.macnt
+			if nr>=MAXMACROS:
+				raise RuntimeError('macro limit exceeded:', nr)
 			self.macnt	+= 1
 
 			a		= {}
@@ -2176,6 +2176,7 @@ class RfbCommander(object):
 #			a['*']	= ' '.join(args)
 			self.args	= a
 			self.mode	= self.MODE_SPC
+			self.diag(N=nr, _macro=macro, args=self.args)
 
 			# read in the complete macro file
 			with Open(MACRODIR+macro+MACROEXT) as file:
@@ -2205,6 +2206,7 @@ class RfbCommander(object):
 				self.diag(_macro=macro, err="EOF reached, no 'exit'")
 				st	= self.fail()
 
+			self.diag(N=nr, macro=macro, ret=st)
 			yield Return(st)
 
 		finally:
@@ -2458,22 +2460,26 @@ class RfbCommander(object):
 		self.rfb.force_flush()
 		return self.ok()
 
-	def cmd_check(self,*templates):
+	def checker(self, **kw):
+		w	= dict(**kw)
+		r	= len(w['t']) and self.rfb.check_waiter(w, self.debugFn()) and self.print_wait(w)
+		self.diag(check=w)
+		return r
+		
+	def cmd_check(self, *templates):
 		"""
 		check template..:
 		- check if template matches
 		- fails if no template matches
 		- prints first matching template
 		"""
-		w = dict(t=templates)
-		return len(templates) and self.rfb.check_waiter(w, self.debugFn()) and self.print_wait(w)
+		return self.checker(t=templates)
 
 	def cmd_state(self,*templates):
 		"""
 		state template..: like check, but writes the state (picture) to s/TEMPLATE.img
 		"""
-		w = dict(t=templates, img=1)
-		return len(templates) and self.rfb.check_waiter(w, self.debugFn()) and self.print_wait(w)
+		return self.checker(t=templates, img=1)
 
 	def cmd_wait(self,timeout,*templates):
 		"""
@@ -2487,6 +2493,7 @@ class RfbCommander(object):
 			yield Return(self.fail()); return
 
 		def result(**waiter):
+			self.diag(wait=waiter)
 			self.scheduler(self.print_wait(waiter))
 
 		timeout = int(timeout)
@@ -2621,7 +2628,7 @@ class RfbCommander(object):
 				out	= PIL.Image.new('RGB',im.size)
 
 			for r in reg:
-				self.diag(img=i, r=r, xy=v.xy, dir=v.dir, ruler=v.ruler, had=v.had)
+				self.debug(img=i, r=r, xy=v.xy, dir=v.dir, ruler=v.ruler, had=v.had)
 
 				if r[3]==0 or r[4]==0:
 					nextrule()
