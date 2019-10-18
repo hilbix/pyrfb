@@ -32,7 +32,8 @@ if (!$fd) die("cannot open $targ");
 socket_set_blocking($fd,1);
 fwrite($fd,"if state$t\nthen echo ok\nelse echo ko\nexit\n");	# state (template)
 fflush($fd);
-echo fread($fd,4096);
+while (!feof($fd))
+  echo fread($fd,4096);
 fclose($fd);
 flush();
 
