@@ -1156,6 +1156,9 @@ class Val(object):
 	def val(self):
 		return self.__val
 
+	def __repr__(self):
+		return self.__class__.__name__+'('+repr(self.__val)+')'
+
 class Return(Val):	pass
 class Bye(Val):		pass
 
@@ -1170,6 +1173,16 @@ class RfbCommander(object):
 	def __init__(self, io):
 		self.io		= io
 
+		# HACK:
+		# I do not like that global "self.bye" thingie yet.
+		# There should be some "bye" object,
+		# which allows to be passed with additional flags, like
+		# "I need to do just a return from macro" or
+		# "I need to exit from input loop, as well"
+		# But I haven't found a good idea yet.
+		#
+		# Example: "prompt" "run macro" should exit if "macro" exists, but not if not
+		# Currently I cannot really express this easily.
 		self.bye	= False
 		self._prompt	= None
 		self.globals	= None
@@ -1207,26 +1220,27 @@ class RfbCommander(object):
 #			self.log('depth', max)
 
 	def scheduler(self, v=None, error=None):
-#		self.trace(_sched='start', val=v)
+		self.trace(Sched=len(self.stack), ____________________v=v, _error=error, B=self.bye)
 		while self.stack:
 			g	= self.stack[len(self.stack)-1]
-			self.trace(_sched=len(self.stack), send=g, v=v)
 			try:
 				err	= error
 				if err:
 					error	= None
 					# keep v if next gives StopIteration
+					self.trace(Sched=len(self.stack), _throw=g, _v=err, B=self.bye)
 					v	= g.throw(err)
 				else:
+					self.trace(Sched=len(self.stack), _send=g, _v=v, B=self.bye)
 					v	= g.send(v)
 			except StopIteration:
-				self.trace(_sched=len(self.stack), stop=g)
+				self.trace(Sched=len(self.stack), _stop=g, B=self.bye)
 				self.stack.pop()
 				if not err:		# StopIteration on .throw() is OK
 					self.log(warn='Return() was not used', generator=g)
 				continue
 			except Exception, e:
-				self.trace(_sched=len(self.stack), exc=e)
+				self.trace(Sched=len(self.stack), _g=g, _exc=e, B=self.bye)
 				if not err:		# skip error sequences, just tell the head
 					self.io.log_err(None, 'scheduler exception from '+repr(g))
 				error	= e
@@ -1239,21 +1253,22 @@ class RfbCommander(object):
 			while isinstance(v, Return):
 				v	= v.val()
 				g	= self.stack.pop()
-				self.trace(_sched=len(self.stack), fin=g, ret=v)
 				try:
+					self.trace(Sched=len(self.stack), _return=g, B=self.bye)
 					g.send(None)
+					self.trace(Sched=len(self.stack), _return=g, bug='no return after Return()', B=self.bye)
 					# Must not come here
 					self.throw(v, 'Return() not followed by return:', repr(g))
 					# never reached
 
 				except StopIteration:
-					pass
+					self.trace(Sched=len(self.stack), _returned=g, B=self.bye)
 
 			if v is self.__Nothing:
 				# We are delaying (waiting for event etc.)
 				# This is why we see __Nothing
 				# (perhaps we should get a callback or something .. but)
-				self.trace(_sched=len(self.stack), wait=g)
+				self.trace(Sched=len(self.stack), _waiting=g, B=self.bye)
 				return
 
 			if inspect.isgenerator(v):
@@ -1263,17 +1278,20 @@ class RfbCommander(object):
 				if len(self.stack)>=MAXSTACK:
 					error	= RuntimeError('stackoverflow, too many recursions: '+str(len(self.stack)))
 					self.io.log_err(error, 'scheduler exception')
+					self.trace(Sched=len(self.stack), _macro=v, stackoverflow=len(self.stack), B=self.bye)
 				else:
-					self.trace(_sched=len(self.stack), macro=v)
+					self.trace(Sched=len(self.stack), _macro=v, B=self.bye)
 					self.stack.append(v)
 					v	= None
+			else:
+				self.trace(Sched=len(self.stack), _val=v, B=self.bye)
 
 			# Postpone the next iteration.
 			# XXX TODO XXX do not use 'sleep' here
 			self.io.sleep(0, self.scheduler, v, error)
 			return
 
-		self.trace(_sched='end')
+		self.trace(Sched=len(self.stack), _end=True, v=v, error=error, B=self.bye)
 		self.io.end()
 		if error:
 			raise error
@@ -1315,8 +1333,7 @@ class RfbCommander(object):
 
 				line		= self.lines.pop(0)
 				v		= yield self.readLine(line, self._prompt and prompt)
-				# xxx
-				self.log(Done=line, Ret=v, bye=self.bye)
+				self.log(Done=line, Ret=v, B=self.bye)
 		finally:
 			if hold:
 				self.io.resume()				# Enable factory, as we are available again
@@ -1344,14 +1361,19 @@ class RfbCommander(object):
 			self.macnt	= 0							# reset macro counter on each line processed
 			st		= None
 			try:
-				st	= self.get_bye((yield self.processLine(line, prompt)))	# only expand on prompts
+				v	= self.processLine(line, prompt)			# only expand on prompts
+				self.trace(Line=line, _yield=v, B=self.bye)
+				v	= yield v
+				self.trace(Line=line, _got=v, B=self.bye)
+				st	= self.get_bye(v)
 			except Exception,e:
+				self.trace(Line=line, ex=e, B=self.bye)
 				self.io.log_err(e, 'exception in readline')
 				self.bye		= True	# Really?
 				if prompt:
 					self.bye	= False
 					self.writeLine(traceback.format_exc())
-			self.trace(line=line, _status=st, prompt=prompt, bye=self.bye)
+			self.trace(Line=line, _status=st, prompt=prompt, B=self.bye)
 			if st:
 				self.out(self.success, st, line)
 			else:
@@ -2181,8 +2203,15 @@ class RfbCommander(object):
 			self.diag(N=nr, _macro=macro, args=self.args)
 
 			# read in the complete macro file
+			# TODO XXX TODO decide: Move this after the hack?
 			with Open(MACRODIR+macro+MACROEXT) as file:
 				data	= file.readlines()
+
+			# HACK:
+			# If we are called with "bye", remember this
+			# so we can set it again on leave.
+			was_bye		= self.bye
+			self.bye	= False
 
 			for l in data:
 				# ignore empty lines and comments
@@ -2195,21 +2224,23 @@ class RfbCommander(object):
 				l	= l.encode('utf8')
 
 				# parse line
-				self.trace(Macro=macro, l=l, bye=self.bye)
+				#self.trace(Macro=macro, l=l, B=self.bye)
 				st		= self.get_bye((yield self.processLine(l, True)))
-				self.trace(Macro=macro, ret=st, bye=self.bye)
+				self.trace(Macro=macro, l=l, ret=st, B=self.bye)
 				if not st:
 					# pass on errors
 					break
 				if self.bye:
 					# "exit" is success (st==True)
-					self.bye	= False
+					self.bye	= False			# we have obeyed the passed "bye"
 					break
 			else:
 				# EOF fails
-				self.diag(_macro=macro, err="EOF reached, no 'exit'")
+				self.diag(N=nr, _macro=macro, err="EOF reached, no 'exit'")
 				st	= self.fail()
 
+			# HACK: bring back "bye" value from above.
+			self.bye	= self.bye or was_bye
 			self.diag(N=nr, macro=macro, ret=st)
 			yield Return(st)
 
@@ -2707,10 +2738,24 @@ class CorrectedLineReceiver(twisted.protocols.basic.LineReceiver):			#TWISTED
 class ControlProtocol(CorrectedLineReceiver):
 	delimiter='\n'									#TWISTED black magic, DO NOT REMOVE
 
+	ID	= 0
+
+	@classmethod
+	def getid(klass):
+		klass.ID	+= 1
+		return klass.ID
+
 	# Called from factory, but no self.factory here!
 	def __init__(self):
 		# self.factory not present at this time
 		self.cmd	= RfbCommander(self)
+		self.__id	= self.getid()
+
+	def connectionMade(self):
+		print("OPEN", self.__id)
+
+	def connectionLost(self, *args):
+		print('CLOSE', self.__id, args)
 
 	# Called by LineReceiver
 	# Note that this does not honor pause()
