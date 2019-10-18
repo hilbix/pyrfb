@@ -70,7 +70,7 @@ elseif (isset($_GET["l"]))
 else
   die('wrong request');
 
-fclose(send_($o=="" ? $s : $o));
+fclose(send($o=="" ? $s : $o));
 echo $s;
 flush();
 
