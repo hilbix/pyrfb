@@ -1315,6 +1315,7 @@ class RfbCommander(object):
 
 				line		= self.lines.pop(0)
 				v		= yield self.readLine(line, self._prompt and prompt)
+				# xxx
 				self.log(Done=line, Ret=v, bye=self.bye)
 		finally:
 			if hold:
@@ -1350,6 +1351,7 @@ class RfbCommander(object):
 				if prompt:
 					self.bye	= False
 					self.writeLine(traceback.format_exc())
+			self.trace(line=line, _status=st, prompt=prompt, bye=self.bye)
 			if st:
 				self.out(self.success, st, line)
 			else:
@@ -1752,7 +1754,7 @@ class RfbCommander(object):
 			if k is None:
 				raise KeyError(y)
 			return k == v
-		return self.true(false, cmp, *args)
+		return self.true(False, cmp, *args)
 
 	def cmd_equal(self, v, *args):
 		"""
@@ -2193,7 +2195,9 @@ class RfbCommander(object):
 				l	= l.encode('utf8')
 
 				# parse line
+				self.trace(Macro=macro, l=l, bye=self.bye)
 				st		= self.get_bye((yield self.processLine(l, True)))
+				self.trace(Macro=macro, ret=st, bye=self.bye)
 				if not st:
 					# pass on errors
 					break
