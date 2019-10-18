@@ -4,15 +4,10 @@
 # This Works is placed under the terms of the Copyright Less License,
 # see file COPYRIGHT.CLL.  USE AT OWN RISK, ABSOLUTELY NO WARRANTY.
 
-header('Content-type: text/plain');
-header('Expires: -1');
-header('Pragma: no-cache');
+require 'sock.inc';
 
-$targ = intval(substr($_SERVER['PATH_INFO'],1));
-$root = $_SERVER['DOCUMENT_ROOT'];
-$script = $_SERVER['SCRIPT_NAME'];	// this must be relative to document root
-$base = "$root/".dirname($script)."/$targ";
-if (!is_dir($base)) die("wrong $targ");
+plain();
+args(2, 2);
 
 $dirs = [ 'ed'=>'e',   'learn'=>'l',   'stat'=>'s',   'oper'=>'o' ];
 $exts = [ 'ed'=>'tpl', 'learn'=>'png', 'stat'=>'png', 'oper'=>'macro' ];
