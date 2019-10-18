@@ -15,7 +15,7 @@ ID="${ID##*[^0-9]}"
 t=1
 while	! [ -f INHIBIT ] && ! read -t$t t && printf '%(%Y%m%d-%H%M%S)T '
 do
-	v="$(./sendsock.py "${1:-$ID}" 'run trig')"
+	v="$(./sendsock.py "${1:-$ID}" 'do trig')"
 	ret=$?
 	printf '%q: %q\n' "$ret" "$v"
 	let t=MIN+RANDOM%FAST
