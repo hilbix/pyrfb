@@ -2,7 +2,7 @@
 
 cd "$(dirname "$(readlink -e "$0")")/.." || exit
 
-trig()
+beat()
 {
 printf '%(%Y%m%d-%H%M%S)T' || exit
 v="$(./sendsock.py "$1" 'run heartbeat')"
@@ -10,12 +10,12 @@ printf ' %q:%q %q\n' "$1" "$?" "$v" || exit
 read -t60 t && exit
 }
 
-while	:
+while	[ ! -f INHIBIT ]
 do
 	for a in sub/*
 	do
 		[ -d "$a" ] || { sleep 1; continue; }
-		trig "${a##*/}"
+		beat "${a##*/}"
 	done
 done
 
