@@ -16,16 +16,11 @@
 # mousebuttons are a bitmask of pressed buttons
 # if name is empty on learn, a default name (screen-TIMESTAMP) us used
 
-header("Content-type: text/plain");
-header("Pragma: no-cache");
-header("Expires: -1");
+require 'sock.inc';
 
-$targ = intval(substr($_SERVER["PATH_INFO"],1));
+plain();
+args(2, 2);
 
-$fd = fsockopen("unix://../sub/$targ/sock");
-if (!$fd) die("cannot open $targ");
-
-socket_set_blocking($fd,0);
 $o="";
 $s="";
 if (isset($_GET["c"]))
@@ -74,10 +69,8 @@ elseif (isset($_GET["l"]))
   }
 else
   die('wrong request');
-if ($o=="") $o = $s;
-fwrite($fd,"$o\n");	# learn/mouse/key/code
-fflush($fd);
-fclose($fd);
+
+fclose(send_($o=="" ? $s : $o));
 echo $s;
 flush();
 
