@@ -37,7 +37,8 @@ if (!$fd) die("cannot open $targ");
 socket_set_blocking($fd,1);
 fwrite($fd,"run$t\n");		# run (macro)
 fflush($fd);
-echo fread($fd,4096);
+while (!feof($fd))
+  echo fread($fd,4096);
 fclose($fd);
 flush();
 
