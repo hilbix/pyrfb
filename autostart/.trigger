@@ -13,7 +13,7 @@ ID="`basename -- "$0" .sh`" || exit
 ID="${ID##*[^0-9]}"
 
 t=1
-while	! read -t$t t && printf '%(%Y%m%d-%H%M%S)T '
+while	! [ -f INHIBIT ] && ! read -t$t t && printf '%(%Y%m%d-%H%M%S)T '
 do
 	v="$(./sendsock.py "${1:-$ID}" 'run trig')"
 	ret=$?
