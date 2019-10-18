@@ -5,7 +5,7 @@ cd "$(dirname "$(readlink -e "$0")")/.." || exit
 beat()
 {
 printf '%(%Y%m%d-%H%M%S)T' || exit
-v="$(./sendsock.py "$1" 'run heartbeat')"
+v="$(./sendsock.py "$1" 'do heartbeat')"
 printf ' %q:%q %q\n' "$1" "$?" "$v" || exit
 read -t60 t && exit
 }
