@@ -2568,6 +2568,91 @@ class RfbCommander(object):
 		self.rfb.stop()
 		return self.ok()
 
+	def cmd_send(self, channel, *args):
+		"""
+		send channel data..: send to channel, waiting
+		- This waits until somebody has read the data
+		- Data delivery is in-sequence
+		see also: send/recv, req/rep, push/pull
+		"""
+		c	= Channel(channel)
+		v	= ' '.join(args)
+		if not c.put(v):
+			c.put(v, self.scheduler)
+			yield self.__Nothing
+		yield Return(self.ok())
+
+	def cmd_push(self, channel, *args):
+		"""
+		push channel data..: append data to channel, nonwaiting
+		- This appends data to a channel, not waiting for delivery
+		- Data delivery is in-sequence
+		see also: send/recv, req/rep, push/pull
+		"""
+		c	= Channel(channel)
+		v	= ' '.join(args)
+		return self.ok() if c.put(v, False) else self.fail()
+
+	def cmd_rep(self, channel, *args):
+		"""
+		rep channel data..: send data to a channel, directly and exclusively
+		- This succeeds if data is delivered
+		- This fails if nobody waiting on the channel
+		- This errors if channel is not empty (somebody other does send/push)
+		see also: send/recv, req/rep, push/pull
+		"""
+		c	= Channel(channel)
+		if c.has_put():
+			return self.err()
+		v	= ' '.join(args)
+		return self.ok() if c.put(v) else self.fail()
+
+	def cmd_recv(self, channel, k):
+		"""
+		recv channel var: receive data from channel, waiting
+		- This waits until somebody sends data
+		- Data receipt is in-sequence
+		see also: send/recv, req/rep, push/pull
+		"""
+		c	= Channel(channel)
+		v	= c.get(self.scheduler)
+		if v is None:
+			v	= yield self.__Nothing
+		self.repl[k]	= v
+		yield Return(self.ok())
+
+	def cmd_pull(self, channel, k):
+		"""
+		pull channel var: receive data from channel, nonwaiting
+		- Fails if there is no data on the channel
+		- Data receipt is in-sequence
+		see also: send/recv, req/rep, push/pull
+		"""
+		c	= Channel(channel)
+		v	= c.get()
+		if v is None:
+			return self.fail()
+		self.repl[k]	= v
+		return self.ok()
+
+	def cmd_req(self, channel, k):
+		"""
+		req channel var: receive data from channel, exclusively
+		- This fails if somebody else is waiting for data, too
+		- Else this waits until somebody sends data
+		this waits for something to arrive on the channel
+		see also: send/recv, req/rep, push/pull
+		"""
+		c	= Channel(channel)
+		if c.has_get():
+			yield Return(self.fail())
+			return
+		v	= c.get(self.scheduler)
+		if v is None:
+			v	= yield self.__Nothing
+		self.repl[k]	= v
+		yield Return(self.ok())
+
 	def template(self, name, prefix=''):
 		"""
 		load and returns the template named after
@@ -2710,6 +2795,47 @@ class RfbCommander(object):
 		r	= t['r']
 		return self.fail()
 		return self.ok()
+
+class Channel():
+	chan	= {}
+
+	def __init__(self, name):
+		self.c	= self.__class__.chan.get(name)
+		if self.c is None:
+			self.c	= self
+			self.p	= []	# waiting for put
+			self.g	= []	# waiting for get
+			self.__class__.chan[name]	= self
+
+	def has_put(self):		return self.c.p and True
+	def has_get(self):		return self.c.g and True
+
+	def put(self, data, cb=None):	return self.c._put(data, cb)
+	def get(self, cb=None):		return self.c._get(cb)
+
+	def _get(self, cb):
+		while self.p:
+			# self.g == []
+			r,p	= self.p.pop(0)
+			if p:
+				p()
+			if r is not None:
+				return r
+		# self.p == []
+		if cb:
+			self.g.append(cb)
+		return None
+
+	def _put(self, data, cb):
+		if self.g:
+			# self.p == []
+			self.g.pop(0)(data)
+			return True
+		# self.g == []
+		if cb is None:
+			return False
+		self.p.append((data,cb))
+		return True
 
 # Following are twisted wrappers, implementing an abstract interface to the classes above
 #
