@@ -11,9 +11,9 @@ ID="${1:-$ID}"
 t=1
 while	! read -t$t t
 do
+	mv -f "sub/$ID/web/console.last.txt" "sub/$ID/web/console.old.txt"
+	mv -f "sub/$ID/web/console.txt" "sub/$ID/web/console.last.txt"
 	t=1
 	unbuffered -cduva "sub/$ID/web/console.txt" ./sendsock.py "$ID" 'do console' || t=20
-	mv -f "sub/$ID/web/console.last" "sub/$ID/web/console.old"
-	mv -f "sub/$ID/web/console.txt" "sub/$ID/web/console.last"
 done
 
