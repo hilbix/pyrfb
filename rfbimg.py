@@ -1563,7 +1563,7 @@ class RfbCommander(object):
 		Suppress normal output of cmd
 		Commandline see 'verbose'.  'verbose' and 'quiet' are independent.
 		"""
-		yield self.onoff('quiet', *args)
+		return self.onoff('quiet', *args)
 
 	def cmd_verbose(self,*args):
 		"""
@@ -1572,21 +1572,21 @@ class RfbCommander(object):
 		verbose off: disable verbose
 		verbose cmd: verbose output of cmd (see: dump)
 		"""
-		yield self.onoff('verbose', *args)
+		return self.onoff('verbose', *args)
 
 	def cmd_debug(self, *args):
 		"""
 		Enable debugging output.
 		Commandline see 'verbose'.  'verbose' and 'quiet' are independent.
 		"""
-		yield self.onoff('debugging', *args)
+		return self.onoff('debugging', *args)
 
 	def cmd_trace(self, *args):
 		"""
 		Enable scheduler tracing.
 		Commandline see 'verbose'.  'verbose' and 'quiet' are independent.
 		"""
-		yield self.onoff('tracing', *args)
+		return self.onoff('tracing', *args)
 
 	def onoff(self, prop, *args):
 		old	= getattr(self, prop)
