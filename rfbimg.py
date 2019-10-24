@@ -1385,7 +1385,7 @@ class RfbCommander(object):
 		yield Return(st)
 
 	def expand(self, s):
-		return var_expand(s, self.args, self.repl, self.globals)
+		return var_expand(s, self.args, self.autoset(), self.globals)
 
 	def prompt(self):
 		if not self._prompt:
