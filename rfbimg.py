@@ -34,13 +34,14 @@ MAXSTACK	= 10000
 MAXMACROS	= 100000
 
 import easyrfb
-import json
 
-import os
+import gc
 import io
+import os
 import re
 
 import sys
+import json
 import time
 import errno
 import random
@@ -182,10 +183,13 @@ valid_filename = re.compile('^[,_a-zA-Z0-9][-,_a-zA-Z0-9]*$')
 
 log	= None
 
-# WTF, why isn't there a standard function for this?
+# WTF, why isn't o.update() returning o?
 def updateDict(o, *args, **kw):
 	o.update(*args, **kw)
 	return o
+
+def positiveHash(x):
+	return hash(x)+sys.maxint+1
 
 def timestamp():
 	t = time.gmtime()
@@ -1049,22 +1053,48 @@ class Callback():
 		calls cb(*args, *args2, **kw, **kw2)
 		"""
 		self.__have	= False
-		self.__cb	= val
+		self.__cb	= cb
 		self.__args1	= args
 		self.__kw1	= kw
+		self.__done	= False
+		self.__delay	= None
+
+	# This must be run in the same thread as __init__ was called
+	def cb(self):
+		"""
+		This must be called in the same thread as __init__ ran
+		This only fires once
+		"""
+		if self.__done:
+			return None
+		self.done	= True
+		return self.__cb(*(self.__args1+self.__args2), **(updateDict(dict(self.__kw1), self.__kw2)))
 
 	def activate(self, delay, cb):
+		"""
+		This must be called in the same thread as __init__ ran
+		cb is a default callback which is used, if the cb was None on __init__ time
+		delay(cb) is a function which switches to the right thread and executes cb there
+		"""
 		if self.__cb is None:
 			self.__cb	= cb
-		if self.__have:
-			self.__cb(*self.__args1, *self.__args2, **self.__kw1, **self.__kw2)
-		else:
-			delay
+		self.__delay	= delay
+		if not self.__have:
+			return None
+		return self.cb()
+
 	def __call__(self, *args, **kw):
+		"""
+		This may be fired from any thread
+		You should only call this once
+		"""
 		self.__args2	= args
 		self.__kw2	= kw
 		self.__have	= True
-		
+		# Call in the main thread
+		if self.__delay:
+			self.__delay(self.cb)
+
 
 class RfbCommander(object):
 	valid_filename	= valid_filename
@@ -1096,7 +1126,12 @@ class RfbCommander(object):
 	# INIT
 	#
 
+	def end(self):
+		self.io.end()
+		self.io	= None
+
 	def __init__(self, io):
+		self.rfb	= None
 		self.io		= io
 
 		# HACK:
@@ -1115,7 +1150,6 @@ class RfbCommander(object):
 		self.globals	= None
 		self.repl	= {}
 		self.args	= {}
-		self.autovars	= False
 		self.success	= None
 		self.failure	= 'ko'
 		self.state	= None
@@ -1131,8 +1165,13 @@ class RfbCommander(object):
 		self.lines	= []
 		#self.max	= 0
 		self.macnt	= 0
+		self.clear()
 		self.scheduler()
 
+	def clear(self):
+		self.time	= None
+		self.gmtime	= None
+		self.random	= None
 	#
 	# Command scheduler
 	#
@@ -1149,29 +1188,29 @@ class RfbCommander(object):
 
 		Callbacks can pass in variables and/or errors (exceptions)
 		so self.scheduler is usually the callback itself which accepts the result to continue.
-		To get the value of the callback, do
-			c	= Callback(self.scheduler)
+		Example how to get the value of the callback and demonstrate a nice sideeffect:
+			c	= Callback(some_function, *args, **kw)
+			# c(result) can now be called any time here or after the yield from any thread
 			setup_callback(c)
 			try: val=yield c
-			except Exception, err: return
-		- val then is what scheduler(val) was called with, but only if there was no error passed in
-		- If self.scheduler(Val, error=Err) then err == Err and, thanks to the "return",
-		  the error will be ignored and the value will be passed to the next yield up in the stack.
+			except Exception, err: return	# expected exception which gives Val to the caller
+		- some_function then invokes self.scheduler(Val, error=Err)
+		- If Err is given then err becomes Err and raises the exception on the yield.
+		  The "return" here does a StopIteration, which allows to pass Val to the next yield up in the stack.
+		  (This is the only situation where Return() must not be used.)
+		- else, without error set, val becomes Val.  It's easy and straight forward.
 
 		There are following specials:
-		- "self.Callback()" which is equivalent to "Callback(None)" which is equivalent to "Callback(self.scheduler)"
-		  - This allows asynchronous call to the given callback, even from other threads (latter is not tested yet)
-			c = Callback(fn, *args, **kw)
-			c(*args2, **kw2)	# c.val = fn(*args, *args2, **kw, **kw2)
-			v = c.val()
-		    however
+		- "Callback()" which is equivalent to "Callback(None)" which is equivalent to "Callback(self.scheduler)"
+		  - This allows asynchronous call to the given callback, even from other threads (latter not tested yet)
+			c	= Callback(fn, *args1, **kw1)
+			install_callback(c)
+			res	= yield c
+		    then
 			c(*args2, **kw2) can be called from another thread
-		    end
-			v.val(v)
-		    returns
-			v
-		    as long as c() was not called
-		- "val = yield self.__Nothing" wait for callback to call "self.scheduler(v)", see above
+		    which then invokes
+			fn(*args1, *args2, **kw1, **kw2)
+		    in the right thread.
 		- "result = yield generator(args..)" to "call" the generator
 		  - "val = yield val" just returns the value unchanged through the scheduler,
 		    hence you do not need to know if "fn(arg)" is actually a generator or a function which returns it's value
@@ -1251,7 +1290,7 @@ class RfbCommander(object):
 			return self.io.later(self.scheduler, v, error)
 
 		self.trace(Sched=len(self.stack), _end=True, v=v, error=error, B=self.bye)
-		self.io.end()
+		self.end()
 		if error:
 			raise error
 
@@ -1297,8 +1336,10 @@ class RfbCommander(object):
 
 					# The next 3 commands must be in exactly this sequence to avoid races
 					self.paused	= False			# enable queueLine() directly sending to us
-					yield self.__Nothing			# wait for next line
+					yield Callback()			# wait for next line
 					self.paused	= True			# disable queueLine() sending until allowed again
+					# hack: invalidate cached values (time etc.) after line is read
+					self.clear()
 					continue
 
 				if not hold:
@@ -1317,8 +1358,6 @@ class RfbCommander(object):
 	def readLine(self, line, prompt):
 		if prompt and line.strip()=='':
 			# hack: Do not error on empty lines when prompting
-			# hack: and do the autoset which usually is done in .processLine
-			self.autoset()
 			st	= self.ok()
 		else:
 			self.log(line=line)
@@ -1329,7 +1368,7 @@ class RfbCommander(object):
 				self.trace(Line=line, _yield=v, B=self.bye)
 				v	= yield v
 				self.trace(Line=line, _got=v, B=self.bye)
-				st	= self.get_bye(v)
+				st	= self.getBye(v)
 			except Exception,e:
 				self.trace(Line=line, ex=e, B=self.bye)
 				self.log_err(e, 'exception in readline')
@@ -1350,7 +1389,7 @@ class RfbCommander(object):
 
 	# This now is deterministic O(len(s))
 	# and no more possibly endless recursive/iterative
-	def expand(self, s):
+	def expand(self, o):
 		"""
 		return s with '{var}' sequences replaced by vars
 		If var is missing und undefined sequence, '{var}' is just not replaced.
@@ -1367,10 +1406,11 @@ class RfbCommander(object):
 		{var:x:y} gives var starting at character x until character y
 
 		{CMD args} calls self.get(CMD)(args)
-		- If this errors, the replacement is not done
+		- If this errors/throws, the replacement is not done
 		- Else the output of CMD is replaced
 		- Result (the return value of command) is stored in {?}
 		"""
+#		print('EXPAND',o)
 		maxarg	= int(self.args.get('#', '0'))
 		r	= []
 		t	= []
@@ -1417,6 +1457,20 @@ class RfbCommander(object):
 					r.append('{'+v+'}')
 					continue
 
+				sep	= v.split(' ')
+				if len(sep)>1:
+					print("HERE", sep)
+					# {X args}
+					try:
+						z	= None
+						z	= yield self.get(sep[0])
+						z	= yield z(*sep[1:])
+						r.append(z)
+					except Exception, e:
+						self.log_err(e, 'expanding '+v+' via '+str(z))
+						r.append('{'+v+'}')
+					continue
+
 				# {X}
 				# {X:N}
 				# {X:N:N}
@@ -1425,6 +1479,7 @@ class RfbCommander(object):
 				y	= int(sep[1]) if len(sep)>1 and sep[1] else -1
 				z	= int(sep[2]) if len(sep)>2 and sep[2] else -1
 				if v=='' or len(sep)>1 and v.isdigit():
+					# Numeric (macro) arguments, taken only from self.args
 					# {[start]:[end]}
 					# {[start]:[end]:[step]}
 					x	= int(v) if v else 0
@@ -1433,11 +1488,9 @@ class RfbCommander(object):
 					if z<1: z=1
 					l	= []
 					while x<=y:
-						v	= str(x)
-						for c in d:
-							if c and v in c:
-								l.append(c[v])
-								break
+						v	= self.args.get(str(x))
+						if v is None:	break		# XXX TODO XXX can this happen?  Should we raise?
+						l.append(v)
 						x += z
 					# XXX TODO XXX
 					# you cannot detect the difference between
@@ -1450,7 +1503,7 @@ class RfbCommander(object):
 				# {var}
 				# {var:start}
 				# {var:start:end}
-				for a in d:
+				for a in [self.args, self.repl, self.globals]:
 					if a and v in a:
 						x	= a[v]
 						if y<0:	y=0
@@ -1475,7 +1528,7 @@ class RfbCommander(object):
 			r	= t.pop()
 			r.append('{'+v)
 #		print('r', r)
-		yield ''.join(r)
+		yield Return(''.join(r))
 
 	def prompt(self):
 		if not self._prompt:
@@ -1483,63 +1536,141 @@ class RfbCommander(object):
 			return
 
 		# TODO XXX TODO print some stats here
+		o1	= gc.get_count()
+		gc.set_debug(gc.DEBUG_LEAK)
+		n	= gc.collect()
+		o2	= gc.get_count()
+		self.diag(gc=n, before=o1, after=o2)
 		v	= yield self.expand(self._prompt)
 		self.write(v)
-		yield Return(True)			# push output to user
+		yield Return(True)			# push prompt to user
 
 	#
 	# Variables
 	#
 
-	def autoset(self):
-		self.autovars	= True
-		r		= self.repl
-
-		r['mouse.x']		= str(self.rfb.lm_x)
-		r['mouse.y']		= str(self.rfb.lm_y)
-		r['mouse.b']		= str(self.rfb.lm_c)
-
-		r['flag.verbose']	= bool2str(self.verbose)
-		r['flag.quiet']		= bool2str(self.quiet)
-		r['flag.debug']		= bool2str(self.quiet)
-		r['flag.trace']		= bool2str(self.quiet)
-
-		r['sys.tick']		= str(self.rfb.tick)
-		r['sys.macros']		= str(self.macnt)
-		r['sys.depth']		= str(len(self.stack))
-
-		tm			= time.gmtime()
-		r['date.y']		= str(tm.tm_year)
-		r['date.m']		= str(tm.tm_mon)
-		r['date.mm']		= str(tm.tm_mon).zfill(2)
-		r['date.d']		= str(tm.tm_mday)
-		r['date.dd']		= str(tm.tm_mday).zfill(2)
-#		r['date.w']		= str(tm.tm_week)		# 1-52
-#		r['date.ww']		= str(tm.tm_week).zfill(2)	# /1-52
-		r['date.wd']		= str(tm.tm_wday+1)		# 1-7 where 7=sun
-		r['date.yd']		= str(tm.tm_yday)		# 1-366
-		r['date.ydd']		= str(tm.tm_yday).zfill(3)
-		r['time.h']		= str(tm.tm_hour)
-		r['time.hh']		= str(tm.tm_hour).zfill(2)
-		r['time.m']		= str(tm.tm_min)
-		r['time.mm']		= str(tm.tm_min).zfill(2)
-		r['time.s']		= str(tm.tm_sec)
-		r['time.ss']		= str(tm.tm_sec).zfill(2)
-
-# this was for debugging saves to JSON
-#		r['all']		= ''.join([chr(x) for x in range(256)])
-
-		# XXX TODO XXX add more replacements
-
-		return r
+	def get(self, n):
+		return ' '.join([k[4:] for k in dict(self) if k.startswith('get_')])   if n is None else   getattr(self,'get_'+n, None)
+	def GET(self, k, d):
+		return ' '.join([str(k) for k in d])   if k is None else   d.get(k, lambda self: None)(self)
+	def GETdatetime(self, k, d):
+		if self.time   is None: self.time   = time.time()
+		if self.gmtime is None: self.gmtime = time.gmtime(self.time)
+		return self.GET(k, d)
+	def get_time(self, k):
+		"""
+		time sec	seconds since epoch
+		time min	minutes since epoch
+		time hour	hours since epoch
+		time day	days since epoch
+		time week	weeks since epoch
+		time h		UTC hour 0-23
+		time hh		UTC hour 00-23
+		time m		UTC minute 0-59
+		time mm		UTC minute 00-59
+		time s		UTC second 0-60 (60 is leap second if supported)
+		time ss		UTC minute 00-60
+		"""
+		return self.GETdatetime(k,
+			{
+			'sec':	lambda self:	str(self.time),				# seconds since epoch
+			'min':	lambda self:	str(self.time//60),			# minutes since epoch
+			'hour':	lambda self:	str(self.time/3600),			# hours since epoch
+			'day':	lambda self:	str(self.time//86400),			# days since epoch
+			'week':	lambda self:	str(self.time/604800),			# weeks since epoch
+			'h':	lambda self:	str(self.gmtime.tm_hour),		# 0-23
+			'hh':	lambda self:	str(self.gmtime.tm_hour).zfill(2),	# 00-23
+			'm':	lambda self:	str(self.gmtime.tm_min),		# 0-59
+			'mm':	lambda self:	str(self.gmtime.tm_min).zfill(2),	# 00-59
+			's':	lambda self:	str(self.gmtime.tm_sec),		# 0-60	60 for leap second (can this happen?)
+			'ss':	lambda self:	str(self.gmtime.tm_sec).zfill(2),	# 00-60	60 for leap second (can this happen?)
+			})
+	def get_date(self, k):
+		"""
+		date y		UTC year
+		date m		UTC month 1-12
+		date mm		UTC month 01-12
+		date d		UTC day 1-31
+		date dd		UTC day 01-12
+		date wd		UTC week day 1-7 where 7=sun
+		date yd		UTC year day 1-366
+		date ydd	UTC year day 001-366
+		"""
+		return self.GETdatetime(k,
+			{
+			'y':	lambda self:	str(self.gmtime.tm_year),		# year
+			'm':	lambda self:	str(self.gmtime.tm_mon),		# 1-12
+			'mm':	lambda self:	str(self.gmtimetm_mon).zfill(2),	# 01-12
+			'd':	lambda self:	str(self.gmtime.tm_mday),		# 1-31
+			'dd':	lambda self:	str(self.gmtimetm_mday).zfill(2),	# 01-31
+#			'w':	lambda self:	str(self.gmtime.tm_week),		# 1-52
+#			'ww':	lambda self:	str(self.gmtimetm_week).zfill(2),	# 01-52
+			'wd':	lambda self:	str(self.gmtimetm_wday+1),		# 1-7 where 7=sun
+			'yd':	lambda self:	str(self.gmtimetm_yday),		# 1-366
+			'ydd':	lambda self:	str(self.gmtimem_yday).zfill(3),	# 001-366
+			})
+	def get_rnd(self, a, b=None):
+		"""
+		random {}: some often very long positive integer value
+		random x: 0..x
+		random x y: x..y
+		"""
+		if self.random is None:	self.random = positiveHash(repr(self.repl))
+		if b is None: a,b = 0,a
+		a	= int(a)
+#		print('rnd', r, a, b)
+		if b == '':
+			return str(a+positiveHash(str(random.random())+'.'+str(self.random)))
+		b = int(b)
+		if b>=a:	b -= a
+		b	+= 1
+		return str( a + ((self.random + rand(b)) % b) )
+	def get_mouse(self, k):
+		"""
+		mouse x:	mouse pos x
+		mouse y:	mouse pos y
+		mouse b:	mouse buttons
+		"""
+		return self.GET(k,
+			{
+			'x':	lambda self:	str(self.rfb.lm_x),
+			'y':	lambda self:	str(self.rfb.lm_y),
+			'b':	lambda self:	str(self.rfb.lm_c),
+			})
+	def get_flag(self, k):
+		"""
+		flag verbose:	is verbose active
+		flag quiet:	is quiet active
+		flag debug:	is debug active
+		flag trace:	is trace active
+		"""
+		return self.GET(k,
+			{
+			'verbose':	lambda self:	bool2str(self.verbose),
+			'quiet':	lambda self:	bool2str(self.quiet),
+			'debug':	lambda self:	bool2str(self.debug),
+			'trace':	lambda self:	bool2str(self.trace),
+			})
+	def get_sys(self, k):
+		"""
+		sys tick:	number of ticks (each tick is aprox 0.1s)
+		sys macros:	number of macros processed so far
+		sys depth:	recoursion depth
+		"""
+		return self.GET(k,
+			{
+			'tick':		lambda self:	str(self.rfb.tick),
+			'macros':	lambda self:	str(self.macnt),
+			'depth':	lambda self:	str(len(self.stack)),
+			})
 
 	#
 	# Output helpers
 	#
 
-	def send(self, s):
+	def send(self, *args):
 		if not self.quiet:
-			self.writeLine(s)
+			self.writeLine(' '.join(args))
 		return True
 
 	def diag(self, **kw):
@@ -1637,9 +1768,10 @@ class RfbCommander(object):
 		And it fundamentally changes how "unknown" commands are processed.
 		Without prompt they set exit state, while with prompt they don't and just fail.
 		"""
+		gc.disable()
 		self._prompt = ' '.join(args) if args else '> '
 		self.repl['prompt']=self._prompt
-		self.send(__file__ + ' ' + sys.version.split('\n',1)[0].strip())
+		self.send(__file__, sys.version.split('\n',1)[0].strip())
 		return self.ok()
 
 	def cmd_success(self,*args):
@@ -1691,7 +1823,8 @@ class RfbCommander(object):
 					self.debug(**{prop:st})
 				args	= []
 		if not args:
-			yield Return(old); return
+			yield Return(old)
+			return
 
 		setattr(self, prop, True)
 		self.debug(**{prop:True})
@@ -1709,7 +1842,7 @@ class RfbCommander(object):
 		self.failure = args and ' '.join(args) or None
 		return self.ok()
 
-	def cmd_ok(self,*arg):
+	def cmd_ok(self,*args):
 		"""
 		ok: dummy command, ignores args, always succeeds
 		"""
@@ -1744,19 +1877,31 @@ class RfbCommander(object):
 		hence lengthy calculations block other things.
 		"""
 		if cmd is None:
-			all	= []
-			for a in dir(self):
-				if a.startswith('cmd_'):
-					all.append(a[4:])
-			return self.ok('known commands: '+', '.join(all))
+			self.help_list('commands:', 'cmd_')
+			self.help_list('expands: ', 'get_')
+			return self.ok()
+		ok	= self.help_doc('c:', 'cmd_'+cmd)
+		ok	= self.help_doc('e:', 'get_'+cmd) or ok
+		return self.ok() if ok else self.fail('no help for: '+cmd)
 
-		fn = getattr(self, 'cmd_'+cmd)
+	def help_list(self, what, prefix):
+		l	= len(prefix)
+		all	= []
+		for a in dir(self):
+			if a.startswith(prefix):
+				all.append(a[l:])
+		self.send(what, ', '.join(all))
+
+	def help_doc(self, what, name):
+		fn	= getattr(self, name, None)
+		if fn is None:
+			return False
 		for a in fn.__doc__.split('\n'):
 			a	= a.strip()
 			if len(a):
 				if a=='.': a=''
-				self.writeLine(' '+a)
-		return self.ok()
+				self.writeLine(what+'\t'+a)
+		return True
 
 	def var(self, k):
 		for d in [self.args, self.repl, self.globals]:
@@ -1773,7 +1918,23 @@ class RfbCommander(object):
 		except TypeError:
 			return 0
 
-	def let(self, k, fn, *args):
+	def expr(self, fn, args):
+		if len(args)<2: raise RuntimeError("two arguments minimum")
+		r	= fn(args[0], args[1])
+		for v in args[2:]:
+			r	= fn(r, v)
+		return str(r)
+
+	def get_bool(self, fn, args, inverted=False):
+		if not args:	return 'fail'
+		k	= False
+		for a in args:
+			if not fn(a):
+				k	= True
+				break
+		return 'ok' if k==inverted else 'fail'
+
+	def let(self, k, fn, args):
 		v	= self.nvar(k)
 		ret	= v != 0
 		for a in args:
@@ -1812,39 +1973,71 @@ class RfbCommander(object):
 		let var 0 1:	makes var 1 and succeeds
 		let var 0 1 a:	makes var 1 and errors
 		"""
-		return self.let(v, lambda x,y: y, *args)
+		return self.let(v, lambda x,y: y, args)
 
 	def cmd_add(self, v, *args):
 		"""
 		add var N..:	add all the N to var
 		- the return value is the same as in "let"
 		"""
-		return self.let(v, lambda x,y: x+y, *args)
+		return self.let(v, lambda x,y: x+y, args)
+
+	def get_add(self, *args):
+		"""
+		add args..:	add all arguments
+		"""
+		return self.expr(lambda x,y: int(x)+int(y), args)
 
 	def cmd_sub(self, v, *args):
 		"""
 		sub var N..:	like add, but subtracs
 		"""
-		return self.let(v, lambda x,y: x-y, *args)
+		return self.let(v, lambda x,y: x-y, args)
+
+	def get_sub(self, *args):
+		"""
+		sub args..:	substract all arguments from the first one
+		"""
+		return self.expr(lambda x,y: int(x)-int(y), args)
 
 	def cmd_mul(self, v, *args):
 		"""
 		mul var N..:	like add, but multiplies
 		"""
-		return self.let(v, lambda x,y: x*y, *args)
+		return self.let(v, lambda x,y: x*y, args)
+
+	def get_mul(self, *args):
+		"""
+		mul args..:	multiply all args
+		"""
+		return self.expr(lambda x,y: int(x)*int(y), args)
 
 	def cmd_div(self, v, *args):
 		"""
 		div var N..:	like add, but divides
 		- if N is 0 this errors
 		"""
-		return self.let(v, lambda x,y: x/y, *args)
+		return self.let(v, lambda x,y: x//y, args)
+
+	def get_div(self, *args):
+		"""
+		div args..:	divide all args
+		division by 0:	the arguments are not replaced
+		"""
+		return self.expr(lambda x,y: int(x)//int(y), args)
 
 	def cmd_mod(self, v, *args):
 		"""
 		mod var N..:	like div, but does the remainder
 		"""
-		return self.let(v, lambda x,y: x%y, *args)
+		return self.let(v, lambda x,y: x%y, args)
+
+	def get_mod(self, *args):
+		"""
+		mod args..:	remainder all args
+		division by 0:	the arguments are not replaced
+		"""
+		return self.expr(lambda x,y: int(x)%int(y), args)
 
 	def cmd_nat(self, *args):
 		"""
@@ -1854,6 +2047,20 @@ class RfbCommander(object):
 		- success if all vars are numbers and higher than 0
 		"""
 		return self.true(true, lambda x,y: int(self.var(y))>0, *args)
+
+	def get_nat(self, *args):
+		"""
+		nat args..:	'ok' if all vars are natural numbers, 'fail' else
+		if {nat args..}
+		then echo all natural number
+		"""
+		def check(x):
+			try:
+				int(x)
+				return True
+			except ValueError:
+				return False
+		return self.get_bool(check, args)
 
 	def cmd_cmp(self, v, *args):
 		"""
@@ -1869,6 +2076,17 @@ class RfbCommander(object):
 			return k == v
 		return self.true(False, cmp, *args)
 
+	def get_cmp(self, v, *args):
+		"""
+		cmp args..:	'ok' if all args are equal, 'fail' else
+		- A single arg is compered to the empty string, so {cmp } is 'ok' while {cmp x} is 'fail'
+		- Beware of blanks in expansions {a} can be "a a" so {cmp {a}} is 'ok'
+		- Use 'equal' to compare variables directly without sideeffects
+		if {cmp x y}
+		then echo same
+		"""
+		return 'ok' if not args and v=='' else self.get_bool(lambda x: x==v, args)
+
 	def cmd_equal(self, v, *args):
 		"""
 		equal var..: success if all variables exist and are all equal
@@ -1882,6 +2100,17 @@ class RfbCommander(object):
 			if self.var(a) != v:
 				return self.fail()
 		return self.ok()
+
+	def get_equal(self, v, *args):
+		"""
+		equal var..:	'ok' if all vars exist and are equal, 'fail' else
+		- a single variable is just checked for existence
+		if {equal a b}
+		then echo {a}=={b}
+		else echo {a}!={b}
+		"""
+		v	= self.var(v)
+		return 'fail' if v is None else 'ok' if not args else self.get_bool(lambda x: self.var(x)==v, args)
 
 	def cmd_empty(self, *args):
 		"""
@@ -1898,6 +2127,14 @@ class RfbCommander(object):
 			if v is not None and v != '':
 				return self.fail()
 		return self.ok()
+
+	def get_empty(self, *args):
+		"""
+		empty args..:	'ok' if there is only the empty arg, 'fail' else
+		- only '{empty }' succeeeds, '{empty}' does not work and '{empty  }' fails
+		- 'if {empty {a}}' fails if 'a' does not exist, as then this expands to '{a}'
+		"""
+		return 'ok' if len(args)==1 and args[0]=='' else 'fail'
 
 	def cmd_local(self, k, *args):
 		"""
@@ -1925,7 +2162,7 @@ class RfbCommander(object):
 		.
 		There is a subtle detail:
 		'set a ' <- note: trailing blank -- sets {a} to the empty string
-		'set a' <- note: no blank        -- checks if {a} is known and
+		'set a' <- note: no blank        -- checks if {a} is known
 		'set  b' <- note: two blanks     -- sets {} to b
 		.
 		Example:
@@ -1942,8 +2179,8 @@ class RfbCommander(object):
 						flag	= True
 			else:
 				self.writeLine('use "load" to load globals')
-			if not self.autovars:
-				self.writeLine('use "prompt" to get automatic vars')
+#			if not self.autovars:
+#				self.writeLine('use "prompt" to get automatic vars')
 			if flag:
 				self.writeLine('note: vars override globals, use "save" to save globals')
 			for k,v in sorted(self.repl.iteritems()):
@@ -1956,6 +2193,14 @@ class RfbCommander(object):
 		else:
 			self.repl[var]	= ' '.join(args)
 		return self.ok()
+
+	def get_set(self, *args):
+		"""
+		set var..:	'ok' if all vars exists, 'fail' else
+		if {set a}
+		then echo a carries a value
+		"""
+		return self.get_bool(lambda x: self.var(x) is not None, args)
 
 	def cmd_unset(self, *args):
 		"""
@@ -2256,8 +2501,9 @@ class RfbCommander(object):
 		return self.ok()
 
 	def sleep(self, seconds):
-		self.io.sleep(seconds, self.scheduler)
-		return self.__Nothing
+		cb	= Callback()
+		self.io.sleep(seconds, cb)
+		return cb
 
 	def cmd_sleep(self, sec):
 		"""
@@ -2289,11 +2535,13 @@ class RfbCommander(object):
 	def run_do(self, macro, *args):
 		# prevent buggy names
 		if not self.valid_filename.match(macro):
-			yield Return(self.fail()); return
+			yield Return(self.fail())
+			return
 
 		oldargs		= self.args
 		oldmode		= self.mode
 		oldstate	= self.state
+		self.clear()
 
 		try:
 			nr	= self.macnt
@@ -2333,7 +2581,8 @@ class RfbCommander(object):
 
 				# parse line
 				#self.trace(Macro=macro, l=l, B=self.bye)
-				st		= self.get_bye((yield self.processLine(l, True)))
+				st	= yield self.processLine(l, True)
+				st	= self.getBye(st)
 				self.trace(Macro=macro, l=l, ret=st, B=self.bye)
 				if not st:
 					# pass on errors
@@ -2356,6 +2605,7 @@ class RfbCommander(object):
 			self.mode	= oldmode
 			self.args	= oldargs
 			self.state	= oldstate
+			self.clear()
 
 	def cmd_run(self, *args):
 		"""
@@ -2363,7 +2613,7 @@ class RfbCommander(object):
 		"""
 		return Bye(self.run_do(*args))
 
-	def get_bye(self, v):
+	def getBye(self, v):
 		while isinstance(v, Bye):
 			v	= v.val()
 			self.bye= True
@@ -2377,9 +2627,41 @@ class RfbCommander(object):
 		.
 		not return:	returns the inverse STATE (error/fail become success)
 		"""
-		st		= self.get_bye((yield self.processArgs(args)))
+		st		= self.getBye((yield self.processArgs(args)))
 		self.bye	= False
 		yield Return(self.fail() if st else self.ok())
+
+	def get_and(self, *args):
+		"""
+		and args..: all 'ok'
+		- 'ok' if all args are 'ok', 'fail' else
+		- fails for no arguments.  'x' makes this 'fail'
+		"""
+		return self.get_bool(lambda x: x=='ok', args)
+
+	def get_nand(self, *args):
+		"""
+		nand args..: not all are 'fail'
+		- 'ok' if any of the args is 'fail', 'fail' else
+		- fails for no arguments.  'x' is ignored
+		"""
+		return self.get_bool(lambda x: x!='fail', args, True)
+
+	def get_or(self, *args):
+		"""
+		or args..: any 'ok'
+		- 'ok' if any arg is 'ok', 'fail' else
+		- fails for no arguments. 'x' is ignored
+		"""
+		return self.get_bool(lambda x: x!='ok', args, True)
+
+	def get_nor(self, *args):
+		"""
+		nor args..: none 'ok'
+		- 'fails' if any arg is 'ok', 'ok' else
+		- fails for no arguments.  'x' make this fail
+		"""
+		return self.get_bool(lambda x: x!='ok', args)
 
 	def cmd_if(self, *args):
 		"""
@@ -2401,7 +2683,7 @@ class RfbCommander(object):
 		if return
 		- technically the same as before
 		"""
-		st		= self.get_bye((yield self.processArgs(args)))
+		st		= self.getBye((yield self.processArgs(args)))
 		self.bye	= False
 		self.prevstate	= self.state
 		self.state	= st
@@ -2482,8 +2764,9 @@ class RfbCommander(object):
 		def drained(**kw):
 			self.rfb.flush(refresh)		# XXX TODO XXX WTF HACK WTF!
 			self.scheduler()
-		self.rfb.event_add(drained)
-		yield self.__Nothing
+		cb	= Callback(drained)
+		self.rfb.event_add(cb)
+		yield cb
 		yield Return(True)
 
 	def templatemouse(self, t, n, click):
@@ -2504,7 +2787,8 @@ class RfbCommander(object):
 		# Mouse button release
 		if not click and x < lx < x+w-1 and y < ly < y+h-1:
 			# jitter 1 pixel
-			yield Return((lx+rand(3)-1, ly+rand(3)-1)); return
+			yield Return((lx+rand(3)-1, ly+rand(3)-1))
+			return
 
 		x	+= rand(w);
 		y	+= rand(h);
@@ -2588,8 +2872,9 @@ class RfbCommander(object):
 		.
 		Usually followed by: exit
 		"""
-		self.rfb.next(self.scheduler)
-		yield self.__Nothing
+		cb	= Callback()
+		self.rfb.next(cb)
+		yield cb
 		yield Return(self.ok())
 
 	def cmd_flush(self):
@@ -2633,15 +2918,17 @@ class RfbCommander(object):
 		Note: This waits count frames, not a defined time
 		"""
 		if not templates:
-			yield Return(self.fail()); return
+			yield Return(self.fail())
+			return
 
 		def result(**waiter):
 			self.diag(wait=waiter)
 			self.scheduler(self.print_wait(waiter))
 
 		timeout = int(timeout)
-		self.rfb.wait(cb=result, t=templates, retries=abs(timeout), img=timeout<0)
-		yield Return(self.__Nothing)
+		cb	= Callback(result)
+		self.rfb.wait(cb=cb, t=templates, retries=abs(timeout), img=timeout<0)
+		yield Return(cb)
 		# return value see result()
 
 	def print_wait(self,waiter):
@@ -2697,8 +2984,9 @@ class RfbCommander(object):
 		c	= Channel(channel)
 		v	= ' '.join(args)
 		if not c.put(v):
-			c.put(v, self.scheduler)
-			yield self.__Nothing
+			cb	= Callback()
+			c.put(v, cb)
+			yield cb
 		yield Return(self.ok())
 
 	def cmd_push(self, channel, *args):
@@ -2736,9 +3024,10 @@ class RfbCommander(object):
 		"""
 		if k is None: k=channel
 		c	= Channel(channel)
-		v	= c.get(self.scheduler)
+		cb	= Callback()
+		v	= c.get(cb)
 		if v is None:
-			v	= yield self.__Nothing
+			v	= yield cb
 		self.repl[k]	= v
 		yield Return(self.ok())
 
@@ -2772,9 +3061,10 @@ class RfbCommander(object):
 		if c.has_get():
 			yield Return(self.fail())
 			return
-		v	= c.get(self.scheduler)
+		cb	= Callback()
+		v	= c.get(cb)
 		if v is None:
-			v	= yield self.__Nothing
+			v	= yield cb
 		self.repl[k]	= v
 		yield Return(self.ok())
 
@@ -3062,6 +3352,7 @@ class ControlProtocol(CorrectedLineReceiver):
 			#self.transport.loseConnection()				#TWISTED
 		except:
 			pass
+		self.cmd	= None
 
 	def sleep(self, secs, cb, *args, **kw):
 		twisted.internet.reactor.callLater(secs, cb, *args, **kw)		#TWISTED
