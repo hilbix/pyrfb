@@ -991,126 +991,6 @@ def Extend(l, *a):
 		l.extend(b)
 	return l
 
-# This now is deterministic O(n)
-# and no more possibly endless recursive/iterative
-def var_expand(o, *d):
-	"""
-	return o with '{var}' sequences replaced by vars given in dicts *d
-	first dict wins.  If var is missing, '{var}' is just not replaced.
-	Also: {} is an escape preventing expansion at this stage.
-	You can nest it with: {{}} which will replace to {}
-	"""
-	maxarg	= None
-	for a in d:
-		if a:
-			maxarg	= a.get('#')
-			if maxarg is not None:
-				break
-	maxarg	= int(maxarg) if maxarg else 0
-
-	r	= []
-	t	= []
-	s	= str(o)
-	p	= 0
-	inhibit	= False
-	for i in range(len(s)):
-		if s[i]=='{':
-			r.append(s[p:i])
-			t.append(r)
-#			print('stack', t)
-			r	= []
-			p	= i+1
-		if s[i]=='}' and t:
-			r.append(s[p:i])
-			v	= ''.join(r)
-			r	= t.pop()
-#			print('unstack', r, v)
-			p	= i+1
-			if v=='':
-				# {} special case
-				# Regardless how deep it shows up,
-				# it inhibits further expansion,
-				# but only a single time.
-				# {{}} is your friend ..
-				inhibit	= True
-				# But it replaces to nothing at this level.
-				# Notes for degenerate cases a='b', b='', c='x':
-				# '{c{{a}}}' => '{c{b}}' => '{c}' gives 'x'
-				# '{c{{b}}}' => '{c{}}' gives '{c}', as further expansion is inhibited
-				continue
-			# We must check for {} first and then for inhibit:
-			# '{{}someting{}}' expands to '{something}'.
-			# but inhibiting above starts after '{{}' has been seen already
-			# so it would inhibit '{}}', so the '{}' still needs to replace to nothing.
-			# For '{{}something{}}' we are at
-			# STACK('{') INHIBIT('{}') 'something' INHIBIT('{}') YOU_ARE_HERE('}')
-			# giving '{something}' and resets inhibit if we are at top level again.
-			# hence '{{}}'  is replaced to '{}', which is exactly what we want.
-			if inhibit:
-				r.append('{'+v+'}')
-				# inhibit stops when we are on top level again
-				inhibit	= len(r)>0
-				continue
-
-			# {X}
-			# {X:N}
-			# {X:N:N}
-			sep	= v.rsplit(':', 2)
-			v	= sep[0]
-			y	= int(sep[1]) if len(sep)>1 and sep[1] else -1
-			z	= int(sep[2]) if len(sep)>2 and sep[2] else -1
-			if v=='' or len(sep)>1 and v.isdigit():
-				# {[start]:[end]}
-				# {[start]:[end]:[step]}
-				x	= int(v) if v else 0
-				if x<1: x=1
-				if y<0 or y>maxarg: y=maxarg
-				if z<1: z=1
-				l	= []
-				while x<=y:
-					v	= str(x)
-					for c in d:
-						if c and v in c:
-							l.append(c[v])
-							break
-					x += z
-				# XXX TODO XXX
-				# you cannot detect the difference between
-				# empty argument {3:3}
-				# and missing argument {3:2}
-				# both are empty.  Is there some solution?
-				r.append(' '.join(l))
-				continue
-
-			# {var}
-			# {var:start}
-			# {var:start:end}
-			for a in d:
-				if a and v in a:
-					x	= a[v]
-					if y<0:	y=0
-					if z<0:	z=len(x)
-					r.append(x[y:z])
-					break
-			else:
-				# executed if not found (no 'break' above)
-				r.append('{'+v+'}')
-	# append the remaining part (everything after the last '}'
-	if p<len(s):
-		r.append(s[p:])
-	# now works up the strack backwards open braces seen which have missing closing braces
-	# There are no errors here
-#	print('r', r)
-#	print('t', t)
-	while t:
-		# or r	= Append(t.pop(), *r)
-		# or r	= Extend(t.pop(), r)
-		v	= ''.join(r)
-		r	= t.pop()
-		r.append('{'+v)
-#	print('r', r)
-	return ''.join(r)
-
 #	a	= {}
 #	for i in d:
 #		a.update(i)
@@ -1161,6 +1041,30 @@ class Val(object):
 
 class Return(Val):	pass
 class Bye(Val):		pass
+class Callback():
+	def __init__(self, cb=None, *args, **kw):
+		"""
+		postpone some Callback
+
+		calls cb(*args, *args2, **kw, **kw2)
+		"""
+		self.__have	= False
+		self.__cb	= val
+		self.__args1	= args
+		self.__kw1	= kw
+
+	def activate(self, delay, cb):
+		if self.__cb is None:
+			self.__cb	= cb
+		if self.__have:
+			self.__cb(*self.__args1, *self.__args2, **self.__kw1, **self.__kw2)
+		else:
+			delay
+	def __call__(self, *args, **kw):
+		self.__args2	= args
+		self.__kw2	= kw
+		self.__have	= True
+		
 
 class RfbCommander(object):
 	valid_filename	= valid_filename
@@ -1168,7 +1072,29 @@ class RfbCommander(object):
 	MODE_SPC	= ' '
 	MODE_TAB	= "\t"
 
-	__Nothing	= {}		# some Dummy
+	#
+	# Outputs
+	#
+
+	def log_err(self, *args, **kw):
+		self.io.log_err(*args, **kw)
+
+	def flush(self):
+		self.io.write(''.join(self._out))
+		self._out	= []
+
+	def write(self, s):
+		self._out.append(s)
+		self.flush()
+
+	def writeLine(self, s):
+		self._out.append(s)
+		self._out.append('\n')
+		self.flush()
+
+	#
+	# INIT
+	#
 
 	def __init__(self, io):
 		self.io		= io
@@ -1184,6 +1110,7 @@ class RfbCommander(object):
 		# Example: "prompt" "run macro" should exit if "macro" exists, but not if not
 		# Currently I cannot really express this easily.
 		self.bye	= False
+		self._out	= []
 		self._prompt	= None
 		self.globals	= None
 		self.repl	= {}
@@ -1206,20 +1133,55 @@ class RfbCommander(object):
 		self.macnt	= 0
 		self.scheduler()
 
-	def queueLine(self, rfb, line):
-		self.rfb	= rfb
-		self.lines.append(line)
-		self.log('got', line)
-		if not self.paused:	# readLine is waiting for data
-			# assert that TOS is generator of lineInput?
-			self.scheduler()
+	#
+	# Command scheduler
+	#
 
-#	def setmax(self, max):
-#		if self.max < max:
-#			self.max	= max
-#			self.log('depth', max)
-
+	# We cannot use yield in this here, as we need tail-recoursion
 	def scheduler(self, v=None, error=None):
+		"""
+		This is the command scheduler.
+		We have 3 entry points:
+
+		Initialization
+		Asynchronous input channel, triggered by queueLine() if we are waiting for input (= not .paused)
+		Callbacks, which must be synchronous (this is: excactly one callback must be active any time)
+
+		Callbacks can pass in variables and/or errors (exceptions)
+		so self.scheduler is usually the callback itself which accepts the result to continue.
+		To get the value of the callback, do
+			c	= Callback(self.scheduler)
+			setup_callback(c)
+			try: val=yield c
+			except Exception, err: return
+		- val then is what scheduler(val) was called with, but only if there was no error passed in
+		- If self.scheduler(Val, error=Err) then err == Err and, thanks to the "return",
+		  the error will be ignored and the value will be passed to the next yield up in the stack.
+
+		There are following specials:
+		- "self.Callback()" which is equivalent to "Callback(None)" which is equivalent to "Callback(self.scheduler)"
+		  - This allows asynchronous call to the given callback, even from other threads (latter is not tested yet)
+			c = Callback(fn, *args, **kw)
+			c(*args2, **kw2)	# c.val = fn(*args, *args2, **kw, **kw2)
+			v = c.val()
+		    however
+			c(*args2, **kw2) can be called from another thread
+		    end
+			v.val(v)
+		    returns
+			v
+		    as long as c() was not called
+		- "val = yield self.__Nothing" wait for callback to call "self.scheduler(v)", see above
+		- "result = yield generator(args..)" to "call" the generator
+		  - "val = yield val" just returns the value unchanged through the scheduler,
+		    hence you do not need to know if "fn(arg)" is actually a generator or a function which returns it's value
+		- "yield Return(val); return" is used instead of "return val".
+		  - "return val" is not available in generators before Pyhton 3.3.
+		  - You can use this as often as you like, so "yield Return(Return(val)); return" is good, too
+		- "yield Bye(val)" sets the self.bye flag and is used for "exit" and "return"
+		  at the appropriate places
+		- More might show up in future
+		"""
 		self.trace(Sched=len(self.stack), ____________________v=v, _error=error, B=self.bye)
 		while self.stack:
 			g	= self.stack[len(self.stack)-1]
@@ -1242,7 +1204,7 @@ class RfbCommander(object):
 			except Exception, e:
 				self.trace(Sched=len(self.stack), _g=g, _exc=e, B=self.bye)
 				if not err:		# skip error sequences, just tell the head
-					self.io.log_err(None, 'scheduler exception from '+repr(g))
+					self.log_err(None, 'scheduler exception from '+repr(g))
 				error	= e
 				self.stack.pop()
 				continue
@@ -1264,12 +1226,11 @@ class RfbCommander(object):
 				except StopIteration:
 					self.trace(Sched=len(self.stack), _returned=g, B=self.bye)
 
-			if v is self.__Nothing:
-				# We are delaying (waiting for event etc.)
-				# This is why we see __Nothing
-				# (perhaps we should get a callback or something .. but)
+			if isinstance(v, Callback):
+				# We are waiting for some Callback
 				self.trace(Sched=len(self.stack), _waiting=g, B=self.bye)
-				return
+				# Activate the callback in the current thread
+				return v.activate(self.io.later, self.scheduler)	# we need tail recursion here
 
 			if inspect.isgenerator(v):
 				# We got passed something to do
@@ -1277,7 +1238,7 @@ class RfbCommander(object):
 
 				if len(self.stack)>=MAXSTACK:
 					error	= RuntimeError('stackoverflow, too many recursions: '+str(len(self.stack)))
-					self.io.log_err(error, 'scheduler exception')
+					self.log_err(error, 'scheduler exception')
 					self.trace(Sched=len(self.stack), _macro=v, stackoverflow=len(self.stack), B=self.bye)
 				else:
 					self.trace(Sched=len(self.stack), _macro=v, B=self.bye)
@@ -1287,14 +1248,27 @@ class RfbCommander(object):
 				self.trace(Sched=len(self.stack), _val=v, B=self.bye)
 
 			# Postpone the next iteration.
-			# XXX TODO XXX do not use 'sleep' here
-			self.io.sleep(0, self.scheduler, v, error)
-			return
+			return self.io.later(self.scheduler, v, error)
 
 		self.trace(Sched=len(self.stack), _end=True, v=v, error=error, B=self.bye)
 		self.io.end()
 		if error:
 			raise error
+
+	#
+	# Inputs
+	#
+
+	def queueLine(self, rfb, line):
+		"""
+		This receives a line
+		"""
+		self.rfb	= rfb
+		self.lines.append(line)
+		self.log('got', line)
+		if not self.paused:	# readLine is waiting for data
+			# assert that TOS is generator of lineInput?
+			self.scheduler()
 
 	def topLevelInput(self):
 		return self.lineInput(True)
@@ -1340,16 +1314,6 @@ class RfbCommander(object):
 
 		yield Return(ret)						# this is what we expect, a clean self.bye (due to 'exit')
 
-	#
-	# Direct IO Helpers
-	#
-
-	def write(self, s):
-		self.io.write(s)
-
-	def writeLine(self, s):
-		self.io.writeLine(s)
-
 	def readLine(self, line, prompt):
 		if prompt and line.strip()=='':
 			# hack: Do not error on empty lines when prompting
@@ -1368,7 +1332,7 @@ class RfbCommander(object):
 				st	= self.get_bye(v)
 			except Exception,e:
 				self.trace(Line=line, ex=e, B=self.bye)
-				self.io.log_err(e, 'exception in readline')
+				self.log_err(e, 'exception in readline')
 				self.bye		= True	# Really?
 				if prompt:
 					self.bye	= False
@@ -1384,8 +1348,134 @@ class RfbCommander(object):
 		# quiesce scheduler() warning about missing Return()
 		yield Return(st)
 
+	# This now is deterministic O(len(s))
+	# and no more possibly endless recursive/iterative
 	def expand(self, s):
-		return var_expand(s, self.args, self.autoset(), self.globals)
+		"""
+		return s with '{var}' sequences replaced by vars
+		If var is missing und undefined sequence, '{var}' is just not replaced.
+		Also: {} is an escape preventing expansion at lower '{...}'-levels.
+
+		['#'] in the first defined dict gives the number of numeric arguments {1} to {{#}}
+		{} replaces to nothing, but is only a single time replaced, so {{}} leaves a {}
+		{:} gives {1} to {{#}}, space separated
+		{:b} gives {0} to {b}
+		{a:} gives {a} to {{#}}
+		{a:b} gives {a} to {b}
+		{var:x} gives var starting at character x (0 is first)
+		{var::y} gives var ending at character y
+		{var:x:y} gives var starting at character x until character y
+
+		{CMD args} calls self.get(CMD)(args)
+		- If this errors, the replacement is not done
+		- Else the output of CMD is replaced
+		- Result (the return value of command) is stored in {?}
+		"""
+		maxarg	= int(self.args.get('#', '0'))
+		r	= []
+		t	= []
+		s	= str(o)
+		p	= 0
+		inhibit	= 0
+		for i in range(len(s)):
+			if s[i]=='{':
+				r.append(s[p:i])
+				t.append(r)
+#				print('stack', t)
+				r	= []
+				p	= i+1
+			if s[i]=='}' and t:
+				r.append(s[p:i])
+				v	= ''.join(r)
+				r	= t.pop()
+#				print('unstack', r, v)
+				p	= i+1
+				if v=='' and len(t)>=inhibit:
+					# {} special case
+					# Regardless how deep it shows up,
+					# it inhibits further expansion,
+					# on lower stack levels.
+					# {{}} and {{{}}} are your friend ..
+					inhibit	= len(t)
+					# But it replaces to nothing at this level.
+					# Notes for degenerate cases a='b', b='', c='x':
+					# '{c{{a}}}' => '{c{b}}' => '{c}' gives 'x'
+					# '{c{{b}}}' => '{c{}}' gives '{c}', as further expansion is inhibited
+					continue
+				# We must check for {} first and then for inhibit:
+				# '{{}someting{}}' expands to '{something}'.
+				# but inhibiting above starts after '{{}' has been seen already
+				# so it would inhibit '{}}', so the '{}' still needs to replace to nothing.
+				# For '{{}something{}}' we are at
+				# STACK('{') INHIBIT('{}') 'something' INHIBIT('{}') YOU_ARE_HERE('}')
+				# giving '{something}' and resets inhibit if we are at top level again.
+				# hence '{{{}{}}}'  is replaced to '{{}}', which is exactly what we want.
+				if inhibit:
+					if not t:
+						# inhibit stops when we are on top level again
+						inhibit	= 0
+					r.append('{'+v+'}')
+					continue
+
+				# {X}
+				# {X:N}
+				# {X:N:N}
+				sep	= v.rsplit(':', 2)
+				v	= sep[0]
+				y	= int(sep[1]) if len(sep)>1 and sep[1] else -1
+				z	= int(sep[2]) if len(sep)>2 and sep[2] else -1
+				if v=='' or len(sep)>1 and v.isdigit():
+					# {[start]:[end]}
+					# {[start]:[end]:[step]}
+					x	= int(v) if v else 0
+					if x<1: x=1
+					if y<0 or y>maxarg: y=maxarg
+					if z<1: z=1
+					l	= []
+					while x<=y:
+						v	= str(x)
+						for c in d:
+							if c and v in c:
+								l.append(c[v])
+								break
+						x += z
+					# XXX TODO XXX
+					# you cannot detect the difference between
+					# empty argument {3:3}
+					# and missing argument {3:2}
+					# both are empty.  Is there some solution?
+					r.append(' '.join(l))
+					continue
+
+				# {var}
+				# {var:start}
+				# {var:start:end}
+				for a in d:
+					if a and v in a:
+						x	= a[v]
+						if y<0:	y=0
+						if z<0:	z=len(x)
+						r.append(x[y:z])
+						break
+				else:
+					# executed if not found (no 'break' above)
+					r.append('{'+v+'}')
+
+		# append the remaining part (everything after the last '}'
+		if p<len(s):
+			r.append(s[p:])
+		# now works up the strack backwards open braces seen which have missing closing braces
+		# There are no errors here!
+#		print('r', r)
+#		print('t', t)
+		while t:
+			# or r	= Append(t.pop(), *r)
+			# or r	= Extend(t.pop(), r)
+			v	= ''.join(r)
+			r	= t.pop()
+			r.append('{'+v)
+#		print('r', r)
+		yield ''.join(r)
 
 	def prompt(self):
 		if not self._prompt:
@@ -1393,7 +1483,8 @@ class RfbCommander(object):
 			return
 
 		# TODO XXX TODO print some stats here
-		self.write(self.expand(self._prompt))
+		v	= yield self.expand(self._prompt)
+		self.write(v)
 		yield Return(True)			# push output to user
 
 	#
@@ -1511,9 +1602,9 @@ class RfbCommander(object):
 
 	def processLine(self, line, expand=False):
 		if expand:
-			line	= self.expand(line)
+			line	= yield self.expand(line)
 #		print('process', line)
-		return self.processArgs(line.split(self.mode))
+		yield Return(self.processArgs(line.split(self.mode)))
 
 	def processArgs(self, args):
 		"""
@@ -1808,17 +1899,28 @@ class RfbCommander(object):
 				return self.fail()
 		return self.ok()
 
+	def cmd_local(self, k, *args):
+		"""
+		local var: checks if variable is locally known
+		local var val: set variable locally to given value
+		same as 'set var val', but uses local store
+		"""
+		if not args:
+			return self.args.get(var) is not None
+		self.args[k]=' '.join(args)
+		return self.ok()
+
 	def cmd_set(self, var=None, *args):
 		"""
 		set: list all known {var}s
 		set var: check if {var} is known
 		set var val: set {var} to val.
 		.
-		Replacements only work in macros or when promp is active.
+		Replacements only work in macros or when prompt is active.
 		However the sequence in what {...} is replaced first
 		is random and implementation dependent.
 		.
-		You cannot override macro parameters like {0}, {:3}, {3:}, {:} or {#} etc.
+		Use "local" to override macro parameters like {0}, {:3}, {3:}, {:} or {#} etc.
 		To see all variables, do "prompt" followed by "load" followed by "set"
 		.
 		There is a subtle detail:
@@ -1847,7 +1949,7 @@ class RfbCommander(object):
 			for k,v in sorted(self.repl.iteritems()):
 				self.writeLine('v{'+k+'} '+repr(v))
 			for k,v in sorted(self.args.iteritems()):
-				self.writeLine('m{'+k+'} '+repr(v))
+				self.writeLine('l{'+k+'} '+repr(v))
 		elif not args:
 			# must return bool, never None
 			return self.var(var) is not None
@@ -1866,6 +1968,12 @@ class RfbCommander(object):
 		return self.ok()
 
 	def fillstate(self, v, ok=[], fail=[], err=[], **kw):
+		"""
+		Return state of v:
+		Error if v is None
+		Fail if v == ''
+		Success else
+		"""
 		return self.err(*err, **kw) if v==None else self.fail(*fail, **kw) if v=='' else self.ok(*ok, **kw)
 
 	def cmd_expand(self, var, *args):
@@ -1876,14 +1984,14 @@ class RfbCommander(object):
 		- succeeds if expansion is nonempty, else fails
 		"""
 		if args:
-			v	= self.expand(' '.join(args))
+			v	= yield self.expand(' '.join(args))
 			self.repl[var]	= v
 		else:
 			v	= self.var(var)
 			if v is not None:
-				v	= self.expand(v)
+				v	= yield self.expand(v)
 				self.writeLine(v)
-		return self.fillstate(v)
+		yield Return(self.fillstate(v))
 
 	def globs(self, globs):
 		# fix possibly buggy things
@@ -2568,6 +2676,17 @@ class RfbCommander(object):
 		self.rfb.stop()
 		return self.ok()
 
+	def cmd_list(self, k=None):
+		"""
+		list:		list all channels
+		list var:	list all channels into given var
+		"""
+		c	= ' '.join(Channel.list())
+		if k is None:
+			return self.ok('known channels: '+c)
+		self.repl[k]	= c
+		return self.ok()
+
 	def cmd_send(self, channel, *args):
 		"""
 		send channel data..: send to channel, waiting
@@ -2595,7 +2714,7 @@ class RfbCommander(object):
 
 	def cmd_rep(self, channel, *args):
 		"""
-		rep channel data..: send data to a channel, directly and exclusively
+		rep channel data..: send data to a channel, nonwaiting and exclusively
 		- This succeeds if data is delivered
 		- This fails if nobody waiting on the channel
 		- This errors if channel is not empty (somebody other does send/push)
@@ -2607,13 +2726,15 @@ class RfbCommander(object):
 		v	= ' '.join(args)
 		return self.ok() if c.put(v) else self.fail()
 
-	def cmd_recv(self, channel, k):
+	def cmd_recv(self, channel, k=None):
 		"""
 		recv channel var: receive data from channel, waiting
 		- This waits until somebody sends data
 		- Data receipt is in-sequence
+		- if var is not given, varname is channel
 		see also: send/recv, req/rep, push/pull
 		"""
+		if k is None: k=channel
 		c	= Channel(channel)
 		v	= c.get(self.scheduler)
 		if v is None:
@@ -2621,13 +2742,15 @@ class RfbCommander(object):
 		self.repl[k]	= v
 		yield Return(self.ok())
 
-	def cmd_pull(self, channel, k):
+	def cmd_pull(self, channel, k=None):
 		"""
 		pull channel var: receive data from channel, nonwaiting
 		- Fails if there is no data on the channel
 		- Data receipt is in-sequence
+		- if var is not given, varname is channel
 		see also: send/recv, req/rep, push/pull
 		"""
+		if k is None: k=channel
 		c	= Channel(channel)
 		v	= c.get()
 		if v is None:
@@ -2635,14 +2758,16 @@ class RfbCommander(object):
 		self.repl[k]	= v
 		return self.ok()
 
-	def cmd_req(self, channel, k):
+	def cmd_req(self, channel, k=None):
 		"""
-		req channel var: receive data from channel, exclusively
+		req channel [var]: receive data from channel, exclusively
 		- This fails if somebody else is waiting for data, too
 		- Else this waits until somebody sends data
+		- if var is not given, varname is channel
 		this waits for something to arrive on the channel
 		see also: send/recv, req/rep, push/pull
 		"""
+		if k is None: k=channel
 		c	= Channel(channel)
 		if c.has_get():
 			yield Return(self.fail())
@@ -2799,6 +2924,12 @@ class RfbCommander(object):
 class Channel():
 	chan	= {}
 
+	@classmethod
+	def list(klass):
+		for a in sorted(klass.chan):
+			yield a
+		return
+
 	def __init__(self, name):
 		self.c	= self.__class__.chan.get(name)
 		if self.c is None:
@@ -2935,6 +3066,8 @@ class ControlProtocol(CorrectedLineReceiver):
 	def sleep(self, secs, cb, *args, **kw):
 		twisted.internet.reactor.callLater(secs, cb, *args, **kw)		#TWISTED
 
+	def later(self, cb, *args, **kw):
+		twisted.internet.reactor.callFromThread(cb, *args, **kw)		#TWISTED
 
 class CreateControl(twisted.internet.protocol.Factory):					#TWISTED
 	protocol = ControlProtocol							#TWISTED black magic, DO NOT REMOVE
