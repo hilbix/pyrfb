@@ -222,6 +222,12 @@ valid_filename = re.compile('^[,_a-zA-Z0-9][-,_a-zA-Z0-9]*$')
 
 log	= None
 
+def intVal(s, default=0):
+	try:
+		return int(s)
+	except ValueError:
+		return default
+
 # WTF, why isn't o.update() returning o?
 def updateDict(o, *args, **kw):
 	o.update(*args, **kw)
@@ -1721,21 +1727,21 @@ class RfbCommander(object):
 
 	def diag(self, **kw):
 		if self.verbose:
-			self.send(ordered_repr(kw))
+			self.writeLine(ordered_repr(kw))
 		return True
 
 	def trace(self, **kw):
 		if self.tracing:
 			r	= ordered_repr(kw)
 			self.log('trace', r)
-			self.send(r)
+			self.writeLine(r)
 		return True
 
 	def debug(self, **kw):
 		if self.debugging:
 			r	= ordered_repr(kw)
 			self.log('debug', r)
-			self.send(r)
+			self.writeLine(r)
 		return True
 
 	def debugFn(self):
@@ -1964,11 +1970,11 @@ class RfbCommander(object):
 		except TypeError:
 			return 0
 
-	def expr(self, fn, args):
+	def expr(self, fn, args, default=0):
 		if len(args)<2: raise RuntimeError("two arguments minimum")
-		r	= fn(args[0], args[1])
+		r	= fn(intVal(args[0], default), intVal(args[1], default))
 		for v in args[2:]:
-			r	= fn(r, v)
+			r	= fn(r, intVal(v))
 		return str(r)
 
 	def get_bool(self, fn, args, inverted=False):
@@ -2031,8 +2037,9 @@ class RfbCommander(object):
 	def get_add(self, *args):
 		"""
 		add args..:	add all arguments
+		- invalid arguments are taken as 0
 		"""
-		return self.expr(lambda x,y: int(x)+int(y), args)
+		return self.expr(lambda x,y: x+y, args)
 
 	def cmd_sub(self, v, *args):
 		"""
@@ -2043,8 +2050,9 @@ class RfbCommander(object):
 	def get_sub(self, *args):
 		"""
 		sub args..:	substract all arguments from the first one
+		- invalid arguments are taken as 0
 		"""
-		return self.expr(lambda x,y: int(x)-int(y), args)
+		return self.expr(lambda x,y: x-y, args)
 
 	def cmd_mul(self, v, *args):
 		"""
@@ -2055,8 +2063,9 @@ class RfbCommander(object):
 	def get_mul(self, *args):
 		"""
 		mul args..:	multiply all args
+		- invalid arguments are taken as 1
 		"""
-		return self.expr(lambda x,y: int(x)*int(y), args)
+		return self.expr(lambda x,y: x*y, args, 1)
 
 	def cmd_div(self, v, *args):
 		"""
@@ -2069,8 +2078,9 @@ class RfbCommander(object):
 		"""
 		div args..:	divide all args
 		division by 0:	the arguments are not replaced
+		- invalid arguments are taken as 1
 		"""
-		return self.expr(lambda x,y: int(x)//int(y), args)
+		return self.expr(lambda x,y: x//y, args, 1)
 
 	def cmd_mod(self, v, *args):
 		"""
@@ -2083,7 +2093,7 @@ class RfbCommander(object):
 		mod args..:	remainder all args
 		division by 0:	the arguments are not replaced
 		"""
-		return self.expr(lambda x,y: int(x)%int(y), args)
+		return self.expr(lambda x,y: x%y, args)
 
 	def cmd_nat(self, *args):
 		"""
@@ -2689,7 +2699,7 @@ class RfbCommander(object):
 				self.debug(N=nr, _macro=macro, _nr=lnr, line=l, args=self.args)
 				st	= yield self.processLine(l, True)
 				st	= self.getBye(st)
-				self.trace(Macro=macro, l=l, ret=st, B=self.bye)
+				self.trace(N=nr, _macro=macro, _nr=lnr, line=l, ret=st, bye=self.bye)
 				if not st:
 					# pass on errors
 					break
@@ -2704,7 +2714,7 @@ class RfbCommander(object):
 
 			# HACK: bring back "bye" value from above.
 			self.bye	= self.bye or was_bye
-			self.diag(N=nr, macro=macro, ret=st)
+			self.diag(N=nr, _macro=macro, _nr=lnr, bye=self.bye, ret=st)
 			yield Return(st)
 
 		finally:
@@ -2789,10 +2799,14 @@ class RfbCommander(object):
 		if return
 		- technically the same as before
 		"""
-		st		= self.getBye((yield self.processArgs(args)))
-		self.bye	= False
+		try:
+			st	= yield self.processArgs(args)
+		except Exception, e:
+			self.log_err(e, 'if failed')
+			st	= None
 		self.prevstate	= self.state
-		self.state	= st
+		self.state	= self.getBye(st)
+		self.bye	= False
 		yield Return(self.fail() if st is None else self.ok())
 
 	def cmd_then(self, *args):
