@@ -108,7 +108,7 @@ class Open:
 		else:
 			mode	+= 't'
 			if utf8:
-				kw['encoding']	= kw.get('encoding', 'utf-8')
+				kw['encoding']	= kw.get('encoding', 'utf8')
 
 		self.file	= os.fdopen(os.open(name, omode), mode)
 		nropen	+= 1
@@ -143,39 +143,78 @@ GLOBALSFILE='globals.json'
 # we have to do it error-prone, slow, complex, memory inefficient way.
 # WTF, why was that done so badly?
 #
-# And why was the old bullshit taken over into Python3 instead of replacing it by something more sane?
+# And why was the old bullshit taken over into Python3 instead of replacing it by something usable?
 # (I would expect an easy to wrap python class for decoding.)
 #
 # Das kommt mir doch alles sehr lateinisch vor ..
-# encoding='latin1' -> der Default steht total sinnfrei auf UTF-8, wodurch str-Typen nicht encodiert werden können!
-def ioJSONu(io, **kw):	return io.write(unicode(toJSON(o, **kw)))
-def ioJSON(io, **kw):	return io.write(toJSON(o, **kw))
-def toJSON(o, **kw):	return json.dumps(o, encoding='latin1', **kw)
-def toJSONu(o, **kw):	return unicode(toJSON(o, **kw))				# USE THIS! JSON must return unicode
-def toU(s):		return unicode(s, endcoding='latin')			# USE THIS! str -> unicode
-def fromU(u):		return u.encode('latin')				# USE THIS! unicode -> str
-def fromJSON(j):	return json.loads(j, 'latin1')
-def fromJSONio(io):	return json.load(io, 'latin1')
-def fixJSON(j):		return fixed(fromJSON(j))				# USE THIS!
-def fixJSONio(io):	return fixed(fromJSONio(io))				# USE THIS!
+# encoding='latin1' -> der Default steht total sinnfrei auf UTF8, wodurch str-Typen nicht encodiert werden können!
+#def ioJSONu(io, **kw):	return io.write(unicode(toJSON(o, **kw)))
+#def ioJSON(io, **kw):	return io.write(toJSON(o, **kw))
+#def toU(s):		return unicode(s, endcoding='latin1')			# USE THIS! str -> unicode
+#def fromU(u):		return u.encode('latin1')				# USE THIS! unicode -> str
+#def fromJSON(j):	return json.loads(j, 'latin1')
+#def fixJSON(j):		return fixed(fromJSON(j))			# USE THIS!
+#def toJSONu(o, **kw):	return unicode(toJSON(o, **kw))				# USE THIS! JSON must return unicode
+
+# The trick is, never give 'str' to the json module, always only Unicode.  Period.
+# As JSON cannot encode byte strings, only Unicode, you will get back Unicode when reading.
+# You cannot evade this.  Hence we must put in Unicode and Unicode only.  Never str.  Never ever.
+#
+# This way we know that Unicode comes back for all and everything.
+# So we can decode this back into our local string.
+#
+# This has ONE drawback:  Non-Unicode bytestrings are converted into Unicode,
+# and hence we have the UTF8 encoding on those.
+#
+# toJSON() takes an object and resturns a string (not: Unicode)
+def toJSON(o, **kw):	return fromUNI(json.dumps(str2uni(o), ensure_ascii=False, **kw))
+# When reading in, afterwards, we do it backwards.
+# Encode each Unicode-entity into UTF8-strings.
+#
+# fromJSON() tries to do in reverse what toJSON() did
+def fromJSONio(io):	return uni2str(json.load(io))
+
+def fromUNI(s, e='utf8'):
+	# This is mostly well defined: Unicode -> Str.
+	# Unicode-Strings will be encoded as UTF8
+	# and bytestrings will be encoded as Latin1
+	if not isinstance(s, unicode):
+		return s
+	try:
+		return s.encode(e)
+	except UnicodeDecodeError:
+		return s.encode('utf8')		# encode Unicode as UTF8, this always works
+
+def toUNI(s, e='utf8'):
+	# this is not well defined, as we lost what was UTF8 and what was Latin1:  Str -> Unicode
+	# However we can guess:  Something which smells like UTF8 is decoded to Unicode
+	# everything else is transparently read as Latin1
+	if isinstance(s, unicode):
+		return s
+	try:
+		return unicode(s, e)		# s apparently can be expressed as Unicode
+	except UnicodeDecodeError:
+		return unicode(s, 'latin1')	# decode it transparently to Unicode as latin, this always works
 
 # Because json.load() is missing parse_string, and json.loads(), too,
 # we have to fix it by re-inventing the wheel to be able to call
 # fix_uni() for all and everything:
-def fixed_dict(d):	return { fixed(k):fixed(v) for k,v in d.iteritems() }
-def fixed_list(l):	return [fixed(a) for a in l]
-def fixed_uni(u):
-	"""
-	return (str) if possible, (unicode) else
-	"""
-	try:
-		return fromU(u);
-	except:
-		return u
-def fixed(o):
-	if isinstance(o, dict):		return fixed_dict(o);
-	if isinstance(o, list):		return fixed_list(o);
-	if isinstance(o, unicode):	return fixed_uni(o);
+def uni2str_dict(d):	return { uni2str(k):uni2str(v) for k,v in d.iteritems() }
+def uni2str_list(l):	return [uni2str(a) for a in l]
+def uni2str_uni(u):	return fromUNI(u)
+def uni2str(o):
+	if isinstance(o, dict):		return uni2str_dict(o);
+	if isinstance(o, list):		return uni2str_list(o);
+	if isinstance(o, unicode):	return uni2str_uni(o);
+	return o
+
+def str2uni_dict(d):	return { str2uni(k):str2uni(v) for k,v in d.iteritems() }
+def str2uni_list(l):	return [str2uni(a) for a in l]
+def str2uni_uni(u):	return toUNI(u)
+def str2uni(o):
+	if isinstance(o, dict):		return str2uni_dict(o);
+	if isinstance(o, list):		return str2uni_list(o);
+	if isinstance(o, str):		return str2uni_uni(o);
 	return o
 
 # Dots are disallowed for a good reason
@@ -224,6 +263,9 @@ def cached(factory, path, *args, **kw):
 	arg/kw are used for caching, too, so they need to be JSON serializable.
 	"""
 	mtime	= os.stat(path).st_mtime
+	# json.dumps(encoding='latin1') is one way only.
+	# You cannot json.loads(encoding='latin1') again, as this produces complete nonsense.
+	# So for caching index, this is OK, but this is not ok for anything else.  YOU HAVE BEEN WARNED!
 	a	= json.dumps((args, kw), sort_keys=True, encoding='latin1') if args or kw else ''
 	c	= __CACHE.get(path)
 	if c:
@@ -1475,22 +1517,22 @@ class RfbCommander(object):
 				# {X:N}
 				# {X:N:N}
 				sep	= v.rsplit(':', 2)
-				v	= sep[0]
+				b	= sep[0]
 				y	= int(sep[1]) if len(sep)>1 and sep[1] else -1
 				z	= int(sep[2]) if len(sep)>2 and sep[2] else -1
-				if v=='' or len(sep)>1 and v.isdigit():
+				if b=='' or len(sep)>1 and b.isdigit():
 					# Numeric (macro) arguments, taken only from self.args
 					# {[start]:[end]}
 					# {[start]:[end]:[step]}
-					x	= int(v) if v else 0
+					x	= int(b) if b else 0
 					if x<1: x=1
 					if y<0 or y>maxarg: y=maxarg
 					if z<1: z=1
 					l	= []
 					while x<=y:
-						v	= self.args.get(str(x))
-						if v is None:	break		# XXX TODO XXX can this happen?  Should we raise?
-						l.append(v)
+						b	= self.args.get(str(x))
+						if b is None:	break		# XXX TODO XXX can this happen?  Should we raise?
+						l.append(b)
 						x += z
 					# XXX TODO XXX
 					# you cannot detect the difference between
@@ -1504,14 +1546,15 @@ class RfbCommander(object):
 				# {var:start}
 				# {var:start:end}
 				for a in [self.args, self.repl, self.globals]:
-					if a and v in a:
-						x	= a[v]
+					if a and b in a:
+						x	= a[b]
 						if y<0:	y=0
 						if z<0:	z=len(x)
 						r.append(x[y:z])
 						break
 				else:
 					# executed if not found (no 'break' above)
+					self.debug(FailedExpand=b, a=y, b=z, v=v)
 					r.append('{'+v+'}')
 
 		# append the remaining part (everything after the last '}'
@@ -1549,6 +1592,9 @@ class RfbCommander(object):
 	# Variables
 	#
 
+	# All get_xxx functions MUST NOT HAVE SIDEFFECTS on states or variables!
+	# This is because they are expaned even if not needed,
+	# because expansion takes place on line level long before 'then' or 'else' is processed
 	def get(self, n):
 		return ' '.join([k[4:] for k in dict(self) if k.startswith('get_')])   if n is None else   getattr(self,'get_'+n, None)
 	def GET(self, k, d):
@@ -2136,7 +2182,7 @@ class RfbCommander(object):
 		"""
 		return 'ok' if len(args)==1 and args[0]=='' else 'fail'
 
-	def cmd_local(self, k, *args):
+	def cmd_local(self, var, *args):
 		"""
 		local var: checks if variable is locally known
 		local var val: set variable locally to given value
@@ -2144,7 +2190,9 @@ class RfbCommander(object):
 		"""
 		if not args:
 			return self.args.get(var) is not None
-		self.args[k]=' '.join(args)
+		val	= ' '.join(args)
+		self.debug(Local=var, val=val)
+		self.args[var]=val
 		return self.ok()
 
 	def cmd_set(self, var=None, *args):
@@ -2170,7 +2218,7 @@ class RfbCommander(object):
 		if set myvar
 		else set myvar default
 		"""
-		if not var:
+		if var is None:
 			flag	= False
 			if self.globals is not None:
 				for k,v in sorted(self.globals.iteritems()):
@@ -2188,10 +2236,16 @@ class RfbCommander(object):
 			for k,v in sorted(self.args.iteritems()):
 				self.writeLine('l{'+k+'} '+repr(v))
 		elif not args:
+			val	= self.var(var)
+			self.debug(Var=var, test=val)
 			# must return bool, never None
-			return self.var(var) is not None
+			return val is not None
 		else:
-			self.repl[var]	= ' '.join(args)
+			if var=='#' or var.isdigit():
+				return self.bug('use "local '+var+'" to set a local variable')
+			val		= ' '.join(args)
+			self.repl[var]	= val
+			self.debug(Var=var, val=val)
 		return self.ok()
 
 	def get_set(self, *args):
@@ -2202,11 +2256,54 @@ class RfbCommander(object):
 		"""
 		return self.get_bool(lambda x: self.var(x) is not None, args)
 
+	def get_get(self, v, *args):
+		"""
+		get var [replacement]:	replace by variable if defined, else with replacement, '' by default
+		- echo {get 1 (arg 1 is not set)}
+		- do {run}{when 1 .}{get 1}
+		"""
+		v	= self.var(v)
+		return v if v is not None else ' '.join(args) if args else ''
+
+	def get_when(self, v, *args):
+		"""
+		when var [replacement]:	'' if var is empty, else replacement
+		- do {run}{when 1 .}{get 1}
+		"""
+		v	= self.var(v)
+		return '' if v is Null or v=='' else ' '.join(args)
+
+	def get_append(self, v, *args):
+		"""
+		{append var}:		"{when var  }{get var}"
+		{append var args..}:	"{var} args.." if var is known, else "args.."
+		- local y {:}{append x}
+		- local x {append x {:}}
+		"""
+		v	= self.var(v)
+		if v is None:
+			return ' '.join(args) if args else ''
+		return ' '.join([v]+args) if args else v
+
 	def cmd_unset(self, *args):
 		"""
 		unset var..: unset replacements {var}s
+		- this fails for the first {var} missing
+		- locals cannot be unset.  To unset, replace with another macro.
+		To unset a global, you must do something like following:
 		.
-		this fails for the first {var} missing
+		load
+		# create an empty variable, to override the global and thereby saving it empty:
+		set global.x {}
+		# "save" would do, too, as this writes changes of all globals to the store
+		save global.x
+		# unset the variable, as a set variable would override the global on save (again)
+		unset global.x
+		# Now global is empty and no overriding variable is present.
+		# This allows to remove the empty global by explicitly saving it:
+		save global.x
+		.
+		This fails if the global changes while you do this.
 		"""
 		for var in args:
 			del self.repl[var]
@@ -2273,7 +2370,7 @@ class RfbCommander(object):
 		try:
 			with Open(GLOBALSFILE, lock=True) as f:
 				try:
-					globs	= fixJSONio(f)
+					globs	= fromJSONio(f)
 				except ValueError, e:
 					return self.fail('could not read: '+GLOBALSFILE, e)
 		except (OSError,IOError), e:
@@ -2366,7 +2463,7 @@ class RfbCommander(object):
 			# get the current global store from disk
 			# It is write locked, so it cannot change until we are ready
 			try:
-				globs	= fixJSONio(f)
+				globs	= fromJSONio(f)
 			except ValueError:
 				globs	= {}
 
@@ -2394,6 +2491,7 @@ class RfbCommander(object):
 			for a in kick:
 				del changes[a]
 
+#			self.debug(dels=dels, changes=changes, globs=globs)
 			kick	= []
 			for a in dels:
 				v	= globs.get(a)
@@ -2406,7 +2504,8 @@ class RfbCommander(object):
 				self.globs(g)	# remember the changes locally, too
 				return self.ok('nothing left to save (already saved)')
 
-			for a in kick:
+#			self.debug(changes=changes, kick=kick, globs=globs)
+			for k in kick:
 				self.debug(kick=k)
 				del globs[k]
 			for k,v in changes.iteritems():
@@ -2481,7 +2580,7 @@ class RfbCommander(object):
 			#   corruption, so we must not re-introduce it!
 
 			self.debug(glob=globs)
-			s	= toJSONu(globs, sort_keys=True, separators=(",\n",': '))
+			s	= toJSON(globs, sort_keys=True, separators=(",\n",': '))
 			f.seek(0, io.SEEK_SET)
 			f.truncate()	# unsafe!
 			f.write(s)	# unsafe!
@@ -2560,8 +2659,12 @@ class RfbCommander(object):
 
 			# read in the complete macro file
 			# TODO XXX TODO decide: Move this after the hack?
-			with Open(MACRODIR+macro+MACROEXT) as file:
-				data	= file.readlines()
+			try:
+				with Open(MACRODIR+macro+MACROEXT) as file:
+					data	= file.readlines()
+			except Exception, e:
+				self.writeLine(macro+': macro error: '+repr(e))
+				raise
 
 			# HACK:
 			# If we are called with "bye", remember this
@@ -2569,18 +2672,21 @@ class RfbCommander(object):
 			was_bye		= self.bye
 			self.bye	= False
 
+			lnr	= 0
 			for l in data:
+				lnr	+= 1
 				# ignore empty lines and comments
 				if l.strip()=='':	continue
 				if l[0]=='#':		continue
 
 				# l is unicode and contains \n
 				if l.endswith('\n'): l=l[:-1]
-				# we need UTF-8
-				l	= l.encode('utf8')
+				# We need UTF8 strings, not Unicode!
+				l	= fromUNI(l)
 
 				# parse line
 				#self.trace(Macro=macro, l=l, B=self.bye)
+				self.debug(N=nr, _macro=macro, _nr=lnr, line=l, args=self.args)
 				st	= yield self.processLine(l, True)
 				st	= self.getBye(st)
 				self.trace(Macro=macro, l=l, ret=st, B=self.bye)
@@ -3317,7 +3423,7 @@ class ControlProtocol(CorrectedLineReceiver):
 
 	def writeLine(self, s):
 		try:
-			self.sendLine(s.encode('utf-8'))				#TWISTED
+			self.sendLine(fixUNI(s))					#TWISTED
 		except:
 			print('writeLine exception', s)
 			# Ignore dead other sides
