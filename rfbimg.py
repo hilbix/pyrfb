@@ -2710,7 +2710,7 @@ class RfbCommander(object):
 			else:
 				# EOF fails
 				self.diag(N=nr, _macro=macro, err="EOF reached, no 'exit'")
-				st	= self.fail()
+				st	= self.fail('EOF reached on macro '+macro)
 
 			# HACK: bring back "bye" value from above.
 			self.bye	= self.bye or was_bye
