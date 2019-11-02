@@ -1632,7 +1632,7 @@ class RfbCommander(object):
 		"""
 		return self.GETdatetime(k,
 			{
-			'sec':	lambda self:	str(self.time),				# seconds since epoch
+			'sec':	lambda self:	str(int(self.time)),			# seconds since epoch
 			'min':	lambda self:	str(self.time//60),			# minutes since epoch
 			'hour':	lambda self:	str(self.time/3600),			# hours since epoch
 			'day':	lambda self:	str(self.time//86400),			# days since epoch
@@ -2367,6 +2367,12 @@ class RfbCommander(object):
 				self.writeLine(v)
 		yield Return(self.fillstate(v))
 
+	def get_expand(self, *args):
+		"""
+		{expand args..}:	expand the arguments another time
+		"""
+		return self.expand(' '.join(args))
+
 	def globs(self, globs):
 		# fix possibly buggy things
 #		print('before', repr(globs))
@@ -2904,19 +2910,21 @@ class RfbCommander(object):
 
 	def cmd_mouse(self, x, y=None, click=None):
 		"""
+		mouse {} {} b: just set the button (0=release) without moving the mouse
 		mouse x y: jump mouse to the coordinates with the current button setting (dragging etc.)
 		mouse x y buttons: release if all released, jump mouse, then apply buttons
 		mouse template N [buttons]: move mouse in N steps to first region of e/template.tpl and performs action
 		mouse template.# N [buttons]: use region n, n=1 is first
+		mouse template.#.E N [buttons]: as before but use the given edge of region: 0=none(random) 1=nw 2=ne 3=sw 4=se
 		.
 		To release all buttons, you must give 0 as buttons!
 		buttons are 1(left) 2(middle) 4(right) 8 and so on for further buttons.
 		To press multiple buttons add their numbers.
 		.
 		Template based mouse movement should set the button before execution like:
-		mouse template 5 0
-		mouse template 0 1
-		mouse template 0 0
+		mouse {} {} 0
+		mouse template 5 1
+		mouse {} {} 0
 		"""
 		if click is not None:
 			click = int(click)
@@ -2945,7 +2953,11 @@ class RfbCommander(object):
 			return
 
 		try:
-			n	= int(t.split('.',1)[1])
+			e	= int(t.split('.',2)[2])
+		except Exception,e:
+			e	= 0
+		try:
+			n	= int(t.split('.',2)[1])
 		except Exception,e:
 			n	= 0
 		if not n:	n=1
@@ -2960,8 +2972,18 @@ class RfbCommander(object):
 			yield Return((lx+rand(3)-1, ly+rand(3)-1))
 			return
 
-		x	+= rand(w);
-		y	+= rand(h);
+		if e==1:
+			pass
+		elif e==2:
+			y	+= h-1
+		elif e==3:
+			x	+= w-1
+		elif e==4:
+			x	+= w-1;
+			y	+= h-1;
+		else:
+			x	+= rand(w);
+			y	+= rand(h);
 
 #		self.diag(x=x, y=y, lx=lx, ly=ly)
 		# move mouse in n pieces
