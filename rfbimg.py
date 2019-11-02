@@ -32,6 +32,7 @@
 
 MAXSTACK	= 10000
 MAXMACROS	= 100000
+MAXLOOPS	= 10000
 
 import easyrfb
 
@@ -1093,6 +1094,8 @@ class Val(object):
 
 class Return(Val):	pass
 class Bye(Val):		pass
+class Goto(Val):	pass
+
 class Callback():
 	def __init__(self, cb=None, *args, **kw):
 		"""
@@ -1425,6 +1428,7 @@ class RfbCommander(object):
 					self.bye	= False
 					self.writeLine(traceback.format_exc())
 			self.trace(Line=line, _status=st, prompt=prompt, B=self.bye)
+			self.repl['?']='Fail' if st is False else repr(st)
 			if st:
 				self.out(self.success, st, line)
 			else:
@@ -1507,7 +1511,7 @@ class RfbCommander(object):
 
 				sep	= v.split(' ')
 				if len(sep)>1:
-					print("HERE", sep)
+#					print("HERE", sep)
 					# {X args}
 					try:
 						z	= None
@@ -1603,25 +1607,28 @@ class RfbCommander(object):
 	# because expansion takes place on line level long before 'then' or 'else' is processed
 	def get(self, n):
 		return ' '.join([k[4:] for k in dict(self) if k.startswith('get_')])   if n is None else   getattr(self,'get_'+n, None)
+
 	def GET(self, k, d):
 		return ' '.join([str(k) for k in d])   if k is None else   d.get(k, lambda self: None)(self)
+
 	def GETdatetime(self, k, d):
 		if self.time   is None: self.time   = time.time()
 		if self.gmtime is None: self.gmtime = time.gmtime(self.time)
 		return self.GET(k, d)
+
 	def get_time(self, k):
 		"""
-		time sec	seconds since epoch
-		time min	minutes since epoch
-		time hour	hours since epoch
-		time day	days since epoch
-		time week	weeks since epoch
-		time h		UTC hour 0-23
-		time hh		UTC hour 00-23
-		time m		UTC minute 0-59
-		time mm		UTC minute 00-59
-		time s		UTC second 0-60 (60 is leap second if supported)
-		time ss		UTC minute 00-60
+		{time sec}:	seconds since epoch
+		{time min}:	minutes since epoch
+		{time hour}:	hours since epoch
+		{time day}:	days since epoch
+		{time week}:	weeks since epoch
+		{time h}:	UTC hour 0-23
+		{time hh}:	UTC hour 00-23
+		{time m}:	UTC minute 0-59
+		{time mm}:	UTC minute 00-59
+		{time s}:	UTC second 0-60 (60 is leap second if supported)
+		{time ss}:	UTC minute 00-60
 		"""
 		return self.GETdatetime(k,
 			{
@@ -1637,16 +1644,17 @@ class RfbCommander(object):
 			's':	lambda self:	str(self.gmtime.tm_sec),		# 0-60	60 for leap second (can this happen?)
 			'ss':	lambda self:	str(self.gmtime.tm_sec).zfill(2),	# 00-60	60 for leap second (can this happen?)
 			})
+
 	def get_date(self, k):
 		"""
-		date y		UTC year
-		date m		UTC month 1-12
-		date mm		UTC month 01-12
-		date d		UTC day 1-31
-		date dd		UTC day 01-12
-		date wd		UTC week day 1-7 where 7=sun
-		date yd		UTC year day 1-366
-		date ydd	UTC year day 001-366
+		{date y}:	UTC year
+		{date m}:	UTC month 1-12
+		{date mm}:	UTC month 01-12
+		{date d}:	UTC day 1-31
+		{date dd}:	UTC day 01-12
+		{date wd}:	UTC week day 1-7 where 7=sun
+		{date yd}:	UTC year day 1-366
+		{date ydd}:	UTC year day 001-366
 		"""
 		return self.GETdatetime(k,
 			{
@@ -1661,11 +1669,12 @@ class RfbCommander(object):
 			'yd':	lambda self:	str(self.gmtimetm_yday),		# 1-366
 			'ydd':	lambda self:	str(self.gmtimem_yday).zfill(3),	# 001-366
 			})
+
 	def get_rnd(self, a, b=None):
 		"""
-		random {}: some often very long positive integer value
-		random x: 0..x
-		random x y: x..y
+		{random {}}: some often very long positive integer value
+		{random x}: 0..x
+		{random x y}: x..y
 		"""
 		if self.random is None:	self.random = positiveHash(repr(self.repl))
 		if b is None: a,b = 0,a
@@ -1677,11 +1686,12 @@ class RfbCommander(object):
 		if b>=a:	b -= a
 		b	+= 1
 		return str( a + ((self.random + rand(b)) % b) )
+
 	def get_mouse(self, k):
 		"""
-		mouse x:	mouse pos x
-		mouse y:	mouse pos y
-		mouse b:	mouse buttons
+		{mouse x}:	mouse pos x
+		{mouse y}:	mouse pos y
+		{mouse b}:	mouse buttons
 		"""
 		return self.GET(k,
 			{
@@ -1689,12 +1699,13 @@ class RfbCommander(object):
 			'y':	lambda self:	str(self.rfb.lm_y),
 			'b':	lambda self:	str(self.rfb.lm_c),
 			})
+
 	def get_flag(self, k):
 		"""
-		flag verbose:	is verbose active
-		flag quiet:	is quiet active
-		flag debug:	is debug active
-		flag trace:	is trace active
+		{flag verbose}:	is verbose active
+		{flag quiet}:	is quiet active
+		{flag debug}:	is debug active
+		{flag trace}:	is trace active
 		"""
 		return self.GET(k,
 			{
@@ -1703,11 +1714,12 @@ class RfbCommander(object):
 			'debug':	lambda self:	bool2str(self.debug),
 			'trace':	lambda self:	bool2str(self.trace),
 			})
+
 	def get_sys(self, k):
 		"""
-		sys tick:	number of ticks (each tick is aprox 0.1s)
-		sys macros:	number of macros processed so far
-		sys depth:	recoursion depth
+		{sys tick}:	number of ticks (each tick is aprox 0.1s)
+		{sys macros}:	number of macros processed so far
+		{sys depth}:	recoursion depth
 		"""
 		return self.GET(k,
 			{
@@ -1820,8 +1832,8 @@ class RfbCommander(object):
 		And it fundamentally changes how "unknown" commands are processed.
 		Without prompt they set exit state, while with prompt they don't and just fail.
 		"""
-		gc.disable()
-		self._prompt = ' '.join(args) if args else '> '
+		self.io.disable_gc()
+		self._prompt = ' '.join(args) if args else '{?}> '
 		self.repl['prompt']=self._prompt
 		self.send(__file__, sys.version.split('\n',1)[0].strip())
 		return self.ok()
@@ -1955,6 +1967,12 @@ class RfbCommander(object):
 				self.writeLine(what+'\t'+a)
 		return True
 
+	def set(self, k, v):
+		if k in self.args:
+			self.args[k]	= str(v)
+		else:
+			self.repl[k]	= str(v)
+
 	def var(self, k):
 		for d in [self.args, self.repl, self.globals]:
 			if d:
@@ -1977,7 +1995,7 @@ class RfbCommander(object):
 			r	= fn(r, intVal(v))
 		return str(r)
 
-	def get_bool(self, fn, args, inverted=False):
+	def getBool(self, fn, args, inverted=False):
 		if not args:	return 'fail'
 		k	= False
 		for a in args:
@@ -1996,7 +2014,7 @@ class RfbCommander(object):
 			except:
 				ret	= self.err()
 				break
-		self.repl[k]	= str(v)
+		self.set(k, v)
 		return ret
 
 	def true(self, v, fn, *args):
@@ -2036,7 +2054,7 @@ class RfbCommander(object):
 
 	def get_add(self, *args):
 		"""
-		add args..:	add all arguments
+		{add args..}:	add all arguments
 		- invalid arguments are taken as 0
 		"""
 		return self.expr(lambda x,y: x+y, args)
@@ -2049,7 +2067,7 @@ class RfbCommander(object):
 
 	def get_sub(self, *args):
 		"""
-		sub args..:	substract all arguments from the first one
+		{sub args..}:	substract all arguments from the first one
 		- invalid arguments are taken as 0
 		"""
 		return self.expr(lambda x,y: x-y, args)
@@ -2062,7 +2080,7 @@ class RfbCommander(object):
 
 	def get_mul(self, *args):
 		"""
-		mul args..:	multiply all args
+		{mul args..}:	multiply all args
 		- invalid arguments are taken as 1
 		"""
 		return self.expr(lambda x,y: x*y, args, 1)
@@ -2076,7 +2094,7 @@ class RfbCommander(object):
 
 	def get_div(self, *args):
 		"""
-		div args..:	divide all args
+		{div args..}:	divide all args
 		division by 0:	the arguments are not replaced
 		- invalid arguments are taken as 1
 		"""
@@ -2090,7 +2108,7 @@ class RfbCommander(object):
 
 	def get_mod(self, *args):
 		"""
-		mod args..:	remainder all args
+		{mod args..}:	remainder all args
 		division by 0:	the arguments are not replaced
 		"""
 		return self.expr(lambda x,y: x%y, args)
@@ -2102,21 +2120,22 @@ class RfbCommander(object):
 		- fails if any number is <= 0
 		- success if all vars are numbers and higher than 0
 		"""
-		return self.true(true, lambda x,y: int(self.var(y))>0, *args)
+		return self.true(True, lambda x,y: int(self.var(y))>0, *args)
 
 	def get_nat(self, *args):
 		"""
-		nat args..:	'ok' if all vars are natural numbers, 'fail' else
+		{nat args..}:	'ok' if all vars are natural numbers, 'fail' else
 		if {nat args..}
 		then echo all natural number
+		if {nat {sub {higher} {lower}}}
+		then echo {higher} is higher than {lower}
 		"""
 		def check(x):
 			try:
-				int(x)
-				return True
+				return int(x)>0
 			except ValueError:
 				return False
-		return self.get_bool(check, args)
+		return self.getBool(check, args)
 
 	def cmd_cmp(self, v, *args):
 		"""
@@ -2134,14 +2153,17 @@ class RfbCommander(object):
 
 	def get_cmp(self, v, *args):
 		"""
-		cmp args..:	'ok' if all args are equal, 'fail' else
+		{cmp args..}:	'ok' if all args are equal, 'fail' else
 		- A single arg is compered to the empty string, so {cmp } is 'ok' while {cmp x} is 'fail'
 		- Beware of blanks in expansions {a} can be "a a" so {cmp {a}} is 'ok'
 		- Use 'equal' to compare variables directly without sideeffects
 		if {cmp x y}
 		then echo same
+		- If you want to compare two numbers, try:
+		if {nat {sub {higher} {lower}}}
+		then echo {higher} is higher than {lower}
 		"""
-		return 'ok' if not args and v=='' else self.get_bool(lambda x: x==v, args)
+		return 'ok' if not args and v=='' else self.getBool(lambda x: x==v, args)
 
 	def cmd_equal(self, v, *args):
 		"""
@@ -2159,14 +2181,14 @@ class RfbCommander(object):
 
 	def get_equal(self, v, *args):
 		"""
-		equal var..:	'ok' if all vars exist and are equal, 'fail' else
+		{equal var..}:	'ok' if all vars exist and are equal, 'fail' else
 		- a single variable is just checked for existence
 		if {equal a b}
 		then echo {a}=={b}
 		else echo {a}!={b}
 		"""
 		v	= self.var(v)
-		return 'fail' if v is None else 'ok' if not args else self.get_bool(lambda x: self.var(x)==v, args)
+		return 'fail' if v is None else 'ok' if not args else self.getBool(lambda x: self.var(x)==v, args)
 
 	def cmd_empty(self, *args):
 		"""
@@ -2186,7 +2208,7 @@ class RfbCommander(object):
 
 	def get_empty(self, *args):
 		"""
-		empty args..:	'ok' if there is only the empty arg, 'fail' else
+		{empty args..}:	'ok' if there is only the empty arg, 'fail' else
 		- only '{empty }' succeeeds, '{empty}' does not work and '{empty  }' fails
 		- 'if {empty {a}}' fails if 'a' does not exist, as then this expands to '{a}'
 		"""
@@ -2212,10 +2234,9 @@ class RfbCommander(object):
 		set var val: set {var} to val.
 		.
 		Replacements only work in macros or when prompt is active.
-		However the sequence in what {...} is replaced first
-		is random and implementation dependent.
 		.
 		Use "local" to override macro parameters like {0}, {:3}, {3:}, {:} or {#} etc.
+		"set" does not override "local" variables, it stores it into the global ones.
 		To see all variables, do "prompt" followed by "load" followed by "set"
 		.
 		There is a subtle detail:
@@ -2254,21 +2275,22 @@ class RfbCommander(object):
 			if var=='#' or var.isdigit():
 				return self.bug('use "local '+var+'" to set a local variable')
 			val		= ' '.join(args)
+			# This is correct, no self.set(var, val) here
 			self.repl[var]	= val
 			self.debug(Var=var, val=val)
 		return self.ok()
 
 	def get_set(self, *args):
 		"""
-		set var..:	'ok' if all vars exists, 'fail' else
+		{set var..}:	'ok' if all vars exists, 'fail' else
 		if {set a}
 		then echo a carries a value
 		"""
-		return self.get_bool(lambda x: self.var(x) is not None, args)
+		return self.getBool(lambda x: self.var(x) is not None, args)
 
 	def get_get(self, v, *args):
 		"""
-		get var [replacement]:	replace by variable if defined, else with replacement, '' by default
+		{get var [replacement]}:	replace by variable if defined, else with replacement, '' by default
 		- echo {get 1 (arg 1 is not set)}
 		- do {run}{when 1 .}{get 1}
 		"""
@@ -2277,7 +2299,7 @@ class RfbCommander(object):
 
 	def get_when(self, v, *args):
 		"""
-		when var [replacement]:	'' if var is empty, else replacement
+		{when var [replacement]}:	'' if var is empty, else replacement
 		- do {run}{when 1 .}{get 1}
 		"""
 		v	= self.var(v)
@@ -2299,7 +2321,7 @@ class RfbCommander(object):
 		"""
 		unset var..: unset replacements {var}s
 		- this fails for the first {var} missing
-		- locals cannot be unset.  To unset, replace with another macro.
+		- locals cannot be unset.  To unset, run another macro.
 		To unset a global, you must do something like following:
 		.
 		load
@@ -2337,7 +2359,7 @@ class RfbCommander(object):
 		"""
 		if args:
 			v	= yield self.expand(' '.join(args))
-			self.repl[var]	= v
+			self.set(var, v)
 		else:
 			v	= self.var(var)
 			if v is not None:
@@ -2376,6 +2398,8 @@ class RfbCommander(object):
 		Automatic globals always have 'global.' as prefix.
 		if you just load 'x' instead of 'global.x',
 		then 'x' is not considered by 'save'
+		.
+		This does not work with variables declared by "local"
 		"""
 		try:
 			with Open(GLOBALSFILE, lock=True) as f:
@@ -2391,6 +2415,7 @@ class RfbCommander(object):
 		self.globs(globs)
 
 		# transfer global to variables
+		# self.repl is ok here, as we do not respect locals here
 		for a in args:
 			self.repl[a]	= globs.get(a if a.startswith('global.') else 'global.'+a, '')
 
@@ -2407,6 +2432,8 @@ class RfbCommander(object):
 		.
 		An empty global which is saved and unset in variables is removed from globals:
 		'set global.x ' <- note the space, then 'save' then 'unset global.x' then 'save global.x'
+		.
+		This does not work with variables declared by "local", it all must be done with "set".
 		"""
 		# calculate the globals which have changes
 		changes	= {}
@@ -2662,6 +2689,7 @@ class RfbCommander(object):
 			for i in range(len(args)):
 				a[str(i+1)] = args[i]
 			a['#']	= str(len(args))
+			a['!']	= macro
 #			a['*']	= ' '.join(args)
 			self.args	= a
 			self.mode	= self.MODE_SPC
@@ -2682,9 +2710,15 @@ class RfbCommander(object):
 			was_bye		= self.bye
 			self.bye	= False
 
+			cnt	= [0]*(len(data)+1)
 			lnr	= 0
-			for l in data:
+			while lnr<len(data):
+				l	= data[lnr]
 				lnr	+= 1
+				cnt[lnr-1]	= 0
+				c		= cnt[lnr]+1
+				cnt[lnr]	= c
+				self.args['.']	= str(lnr)
 				# ignore empty lines and comments
 				if l.strip()=='':	continue
 				if l[0]=='#':		continue
@@ -2693,6 +2727,9 @@ class RfbCommander(object):
 				if l.endswith('\n'): l=l[:-1]
 				# We need UTF8 strings, not Unicode!
 				l	= fromUNI(l)
+
+				if c>MAXLOOPS:
+					raise RuntimeError(macro+' '+str(lnr)+': '+str(c)+' macro loops: '+l)
 
 				# parse line
 				#self.trace(Macro=macro, l=l, B=self.bye)
@@ -2703,6 +2740,9 @@ class RfbCommander(object):
 				if not st:
 					# pass on errors
 					break
+				if isinstance(st, Goto):
+					lnr	= st.val()
+					continue
 				if self.bye:
 					# "exit" is success (st==True)
 					self.bye	= False			# we have obeyed the passed "bye"
@@ -2735,6 +2775,16 @@ class RfbCommander(object):
 			self.bye= True
 		return v
 
+	def cmd_goto(self, nr=0):
+		"""
+		goto NR: jump to the given line number of macro
+		goto: jump to the start of the macro
+		- local label1 {.}: saves the next line into variable label1
+		- goto {label1}: jumps to the saved line
+		- Has no effect outside of a macro
+		"""
+		return Goto(int(nr))
+
 	def cmd_not(self, *args):
 		"""
 		not cmd args..: fails on success, else succeeds (even on error)
@@ -2749,35 +2799,35 @@ class RfbCommander(object):
 
 	def get_and(self, *args):
 		"""
-		and args..: all 'ok'
+		{and args..}: all 'ok'
 		- 'ok' if all args are 'ok', 'fail' else
 		- fails for no arguments.  'x' makes this 'fail'
 		"""
-		return self.get_bool(lambda x: x=='ok', args)
+		return self.getBool(lambda x: x=='ok', args)
 
 	def get_nand(self, *args):
 		"""
-		nand args..: not all are 'fail'
+		{nand args..}: not all are 'fail'
 		- 'ok' if any of the args is 'fail', 'fail' else
 		- fails for no arguments.  'x' is ignored
 		"""
-		return self.get_bool(lambda x: x!='fail', args, True)
+		return self.getBool(lambda x: x!='fail', args, True)
 
 	def get_or(self, *args):
 		"""
-		or args..: any 'ok'
+		{or args..}: any 'ok'
 		- 'ok' if any arg is 'ok', 'fail' else
 		- fails for no arguments. 'x' is ignored
 		"""
-		return self.get_bool(lambda x: x!='ok', args, True)
+		return self.getBool(lambda x: x!='ok', args, True)
 
 	def get_nor(self, *args):
 		"""
-		nor args..: none 'ok'
+		{nor args..}: none 'ok'
 		- 'fails' if any arg is 'ok', 'ok' else
 		- fails for no arguments.  'x' make this fail
 		"""
-		return self.get_bool(lambda x: x!='ok', args)
+		return self.getBool(lambda x: x!='ok', args)
 
 	def cmd_if(self, *args):
 		"""
@@ -3083,15 +3133,18 @@ class RfbCommander(object):
 		self.rfb.stop()
 		return self.ok()
 
-	def cmd_list(self, k=None):
+	def cmd_list(self, n=None):
 		"""
 		list:		list all channels
-		list var:	list all channels into given var
+		list chan:	list the given channel
 		"""
-		c	= ' '.join(Channel.list())
-		if k is None:
-			return self.ok('known channels: '+c)
-		self.repl[k]	= c
+		if n is None:
+			return self.ok('channels: '+' '.join(Channel.list()))
+		c	= Channel.list(n)
+		if c is None:
+			return self.fail('no channel: '+n)
+		for a in c:
+			self.send(n+': '+a)
 		return self.ok()
 
 	def cmd_send(self, channel, *args):
@@ -3148,7 +3201,7 @@ class RfbCommander(object):
 		v	= c.get(cb)
 		if v is None:
 			v	= yield cb
-		self.repl[k]	= v
+		self.set(k, v)
 		yield Return(self.ok())
 
 	def cmd_pull(self, channel, k=None):
@@ -3164,7 +3217,7 @@ class RfbCommander(object):
 		v	= c.get()
 		if v is None:
 			return self.fail()
-		self.repl[k]	= v
+		self.set(k, v)
 		return self.ok()
 
 	def cmd_req(self, channel, k=None):
@@ -3185,8 +3238,75 @@ class RfbCommander(object):
 		v	= c.get(cb)
 		if v is None:
 			v	= yield cb
-		self.repl[k]	= v
+		self.set(k, v)
 		yield Return(self.ok())
+
+	def cmd_shift(self, *args):
+		"""
+		shift:		remove first macro argument, shifting others down
+		- fails if shift cannot be performed if there are no arguments
+		shift var..:	shift the given variable
+		- if a variable is missing, this errors
+		- this removes the first non-space part with the first space
+		- if the last thing of the variable is shifted, this fails and does not change
+		- else it processes more variables until some error/fail occurs
+		- only succeeds if it succeeds on all variables
+		"""
+		if not args:
+			n	= int(self.args['#'])
+			if not n:
+				return self.fail()
+			n	-= 1
+			for i in range(n):
+				self.args[str(i+1)]	= self.args[str(i+2)]
+			del self.args[str(n)]
+			self.args['#']	= n
+			return self.ok()
+
+		for k in args:
+			v	= self.var(k)
+			if v is None:
+				return self.err()
+			v	= v.split(' ', 2)
+			if len(v) != 2:
+				return self.fail()
+			self.set(k, v[1])
+		return self.ok()
+
+	def get_shift(self, *args):
+		"""
+		{shift args..}:	returns everything but the first arg
+		- returns nothing if there is nothing to shift
+		"""
+		return '' if len(args)<2 else ' '.join(args[2:])
+
+	def cmd_first(self, *args):
+		"""
+		first var..:	truncates the given variables to their first arg
+		- error if var does not exist (or there are no variables)
+		- fails if variable is empty
+		- succeeds else
+		- There is no "first", use {1} instead
+		"""
+		if not args:
+			return self.err()
+		for k in args:
+			v	= self.var(k)
+			if v is None:
+				return self.err()
+			if v == '':
+				return self.fail()
+			v	= v.split(' ', 2)
+			# this does not change the variable if it just has a single arg
+			self.set(k, v[0])
+		return self.ok()
+
+	def get_first(self, *args):
+		"""
+		{first args..}:	returns just the first arg
+		- returns nothing if there is no first arg
+		"""
+		return args[0] if args else ''
 
 	def template(self, name, prefix=''):
 		"""
@@ -3335,10 +3455,15 @@ class Channel():
 	chan	= {}
 
 	@classmethod
-	def list(klass):
-		for a in sorted(klass.chan):
-			yield a
-		return
+	def list(klass, c=None):
+		def dump(l):
+			for a in l:
+				yield a
+		if c is None:
+			return dump(sorted(klass.chan))
+
+		c	= klass.chan.get(c)
+		return None if c is None else dump(c)
 
 	def __init__(self, name):
 		self.c	= self.__class__.chan.get(name)
@@ -3347,6 +3472,10 @@ class Channel():
 			self.p	= []	# waiting for put
 			self.g	= []	# waiting for get
 			self.__class__.chan[name]	= self
+
+	def __iter__(self):
+		for a in self.p:
+			yield a[0]
 
 	def has_put(self):		return self.c.p and True
 	def has_get(self):		return self.c.g and True
@@ -3415,13 +3544,22 @@ class ControlProtocol(CorrectedLineReceiver):
 	# Called from factory, but no self.factory here!
 	def __init__(self):
 		# self.factory not present at this time
+		self.gc_disabled= False
 		self.cmd	= RfbCommander(self)
 		self.__id	= self.getid()
+
+	def disable_gc(self):
+		self.gc_disabled	= True
+		gc.disable()
+		print('GC disabled')
 
 	def connectionMade(self):
 		print("OPEN", self.__id)
 
 	def connectionLost(self, *args):
+		if self.gc_disabled:
+			print('GC enabled')
+			gc.enable()
 		print('CLOSE', self.__id, args)
 
 	# Called by LineReceiver
