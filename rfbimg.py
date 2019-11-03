@@ -340,6 +340,9 @@ class Template:
 	def getTpl(self):
 		return self.tpl
 
+	def getFirstRect(self):
+		return self.p[0]['p'][0]['n']
+
 	def getRect(self, n):
 		if not self.parsed:	self.parse()
 #		D(n, r=self.r, find=self.lf)
@@ -2965,7 +2968,7 @@ class RfbCommander(object):
 			n	= int(t.split('.',2)[1])
 		except Exception,e:
 			n	= 0
-		if not n:	n=1
+		if not n:	n=tpl.getFirstRect()
 		d,x,y,w,h	= tpl.getRect(n)
 
 		lx		= self.rfb.lm_x
