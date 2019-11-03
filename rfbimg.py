@@ -555,6 +555,8 @@ class rfbImg(easyrfb.client):
 		self.lm_x	= 0
 		self.lm_y	= 0
 
+		self.inittime	= time.time()
+
 	# This is really black magic, sorry
 	def timer(self):
 		"""Called each 0.1 seconds when idle"""
@@ -1618,6 +1620,7 @@ class RfbCommander(object):
 
 	def get_time(self, k):
 		"""
+		{time start}:	seconds since epoch when the main program was started
 		{time sec}:	seconds since epoch
 		{time min}:	minutes since epoch
 		{time hour}:	hours since epoch
@@ -1632,6 +1635,7 @@ class RfbCommander(object):
 		"""
 		return self.GETdatetime(k,
 			{
+			'start':lambda self:	str(int(self.rfb.inittime)),		# seconds since epoch when app was started
 			'sec':	lambda self:	str(int(self.time)),			# seconds since epoch
 			'min':	lambda self:	str(self.time//60),			# minutes since epoch
 			'hour':	lambda self:	str(self.time/3600),			# hours since epoch
@@ -2843,17 +2847,17 @@ class RfbCommander(object):
 		- returns failure on error (this usually terminates a macro and let it return failure)
 		- else returns success
 		.
-		if exit: just success (the "exit" has no effect else than returning success)
-		if return command args..: This does not return, the "return" just is redundant
-		if unknown: returns failure, sets err STATE, but does not exit (unlike "unknown" does)
-		- note that "unknown" only exits if no "prompt" is active
+		if cmd args..:		fails on error of command, allows then/else, but stops macro on error
+		if return cmd args..:	never fails, allows then/else/err
+		if exit:		just success (the "exit" has no effect here besides returning success)
+		if unknown:		fails (and thus stops macro)
+		- note that any unknown command exits if no "prompt" is active
 		if if command args..: always succeeds
 		- "then" executed if command has success or failure
 		- "else" executed if command errored
-		- "err" cannot be executed afterwards
-		if command args..
+		- "err" will never be executed afterwards
 		if return
-		- technically the same as before
+		- puts the last state back into action, this effectively is a NOP (No OPeration)
 		"""
 		try:
 			st	= yield self.processArgs(args)
@@ -2864,6 +2868,7 @@ class RfbCommander(object):
 		self.state	= self.getBye(st)
 		self.bye	= False
 		yield Return(self.fail() if st is None else self.ok())
+
 
 	def cmd_then(self, *args):
 		"""
@@ -3644,7 +3649,7 @@ class CreateControl(twisted.internet.protocol.Factory):					#TWISTED
 	protocol = ControlProtocol							#TWISTED black magic, DO NOT REMOVE
 
 	def __init__(self, sockname, rfb):
-		self.rfb = rfb		# becomes ControlProtocol.factory.rfb eventually
+		self.rfb	= rfb		# becomes ControlProtocol.factory.rfb eventually
 		try:
 			os.unlink(sockname)
 		except:
