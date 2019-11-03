@@ -1614,7 +1614,7 @@ class RfbCommander(object):
 		return ' '.join([str(k) for k in d])   if k is None else   d.get(k, lambda self: None)(self)
 
 	def GETdatetime(self, k, d):
-		if self.time   is None: self.time   = time.time()
+		if self.time   is None: self.time   = int(time.time())
 		if self.gmtime is None: self.gmtime = time.gmtime(self.time)
 		return self.GET(k, d)
 
@@ -1636,10 +1636,10 @@ class RfbCommander(object):
 		return self.GETdatetime(k,
 			{
 			'start':lambda self:	str(int(self.rfb.inittime)),		# seconds since epoch when app was started
-			'sec':	lambda self:	str(int(self.time)),			# seconds since epoch
-			'min':	lambda self:	str(self.time//60),			# minutes since epoch
+			'sec':	lambda self:	str(self.time),				# seconds since epoch
+			'min':	lambda self:	str(self.time/60),			# minutes since epoch
 			'hour':	lambda self:	str(self.time/3600),			# hours since epoch
-			'day':	lambda self:	str(self.time//86400),			# days since epoch
+			'day':	lambda self:	str(self.time/86400),			# days since epoch
 			'week':	lambda self:	str(self.time/604800),			# weeks since epoch
 			'h':	lambda self:	str(self.gmtime.tm_hour),		# 0-23
 			'hh':	lambda self:	str(self.gmtime.tm_hour).zfill(2),	# 00-23
@@ -2920,7 +2920,7 @@ class RfbCommander(object):
 		mouse x y buttons: release if all released, jump mouse, then apply buttons
 		mouse template N [buttons]: move mouse in N steps to first region of e/template.tpl and performs action
 		mouse template.# N [buttons]: use region n, n=1 is first
-		mouse template.#.E N [buttons]: as before but use the given edge of region: 0=none(random) 1=nw 2=ne 3=sw 4=se
+		mouse template.#.E N [buttons]: as before but use the given edge of region: 0=none(random) 1=nw 2=sw 3=ne 4=se
 		.
 		To release all buttons, you must give 0 as buttons!
 		buttons are 1(left) 2(middle) 4(right) 8 and so on for further buttons.
@@ -3294,7 +3294,7 @@ class RfbCommander(object):
 			v	= self.var(k)
 			if v is None:
 				return self.err()
-			v	= v.split(' ', 2)
+			v	= v.split(' ', 1)
 			if len(v) != 2:
 				return self.fail()
 			self.set(k, v[1])
@@ -3323,7 +3323,7 @@ class RfbCommander(object):
 				return self.err()
 			if v == '':
 				return self.fail()
-			v	= v.split(' ', 2)
+			v	= v.split(' ', 1)
 			# this does not change the variable if it just has a single arg
 			self.set(k, v[0])
 		return self.ok()
