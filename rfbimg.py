@@ -341,6 +341,7 @@ class Template:
 		return self.tpl
 
 	def getFirstRect(self):
+		if not self.parsed:	self.parse()
 		return self.p[0]['p'][0]['n']
 
 	def getRect(self, n):
