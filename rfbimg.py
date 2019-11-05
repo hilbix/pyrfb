@@ -3163,18 +3163,35 @@ class RfbCommander(object):
 		self.rfb.stop()
 		return self.ok()
 
-	def cmd_list(self, n=None):
+	def cmd_list(self, c=None, n=None):
 		"""
-		list:		list all channels
-		list chan:	list the given channel
+		list:		list nonempty or waiting channels
+		list all:	list all known channels
+		list wait:	list all channels waited for
+		list data:	list all channels which have data queued
+		list dump:	dump all known channels
+		list dump chan:	dump given channel
 		"""
 		if n is None:
-			return self.ok('channels: '+' '.join(Channel.list()))
-		c	= Channel.list(n)
-		if c is None:
-			return self.fail('no channel: '+n)
-		for a in c:
-			self.send(n+': '+a)
+			if c is None:
+				return self.ok('channels: '+' '.join([n for n in Channel.list() if Channel(n).has_put() or Channel(n).has_get()]))
+			if c == 'wait':
+				return self.ok('channels: '+' '.join([n for n in Channel.list() if Channel(n).has_get()]))
+			if c == 'data':
+				return self.ok('channels: '+' '.join([n for n in Channel.list() if Channel(n).has_put()]))
+			if c == 'all':
+				return self.ok('channels: '+' '.join(Channel.list()))
+			if c != 'dump':
+				return self.fail('unknown list command')
+			l	= Channel.list()
+		else:
+			l	= [n]
+		for n in l:
+			c	= Channel.list(n)
+			if c is None:
+				return self.fail('unknown channel')
+			for a in c:
+				self.send('push '+n+' '+a)
 		return self.ok()
 
 	def cmd_send(self, channel, *args):
@@ -3289,8 +3306,8 @@ class RfbCommander(object):
 			n	-= 1
 			for i in range(n):
 				self.args[str(i+1)]	= self.args[str(i+2)]
-			del self.args[str(n)]
-			self.args['#']	= n
+			del self.args[str(n+1)]
+			self.args['#']	= str(n)
 			return self.ok()
 
 		for k in args:
