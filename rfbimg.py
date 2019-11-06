@@ -2346,7 +2346,10 @@ class RfbCommander(object):
 		This fails if the global changes while you do this.
 		"""
 		for var in args:
-			del self.repl[var]
+			try:
+				del self.repl[var]
+			except KeyError:
+				return self.fail("unknown variable "+var)
 		return self.ok()
 
 	def fillstate(self, v, ok=[], fail=[], err=[], **kw):
@@ -2403,6 +2406,7 @@ class RfbCommander(object):
 			del globs[a]
 #		print('after', repr(globs))
 		self.globals	= globs
+
 
 	def cmd_load(self, *args):
 		"""
@@ -3292,7 +3296,9 @@ class RfbCommander(object):
 	def cmd_shift(self, *args):
 		"""
 		shift:		remove first macro argument, shifting others down
-		- fails if shift cannot be performed if there are no arguments
+		- errors if shift cannot be performed if there are no arguments
+		- fails if there are no more arguments left
+		- succeeds if there are arguments left
 		shift var..:	shift the given variable
 		- if a variable is missing, this errors
 		- this removes the first non-space part with the first space
@@ -3301,15 +3307,15 @@ class RfbCommander(object):
 		- only succeeds if it succeeds on all variables
 		"""
 		if not args:
-			n	= int(self.args['#'])
+			n	= self.nvar('#')
 			if not n:
-				return self.fail()
+				return self.err()
 			n	-= 1
 			for i in range(n):
 				self.args[str(i+1)]	= self.args[str(i+2)]
 			del self.args[str(n+1)]
 			self.args['#']	= str(n)
-			return self.ok()
+			return self.ok() if n else self.fail()
 
 		for k in args:
 			v	= self.var(k)
@@ -3330,14 +3336,17 @@ class RfbCommander(object):
 
 	def cmd_first(self, *args):
 		"""
+		first:		check if there are arguments
+		- succeeds if there are arguments (this is {1} is set, it may be empty)
+		- fails if there are no arguments ({#} == 0}
 		first var..:	truncates the given variables to their first arg
-		- error if var does not exist (or there are no variables)
+		- error if var does not exist
 		- fails if variable is empty
 		- succeeds else
 		- There is no "first", use {1} instead
 		"""
 		if not args:
-			return self.err()
+			return self.fail if self.nvar('#')==0 else self.ok()
 		for k in args:
 			v	= self.var(k)
 			if v is None:
