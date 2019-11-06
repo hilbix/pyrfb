@@ -127,6 +127,8 @@ function keyboard_edit(e)
     case 'NumpadSubtract':	regions(-1); return evok(e);
     case 'NumpadAdd':		regions(+1); return evok(e);
 
+    case 'Enter':
+    case 'NumpadEnter':
     case 'Return':		newrect(); return evok(e);
 
     case 'ArrowLeft':	x= -1; break;
