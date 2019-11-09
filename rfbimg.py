@@ -423,7 +423,7 @@ class Template:
 		self.parsed	= True
 		return self
 
-	def match(self, img, debug=False):
+	def match(self, img, debug=False, verbose=False):
 		"""
 		check if img matches this template
 
@@ -435,7 +435,7 @@ class Template:
 
 		finds	= []
 		for p in self.p:
-			offset	= self.part(p, img, debug)
+			offset	= self.part(p, img, debug, verbose)
 			if offset is None:
 				if debug: debug(Template=self.name, _part=p['n'], found=None)
 				return None
@@ -445,7 +445,7 @@ class Template:
 		self.lf	= finds
 		return finds
 
-	def part(self, p, img, debug=False):
+	def part(self, p, img, debug=False, verbose=False):
 		"""
 		check for a matching part (internal routine)
 
@@ -460,7 +460,7 @@ class Template:
 		for i in range(p['c']):
 			r	= p['p']
 			# r is [{ 'x':x, 'y', 'w', 'h', 'i':img, 'm':abs(r[0]), 'px':r[3]*r[4] }]
-			if self.check(r[0], x, y, img, False):
+			if self.check(r[0], x, y, img, verbose and debug):
 				# We got a match, check the remaining rects
 				if debug: debug(Template=self.name, _part=p['n'], x=x, y=y)
 				for r in r[1:]:
@@ -967,7 +967,7 @@ class rfbImg(easyrfb.client):
 				return None
 		return tpls
 
-	def check_waiter(self,waiter,debug=False):
+	def check_waiter(self,waiter,debug=False,verbose=False):
 		""" check a single waiter (templates) """
 		try:
 			tpls = waiter['templates']
@@ -984,7 +984,7 @@ class rfbImg(easyrfb.client):
 
 		for t in tpls:
 			# Check all the templates
-			f	= t['t'].match(self.img, debug)
+			f	= t['t'].match(self.img, debug, verbose)
 			if (f is None) == (not t['cond']):
 				waiter['match'] = (t, f)
 				if 'img' in waiter:
@@ -3095,7 +3095,7 @@ class RfbCommander(object):
 
 	def checker(self, **kw):
 		w	= dict(**kw)
-		r	= len(w['t']) and self.rfb.check_waiter(w, self.debugFn()) and self.print_wait(w)
+		r	= len(w['t']) and self.rfb.check_waiter(w, self.debugFn(), self.verbose) and self.print_wait(w)
 		self.diag(check=w)
 		return r
 		
@@ -3139,7 +3139,7 @@ class RfbCommander(object):
 	def print_wait(self,waiter):
 		m	= waiter.get('match')
 		if not m:
-			return self.fail('timeout')
+			return self.fail('timeout '+' '.join(waiter.get('t', [])))
 		m,f	= m
 		t	= m['t']
 		cond	= m['cond']
@@ -3557,7 +3557,7 @@ class Channel():
 	def get(self, cb=None):		return self.c._get(cb)
 	def peek(self):			return self.c._peek()
 
-	def _peek(self, cb):
+	def _peek(self):
 		for r,p in self.p:
 			if r is not None:
 				return r
