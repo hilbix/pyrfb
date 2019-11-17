@@ -1684,9 +1684,9 @@ class RfbCommander(object):
 
 	def get_rnd(self, a, b=None):
 		"""
-		{random {}}: some often very long positive integer value
-		{random x}: 0..x
-		{random x y}: x..y
+		{rnd }: some often very long positive integer value
+		{rnd x}: 0..x
+		{rnd x y}: x..y
 		"""
 		if self.random is None:	self.random = positiveHash(repr(self.repl))
 		if b is None: a,b = 0,a
