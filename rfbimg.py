@@ -314,6 +314,7 @@ def ordered_repr(d):
 
 class Template:
 	"""
+	Areas in a region which have negative delta are not checked.
 	Searches are regions which are 0 width or 0 height.  Just a dot resets search.
 	- The left top corner of the next region is moved along the given axis
 	- The following regions then are checked relative to the found displacement
@@ -357,8 +358,8 @@ class Template:
 		dy	= part['y'] * off
 		x	= r['x'] + dx
 		y	= r['y'] + dy
-		w	= r['w'] - x
-		h	= r['h'] - y
+		w	= r['w'] - r['x']
+		h	= r['h'] - r['y']
 		d	= r['d']
 #		D(d=d, x=x, y=y, w=w, h=h)
 		return (d, x, y, w, h)
@@ -396,12 +397,12 @@ class Template:
 					cnt	= r[3]
 					dx	= d
 					dy	= 0
-					if d<0: x += cnt	# cnt == 1 means look for 2 positions
+					if d<0: sx += cnt	# cnt == 1 means look for 2 positions
 				elif r[4]!=0:
 					cnt	= r[4]
 					dx	= 0
 					dy	= d
-					if d<0: y += cnt	# cnt == 1 means look for 2 positions
+					if d<0: sy += cnt	# cnt == 1 means look for 2 positions
 				else:
 					sx	= 0
 					sy	= 0
@@ -481,6 +482,9 @@ class Template:
 
 		returns True if match, false otherwise
 		"""
+		if r['d']<0:
+			return True
+
 		# r is { 'x':x, 'y', 'w', 'h', 'i':img, 'm':abs(r[0]), 'px':r[3]*r[4] }
 		# IC.difference apparently does not work on RGBX, so we have to convert to RGB first
 		rect	= (r['x']+dx, r['y']+dy, r['w']+dx, r['h']+dy)
@@ -494,7 +498,7 @@ class Template:
 
 		st	= PIL.ImageStat.Stat(di.crop(bb))
 		delta	= reduce(lambda x,y:x+y, st.sum2)
-		if delta <= abs(r['d']):
+		if delta <= r['d']:
 			if debug: debug(Template=self.name, check=True, rect=rect, delta=delta)
 			return True
 		if debug: debug(Template=self.name, check=False, rect=rect, delta=delta)
@@ -2222,6 +2226,15 @@ class RfbCommander(object):
 		"""
 		return 'ok' if len(args)==1 and args[0]=='' else 'fail'
 
+	def isautolocal(self, name):
+		if name=='':
+			return True
+		if name.isdigit():
+			return True
+		if len(name)>1:
+			return False
+		return name in '#!'
+
 	def cmd_local(self, var, *args):
 		"""
 		local var: checks if variable is locally known
@@ -2232,6 +2245,8 @@ class RfbCommander(object):
 			return self.args.get(var) is not None
 		val	= ' '.join(args)
 		self.debug(Local=var, val=val)
+		if self.isautolocal(var):
+			return self.fail()
 		self.args[var]=val
 		return self.ok()
 
@@ -2350,6 +2365,26 @@ class RfbCommander(object):
 				del self.repl[var]
 			except KeyError:
 				return self.fail("unknown variable "+var)
+		return self.ok()
+
+	def cmd_clear(self, *args):
+		"""
+		clear:		unsets all variables
+		clear all:	unset variables and locals
+		clear local:	unset only local variables
+		- globals cannot be cleared after loaded
+		"""
+		if args:
+			if len(args)!=1 or ( args[0]!='all' and args[0]!='local' ):
+				return self.fail()
+			n	= {}
+			for a in self.args:
+				if self.isautolocal(a):
+					n[a]	= self.args[a]
+			self.args	= n
+			if args[0]=='local':
+				return self.ok()
+		self.repl	= {}
 		return self.ok()
 
 	def fillstate(self, v, ok=[], fail=[], err=[], **kw):
