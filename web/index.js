@@ -12,20 +12,22 @@
 
 // These functions should go into a lib
 
-function Doms(sel) { return document.querySelectorAll(sel) }
-function Dome(e)  { return document.createElement(e) }
-
-function DIV(inner)
+function clicks(e, click) { e=$(e); e.onclick=click; return e }
+function DOMs(sel)	{ return document.querySelectorAll(sel) }
+function DOMe(e, child, attr)
 {
-  return $$$(Dome('div'), inner);
+  var	e = document.createElement(e)
+  if (child)
+    for (var x of mkArray(child))
+      e.appendChild(typeof x=='string' ? document.createTextNode(x) : x);
+  if (attr)
+    for (var x in attr)
+      e.setAttribute(x, attr[x]);
+  return help(e);
 }
 
-function BUTTON(inner, click)
-{
-  var b = $$$(Dome('button'), inner);
-  b.onclick = click;
-  return b;
-}
+function DIV(inner, attr) { return DOMe('div', inner, attr) }
+function BUTTON(inner, click, attr) { return clicks(DOMe('button', inner, attr), click) }
 
 function quote(s)
 {
@@ -133,7 +135,7 @@ function clear(e,c)
 // See also: https://github.com/bfred-it/image-promise/blob/master/index.js
 function IMG(url)
 {
-  var img	= Dome('img');
+  var img	= DOMe('img');
 
   if (typeof url == 'function')
     url	= url(img);
@@ -211,10 +213,18 @@ function EVT(e, ons, fn)
 
 function hover(e, t)
 {
-  if (e == void 0)
+  if (e === void 0)
     return e;
   EVP(e, 'mouseover', CLOSURE(t => out.tmp(true,  t), t));
   EVP(e, 'mouseout',  CLOSURE(t => out.tmp(false, t), t));
+  return e;
+}
+
+function help(e)
+{
+  e = $(e);
+  if (e.title)
+    hover(hover(e, e.title).getAttribute('for'), e.title);
   return e;
 }
 
@@ -296,6 +306,7 @@ var emit =
 // Backend-Calls
 //
 
+// url = [ prefix, path, path ];
 // req.get(url, query-string, callback, callback-args)
 //	runs callback(response, callback-args)
 //	failure: response is undefined
@@ -353,15 +364,24 @@ var req =
     this.cnt.req++;
     emit.emit('act', r);
     // ajax callback is: text, XMLHttpRequest-object, status, last-modified-header
+
+    var q	= ['nocache='+stamp()];
     var u	= Array.from(r.u);
     if (u[0]=='')
       u[0]	= conf.targ;
-    else
+    else if (u[0].slice(-1) != '?')
       u.splice(1, 0, conf.targ);
+
+    if (r.r)
+      q.push.apply(q, mkArray(r.r));
+
+    u	= u.join('/');
+    if (q)
+      u += '?'+q.join('&');
     if (r.post)
-      ajax.push(u.join('/')+'?nocache='+stamp()+(r.r?'&'+r.r:''), (t,x,s) => this.done(r, t, s), r.post);
+      ajax.push(u, (t,x,s) => this.done(r, t, s), r.post);
     else
-      ajax.get(u.join('/')+'?nocache='+stamp()+(r.r?'&'+r.r:''), (t,x,s) => this.done(r, t, s));
+      ajax.get(u, (t,x,s) => this.done(r, t, s));
     return this;
   }
 , done:		function (r, t, s)
@@ -389,16 +409,17 @@ var Dom =
 { dummy: 1
 , sel:	function (tag, sel, ...args)
   {
-//    xLOG('dom.sel1', tag, sel, args);
+    xLOG('dom.sel1', tag, sel, args);
 
-    var m = Doms('[data-'+tag+']');
+    var att = 'data-sel-'+tag;
+    var m = DOMs('['+att+']');
     var current = 0, togo=-1;
 
     for (var i=m.length; --i>=0; )
       {
         if (!m[i].classList.contains('hide'))
           current	= i;
-        if (sel && m[i].getAttribute('data-sel') == sel)
+        if (sel && m[i].getAttribute(att) == sel)
           togo		= i;
         else
           m[i].classList.add('hide');
@@ -413,10 +434,24 @@ var Dom =
     if (togo>=m.length)
       togo	= 0;
     m[togo].classList.remove('hide');
-    var sel = m[togo].getAttribute('data-sel');
+
+    var sel = m[togo].getAttribute(att);
 //    xLOG('dom.sel3', tag, current, togo, sel, args);
+
+    var att = 'data-xsel-'+tag;
+    var m = DOMs('['+att+']');
+    for (var i=m.length; --i>=0; )
+      {
+        if (m[i].getAttribute(att) == sel)
+          m[i].classList.add('sel');
+        else
+          m[i].classList.remove('sel');
+      }
+
     emit.emit('sel', tag, current, togo, sel, ...args);
     emit.emit('sel-'+tag, current, togo, sel, ...args);
+
+    return m[current].getAttribute(att);
   }
 };
 
@@ -429,7 +464,7 @@ var runs =
 , init:		function (attrib)
   {
     if (!attrib) attrib = this.attribute;
-    for (var e of Doms('['+attrib+']'))
+    for (var e of DOMs('['+attrib+']'))
       e.onclick = this.click(e.getAttribute(attrib));
   }
 , click:	function (str)
@@ -448,7 +483,7 @@ var runs =
 , run_sel:	function (args, ev) { Dom.sel(args[0], args[1], ev); }
 , run_reload:	reload
 , run_cmd:	function (args) { req.get(['ping.php', args[0]], ''); }
-, run_quick:	function () { poller.quick(poller.state.quick>0 ? 0 : poller.state.quick<0 ? conf.quick : -1) }
+, run_quick:	function () { poller.quick(poller.state.quick>0 ? -1 : poller.state.quick<0 ? 0 : conf.quick) }
 , run_learn:	function () { req.send('learn', 'l'); return false }
 , run_mnew:	function (...a) { macro.mnew(...a) }
 , run_msave:	function (...a) { macro.msave(...a) }
@@ -768,7 +803,7 @@ var macro =
         for (var u of a)
           if (validfile(u) && (k = this.match.exec(u)))
             {
-              var b	= hover(BUTTON(k[1]+k[2], SELFCALLwithTHIS(this, 'macroclick')), u);
+              var b	= BUTTON(k[1]+k[2], SELFCALLwithTHIS(this, 'macroclick'), {title:u});
               b.realurl = u;
               this.macros[u] = b;
               ctx.o.appendChild(b);
@@ -893,6 +928,7 @@ var macro =
     return req
       .P(['macro.php', u], '', $('mrun').value)
       .then(t => { xLOG('ran',u,t); out('macro',u,t); return t; })
+      .then(t => { if (poller.state.quick>=0 && poller.state.quick<conf.quickmode) poller.quick(conf.quickmode); return t })
   }
 , mdel:		function ()
   {
@@ -939,10 +975,11 @@ function init()
   show.init('show');
 
   emit.init();
-  emit.register('quick', function (v)   { $$$('qrun', v) });
-  emit.register('done',  function (r,t,s) { out((s==200 ? 'done' : 'fail'+s)+': '+r.r+' '+t) });
-  emit.register('act',   function (r)   { if (!r.cb) show.grey(); out('do: '+r.r) });
-  emit.register('wait',  function (w)   { $$$('wait', w) });
+  emit.register('quick',	function (v)   { $$$('qrun', v) });
+  emit.register('done',		function (r,t,s) { out((s==200 ? 'done' : 'fail'+s)+': '+r.r+' '+t) });
+  emit.register('act',		function (r)   { if (!r.cb) show.grey(); out('do: '+r.r) });
+  emit.register('wait',		function (w)   { $$$('wait', w) });
+  emit.register('err',		function (...e){ xLOG('err',...e); out('err: '+e); alert(e) });
 
   req.init();
   runs.init();
@@ -950,8 +987,8 @@ function init()
   macro.init();
 
   // improve hoverness
-  for (var e of Doms('[title]'))
-    hover(hover(e, e.title).getAttribute('for'), e.title);
+  for (var e of DOMs('[title]'))
+    help(e);
 
   reload(false);
 
@@ -981,6 +1018,8 @@ var Assets =
 
   img:	(ctx, u) =>
     {
+      if (!ctx.current)
+        return;
       IMG(i => { i.nr = ++ctx.nr; i.main = ctx.f+'/'+u; ctx.loading(i); return subdir(i.main)+'#'+ ++Assets.generation})
       .then(i =>
         {
@@ -1002,12 +1041,14 @@ var Assets =
 
   template:	(ctx, u) =>
     {
+      if (!ctx.current)
+        return;
+
       u = strCut(u, '.tpl');
 
       LOG('template', ctx.name, u);
 
-      var b = BUTTON(u, e => upd());
-      b.setAttribute('class', 'no');
+      var b = BUTTON(u, e => upd(), {'class':'no'});
 
       function upd(quiet)
         {
@@ -1116,6 +1157,62 @@ function reload(ev)
     }
   );
 
+   return req.P('layout.json?')
+    .then(j => JSON.parse(j))
+    .then(o =>
+      {
+        var was = Dom.sel('b', 'x');
+        new Layout('b').clear(o);
+        Dom.sel('b', was);
+      }
+    )
+    .catch(e => { emit.emit('err','layout',e) })
+}
+
+class Layout
+  {
+  constructor(layout)
+    {
+      this.layout	= layout;
+      this.b		= $('layout-'+layout);
+      this.e		= $('layout_'+layout);
+    }
+
+  clear(o) { clear(this.b); clear(this.e); this.add(o) }
+
+  add(o)
+  {
+    for (var a of o)
+      {
+        var t = a[0];
+        this.b.appendChild(BUTTON(t, runs.click('sel '+this.layout+' '+t), {['data-xsel-'+this.layout]: t, title:a[1]}));
+        var f = 'l_'+a[2];
+        if (! f in this)
+          throw 'Layout '+f+' is missing';
+        this.e.appendChild(DIV(this[f](a.slice(3)), {['data-sel-'+this.layout]:t}));
+      }
+  }
+
+  l_table(o)
+  {
+    var rows = [];
+    for (var row of o)
+      {
+        var cols = [];
+        for (var col of row)
+          {
+            var attr = void 0;
+            if (typeof col!='string')
+              {
+                attr = {'data-var-v': col['v'], 'data-var': col['m']};
+                col='?';
+              }
+            cols.push(DOMe('td', col));
+          }
+        rows.push(DOMe('tr', cols));
+      }
+    return DOMe('table', rows);
+  }
 }
 
 function validfile(u)
