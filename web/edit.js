@@ -282,7 +282,7 @@ return evok(e);
 function ed(e)
 {
 if (edit && edit.dirt && edit!==e)
-  if (!confirm(edit.name+" not saved, leave?"))
+  if (!confirm(edit.name+" not saved, discard?"))
     return;
 edit = e;
 modder("e");
