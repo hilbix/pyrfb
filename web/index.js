@@ -213,7 +213,7 @@ function EVT(e, ons, fn)
 
 function hover(e, t)
 {
-  if (e === void 0)
+  if (!e)
     return e;
   EVP(e, 'mouseover', CLOSURE(t => out.tmp(true,  t), t));
   EVP(e, 'mouseout',  CLOSURE(t => out.tmp(false, t), t));
@@ -979,7 +979,7 @@ function init()
   emit.register('done',		function (r,t,s) { out((s==200 ? 'done' : 'fail'+s)+': '+r.r+' '+t) });
   emit.register('act',		function (r)   { if (!r.cb) show.grey(); out('do: '+r.r) });
   emit.register('wait',		function (w)   { $$$('wait', w) });
-  emit.register('err',		function (...e){ xLOG('err',...e); out('err: '+e); alert(e) });
+  emit.register('err',		function (e,...a){ xLOG('err',e,e.stack,...a); out('err: '+e+' '+a); out('stack: '+e.stack); alert(e+' '+a+'\n'+e.stack) });
 
   req.init();
   runs.init();
@@ -1166,7 +1166,7 @@ function reload(ev)
         Dom.sel('b', was);
       }
     )
-    .catch(e => { emit.emit('err','layout',e) })
+    .catch(e => { emit.emit('err','layout', e, e.stack) })
 }
 
 class Layout
