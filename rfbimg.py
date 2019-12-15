@@ -48,12 +48,19 @@ import errno
 import random
 import inspect
 import functools
+import itertools
 import traceback
 
 import PIL.Image
 import PIL.ImageDraw
 import PIL.ImageStat
 import PIL.ImageChops
+
+def Docstring(*a, **kw):
+	def decorator(o):
+		o.__doc__	= o.__doc__.format(*a, **kw)
+		return o
+	return decorator
 
 # WTF?!? What a bunch of hyper ugly code!  Just for some dead old POSIX locks ..
 # See https://stackoverflow.com/a/46407326/490291
@@ -136,6 +143,7 @@ TEMPLATEEXT='.tpl'
 MACRODIR='o/'
 MACROEXT='.macro'
 GLOBALSFILE='globals.json'
+LISTFILE='99list'
 
 # Because of https://bugs.python.org/issue13769#msg229882 json.dump() is completely useless.
 # Because of missing parse_string, json.load() is completely useless.
@@ -1866,24 +1874,29 @@ class RfbCommander(object):
 
 	def cmd_verbose(self,*args):
 		"""
-		verbose: get verbose status
-		verbose on: enable verbose
-		verbose off: disable verbose
-		verbose cmd: verbose output of cmd (see: dump)
+		verbose: returns current status of verbose
+		verbose on: enable verbose, returns previous status of verbose
+		verbose off: disable verbose, returns previous status of verbose
+		verbose cmd args..: verbose output of cmd (see: dump)
+		See also: quiet, debug, trace
+		Note:
+		There is no shortcut to disable verbose for a single command,
+		instead use 'if verbose off' (to ignore previous status)
+		followed by the lines with your commands (or write a macro).
 		"""
 		return self.onoff('verbose', *args)
 
 	def cmd_debug(self, *args):
 		"""
 		Enable debugging output.
-		Commandline see 'verbose'.  'verbose' and 'quiet' are independent.
+		Commandline see 'verbose'.  'verbose' and 'debug' are independent.
 		"""
 		return self.onoff('debugging', *args)
 
 	def cmd_trace(self, *args):
 		"""
 		Enable scheduler tracing.
-		Commandline see 'verbose'.  'verbose' and 'quiet' are independent.
+		Commandline see 'verbose'.  'verbose' and 'trace' are independent.
 		"""
 		return self.onoff('tracing', *args)
 
@@ -2366,6 +2379,80 @@ class RfbCommander(object):
 			except KeyError:
 				return self.fail("unknown variable "+var)
 		return self.ok()
+
+	def cmd_map(self, *args):
+		"""
+		map s v			create a bi-directional mapping between v and the numeric sequence
+					starting at 1 with the given separator s
+		map s1 v s2:		as before, use s1 for the forward mapping, s2 for the backward mapping
+		map s1 v1 s2 v2:	maps v1 to v2 with s1, v2 to v1 with s2
+		map s1 v1 s2 v2 s3:	extended forward mapping using s1/s2 and backward mapping using s3/s2
+		map s1 v1 s2 v2 s3 v3:	creates v1/v2 mapping with s1/s2/s3 and v2/v3 mapping with s2/s3
+		map s1 v1 s2 v2 s3 v3 s4: creates v1/v2 mapping with s1/s2/s3 and v2/v3 mapping with s2/s3/s4
+		- mapping are bi-directional, so you can map back and forth
+		- multiple same values are joined into the values
+		Example:
+		- set v a b c; map {} v
+		  set va 1; set vb 2; set vc 3; set v1 a; set v2 b; set v3 c
+		- set v a b c; map _ v .
+		  set v_a 1; set v_b 2; set v_c 3
+		  set v.1 a; set v.2 b; set v.3 c
+		- set v1 a b c; set v2 1 2 3; map _ v1 . v2
+		  set v1_a 1; set v1_b 2; set vi_c 3
+		  set v2.1 a; set v2.2 b; set v2.3 c
+		- set v1 a b c; set v2 1 2 3; map _ v1 . v2 -
+		  set v1_a.v2 1; set v1_b.v2 2; set v1_c.v2 3
+		  set v2-1.v1 a; set v2-2.v1 b; set v2-3.v1 c
+		- set v1 a b c; set v2 1 2 3; set v3 X Y Z; map _ v1 . v2 - v3
+		  set v1_a.v2 1; set v1_b.v2 2; set v1_c.v2 3
+		  set v2-1.v1 a; set v2-2.v1 b; set v2-3.v1 c
+		  set v2.1 X; set v2.2 Y; set v2.3 Z
+		  set v3-X 1; set v3-Y 2; set v3-Z 3
+		- set v1 a b c; set v2 1 2 3; set v3 X Y Z; map _ v1 . v2 - v3 +
+		  set v1_a.v2 1; set v1_b.v2 2; set v1_c.v2 3
+		  set v2-1.v1 a; set v2-2.v1 b; set v2-3.v1 c
+		  set v2.1-v3 X; set v2.2-v3 Y; set v2.3-v3 Z
+		  set v3+X-v2 1; set v3+Y-v2 2; set v3+Z-v2 3
+		- this works vor any number of variables by this scheme
+		"""
+		if len(args)<2:
+			return self.fail("map needs at least 2 parameters")
+		self.debug(Map='args', args=args, len=len(args))
+		i	= 1
+		while 1:
+			# get the mapping parameters
+			s1	= args[i-1]
+			n1	= args[i]
+			v1	= self.var(n1).split(' ')
+			s2	= args[i+1] if len(args) > i+1 else s1
+			if len(args) > i+2:
+				n2	= args[i+2]
+				v2	= self.var(n2).split(' ')
+			else:
+				n2	= n1
+				v2	= [str(x) for x in range(1,1+len(v1))]
+			s3	= args[i+3] if len(args) > i+3 else None
+			self.debug(Map='do', n1=n1, n2=n2, s1=s1, s2=s2, s3=s3)
+
+			def MAP(n, a,b, pref,suff):
+				vars	= {}
+				for k,v in zip(a, itertools.cycle(b)):
+					n	= pref+k+suff
+					try:
+						vars[n].append(v)
+					except KeyError:
+						vars[n]	= [v]
+				# keep it local if original variable is local
+				o	= self.args if n in self.args else self.repl
+				for k,v in vars.iteritems():
+					o[k]	= ' '.join(v)
+
+			MAP(n1, v1, v2, n1+s1,                          '' if s3 is None else s2+n2)
+			MAP(n2, v2, v1, n2+s2 if s3 is None else n2+s3, '' if s3 is None else s2+n1)
+
+			i	+= 2
+			if len(args) <= i+2:
+				return self.ok()
 
 	def cmd_clear(self, *args):
 		"""
@@ -3203,36 +3290,58 @@ class RfbCommander(object):
 		self.rfb.stop()
 		return self.ok()
 
+	@Docstring(LISTFILE)
 	def cmd_list(self, c=None, n=None):
 		"""
 		list:		list nonempty or waiting channels
 		list all:	list all known channels
 		list wait:	list all channels waited for
 		list data:	list all channels which have data queued
+		list save:	as 'list dump' but writes the output to macro {0}
 		list dump:	dump all known channels
 		list dump chan:	dump given channel
 		"""
+#		list save FILE:	save list to macro FILE as given (this overwrites macro without backup)
+		def dumper(out, l=None):
+			if l is None:	l = Channel.list()
+			for n in l:
+				c	= Channel.list(n)
+				if c is None:
+					return self.fail('unknown channel')
+				for a in c:
+					out('push '+n+' '+a)
+			return self.ok()
+
+		if c is None:
+			return self.ok('channels: '+' '.join([n for n in Channel.list() if Channel(n).has_put() or Channel(n).has_get()]))
 		if n is None:
-			if c is None:
-				return self.ok('channels: '+' '.join([n for n in Channel.list() if Channel(n).has_put() or Channel(n).has_get()]))
 			if c == 'wait':
 				return self.ok('channels: '+' '.join([n for n in Channel.list() if Channel(n).has_get()]))
 			if c == 'data':
 				return self.ok('channels: '+' '.join([n for n in Channel.list() if Channel(n).has_put()]))
 			if c == 'all':
 				return self.ok('channels: '+' '.join(Channel.list()))
-			if c != 'dump':
-				return self.fail('unknown list command')
-			l	= Channel.list()
-		else:
-			l	= [n]
-		for n in l:
-			c	= Channel.list(n)
-			if c is None:
-				return self.fail('unknown channel')
-			for a in c:
-				self.send('push '+n+' '+a)
-		return self.ok()
+			if c == 'save':
+				# n=None here.  For safety we do not allow to override arbitrary macros
+				name	= LISTFILE if n is None else n
+				if not self.valid_filename.match(name):
+					return self.err('invalid macro name')
+				try:
+					with Open(MACRODIR+name+MACROEXT, write=True, lock=True) as f:
+						f.truncate()
+						f.write("# automatically written, do not edit\n")
+						r = dumper(lambda s: f.write(s+'\n'))
+						f.write("# automatically written, do not edit\n")
+					self.send('written:', name)
+					return r
+				except Exception, e:
+					return self.err('cannot write: '+name, err=e)
+
+		if c != 'dump':
+			return self.fail('unknown list command')
+
+		# quiet affects this by purpose:  quiet do macro -> macro contains "list dump"
+		return dumper(self.send, None if n is None else [n])
 
 	def cmd_send(self, channel, *args):
 		"""
