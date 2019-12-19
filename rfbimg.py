@@ -143,7 +143,7 @@ TEMPLATEEXT='.tpl'
 MACRODIR='o/'
 MACROEXT='.macro'
 GLOBALSFILE='globals.json'
-LISTFILE='99list'
+LISTFILE='list'
 
 # Because of https://bugs.python.org/issue13769#msg229882 json.dump() is completely useless.
 # Because of missing parse_string, json.load() is completely useless.
@@ -1437,7 +1437,7 @@ class RfbCommander(object):
 				self.trace(Line=line, _yield=v, B=self.bye)
 				v	= yield v
 				self.trace(Line=line, _got=v, B=self.bye)
-				st	= self.getBye(v)
+				st	= yield self.getBye(v)
 			except Exception,e:
 				self.trace(Line=line, ex=e, B=self.bye)
 				self.log_err(e, 'exception in readline')
@@ -2875,7 +2875,7 @@ class RfbCommander(object):
 				#self.trace(Macro=macro, l=l, B=self.bye)
 				self.debug(N=nr, _macro=macro, _nr=lnr, line=l, args=self.args)
 				st	= yield self.processLine(l, True)
-				st	= self.getBye(st)
+				st	= yield self.getBye(st)
 				self.trace(N=nr, _macro=macro, _nr=lnr, line=l, ret=st, bye=self.bye)
 				if not st:
 					# pass on errors
@@ -2933,7 +2933,7 @@ class RfbCommander(object):
 		.
 		not return:	returns the inverse STATE (error/fail become success)
 		"""
-		st		= self.getBye((yield self.processArgs(args)))
+		st		= yield self.getBye((yield self.processArgs(args)))
 		self.bye	= False
 		yield Return(self.fail() if st else self.ok())
 
@@ -2995,7 +2995,7 @@ class RfbCommander(object):
 			self.log_err(e, 'if failed')
 			st	= None
 		self.prevstate	= self.state
-		self.state	= self.getBye(st)
+		self.state	= yield self.getBye(st)
 		self.bye	= False
 		yield Return(self.fail() if st is None else self.ok())
 
@@ -3290,18 +3290,18 @@ class RfbCommander(object):
 		self.rfb.stop()
 		return self.ok()
 
-	@Docstring(LISTFILE)
+	@Docstring(LISTFILE, MACROEXT)
 	def cmd_list(self, c=None, n=None):
 		"""
 		list:		list nonempty or waiting channels
 		list all:	list all known channels
 		list wait:	list all channels waited for
 		list data:	list all channels which have data queued
-		list save:	as 'list dump' but writes the output to macro {0}
+		list save:	as 'list dump' but writes the output to {0}{1}
+		list save FILE:	save list to FILE{1} (overwrites without backup)
 		list dump:	dump all known channels
 		list dump chan:	dump given channel
 		"""
-#		list save FILE:	save list to macro FILE as given (this overwrites macro without backup)
 		def dumper(out, l=None):
 			if l is None:	l = Channel.list()
 			for n in l:
@@ -3321,21 +3321,23 @@ class RfbCommander(object):
 				return self.ok('channels: '+' '.join([n for n in Channel.list() if Channel(n).has_put()]))
 			if c == 'all':
 				return self.ok('channels: '+' '.join(Channel.list()))
-			if c == 'save':
-				# n=None here.  For safety we do not allow to override arbitrary macros
-				name	= LISTFILE if n is None else n
-				if not self.valid_filename.match(name):
-					return self.err('invalid macro name')
-				try:
-					with Open(MACRODIR+name+MACROEXT, write=True, lock=True) as f:
-						f.truncate()
-						f.write("# automatically written, do not edit\n")
-						r = dumper(lambda s: f.write(s+'\n'))
-						f.write("# automatically written, do not edit\n")
-					self.send('written:', name)
-					return r
-				except Exception, e:
-					return self.err('cannot write: '+name, err=e)
+
+		if c == 'save':
+			# n=None here.  For safety we do not allow to override arbitrary macros
+			name	= LISTFILE if n is None else n
+			if not self.valid_filename.match(name):
+				return self.err('invalid name')
+			name	+= MACROEXT
+			try:
+				with Open(name, write=True, lock=True) as f:
+					f.truncate()
+					f.write("# automatically written, do not edit\n")
+					r = dumper(lambda s: f.write(s+'\n'))
+					f.write("# automatically written, do not edit\nexit\n")
+				self.send('written:', name)
+				return r
+			except Exception, e:
+				return self.err('cannot write: '+name, err=e)
 
 		if c != 'dump':
 			return self.fail('unknown list command')
