@@ -1852,7 +1852,7 @@ class RfbCommander(object):
 		And it fundamentally changes how "unknown" commands are processed.
 		Without prompt they set exit state, while with prompt they don't and just fail.
 		"""
-		self.io.disable_gc()
+#		self.io.disable_gc()
 		self._prompt = ' '.join(args) if args else '{?}> '
 		self.repl['prompt']=self._prompt
 		self.send(__file__, sys.version.split('\n',1)[0].strip())
@@ -2423,11 +2423,17 @@ class RfbCommander(object):
 			# get the mapping parameters
 			s1	= args[i-1]
 			n1	= args[i]
-			v1	= self.var(n1).split(' ')
+			v1	= self.var(n1)
+			if v1 is None:
+				return self.fail()
+			v1	= v1.split(' ')
 			s2	= args[i+1] if len(args) > i+1 else s1
 			if len(args) > i+2:
 				n2	= args[i+2]
-				v2	= self.var(n2).split(' ')
+				v2	= self.var(n2)
+				if v2 is None:
+					return self.fail()
+				v2	= v2.split(' ')
 			else:
 				n2	= n1
 				v2	= [str(x) for x in range(1,1+len(v1))]
@@ -2487,6 +2493,8 @@ class RfbCommander(object):
 		"""
 		expand var:		echo the expanded value of the variable
 		- errors if var is undef
+		- succeeds if expansion is nonempty
+		- else fails
 		expand var val..:	expand the value and set it to var.
 		- succeeds if expansion is nonempty, else fails
 		"""
@@ -2941,7 +2949,7 @@ class RfbCommander(object):
 		"""
 		{and args..}: all 'ok'
 		- 'ok' if all args are 'ok', 'fail' else
-		- fails for no arguments.  'x' makes this 'fail'
+		- fails for no arguments
 		"""
 		return self.getBool(lambda x: x=='ok', args)
 
@@ -2949,7 +2957,7 @@ class RfbCommander(object):
 		"""
 		{nand args..}: not all are 'fail'
 		- 'ok' if any of the args is 'fail', 'fail' else
-		- fails for no arguments.  'x' is ignored
+		- fails for no arguments
 		"""
 		return self.getBool(lambda x: x!='fail', args, True)
 
@@ -2957,7 +2965,7 @@ class RfbCommander(object):
 		"""
 		{or args..}: any 'ok'
 		- 'ok' if any arg is 'ok', 'fail' else
-		- fails for no arguments. 'x' is ignored
+		- fails for no arguments
 		"""
 		return self.getBool(lambda x: x!='ok', args, True)
 
@@ -2965,7 +2973,7 @@ class RfbCommander(object):
 		"""
 		{nor args..}: none 'ok'
 		- 'fails' if any arg is 'ok', 'ok' else
-		- fails for no arguments.  'x' make this fail
+		- fails for no arguments
 		"""
 		return self.getBool(lambda x: x!='ok', args)
 
@@ -3458,15 +3466,15 @@ class RfbCommander(object):
 	def cmd_shift(self, *args):
 		"""
 		shift:		remove first macro argument, shifting others down
-		- errors if shift cannot be performed if there are no arguments
+		- errors if shift cannot be performed because there are no arguments
 		- fails if there are no more arguments left
 		- succeeds if there are arguments left
 		shift var..:	shift the given variable
 		- if a variable is missing, this errors
-		- this removes the first non-space part with the first space
-		- if the last thing of the variable is shifted, this fails and does not change
-		- else it processes more variables until some error/fail occurs
-		- only succeeds if it succeeds on all variables
+		- removes the first non-space part with the first space from the var
+		- if the result is empty, this fails
+		- else it processes the other variables (if there are any)
+		- succeeds only if it succeeds on all variables
 		"""
 		if not args:
 			n	= self.nvar('#')
@@ -3485,6 +3493,7 @@ class RfbCommander(object):
 				return self.err()
 			v	= v.split(' ', 1)
 			if len(v) != 2:
+				self.set(k, '')
 				return self.fail()
 			self.set(k, v[1])
 		return self.ok()
@@ -3492,9 +3501,9 @@ class RfbCommander(object):
 	def get_shift(self, *args):
 		"""
 		{shift args..}:	returns everything but the first arg
-		- returns nothing if there is nothing to shift
+		- returns nothing if there is nothing to shift or only one args
 		"""
-		return '' if len(args)<2 else ' '.join(args[2:])
+		return '' if len(args)<2 else ' '.join(args[1:])
 
 	def cmd_first(self, *args):
 		"""
