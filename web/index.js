@@ -1130,15 +1130,15 @@ function reload(ev)
           if (t==x)
             {
               t	= null;
-              continue;
+              continue;	// trigger set next
             }
           if (!t)
             {
-              f	= x;
+              f	= x;	// set next into f (or initalize it)
               break;
             }
           if (!f)
-            f	= x;
+            f	= x;	// preset first into f
         }
       $$$('reload', f);
     }
@@ -1157,16 +1157,16 @@ function reload(ev)
     }
   );
 
-   return req.P('layout.json?')
-    .then(j => JSON.parse(j))
-    .then(o =>
-      {
-        var was = Dom.sel('b', 'x');
-        new Layout('b').clear(o);
-        Dom.sel('b', was);
-      }
-    )
-    .catch(e => { emit.emit('err','layout', e, e.stack) })
+  return req.P('layout.json?')
+   .then(j => JSON.parse(j))
+   .then(o =>
+     {
+       var was = Dom.sel('b', 'x');
+       new Layout('b').clear(o);
+       Dom.sel('b', was);
+     }
+   )
+   .catch(e => { emit.emit('err','layout', e, e.stack) })
 }
 
 class Layout
