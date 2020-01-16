@@ -3246,11 +3246,11 @@ class RfbCommander(object):
 
 	def cmd_wait(self,timeout,*templates):
 		"""
-		wait count template..: wait count screen updates for one of the given templates to show up
+		wait count template..: wait count screen updates or 0.1s for one of the given templates to show up
 		.
 		If count is negative, it saves state picture (like 'state' command)
 		.
-		Note: This waits count frames, not a defined time
+		Note: The wait count is 0.1s plus frames
 		"""
 		if not templates:
 			yield Return(self.fail())
