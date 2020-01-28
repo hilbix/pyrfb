@@ -1016,11 +1016,15 @@ var Assets =
   stat:  (...a) => Assets.img(...a),
   ed:    (...a) => Assets.template(...a),
 
-  img:	(ctx, u) =>
+  mouseover:	function() { this.style.opacity=0.5; show.tmp(true,  this); out.tmp(true,  this.nr+' '+this.main) },
+  mouseout:	function() { this.style.opacity=1;   show.tmp(false, this); out.tmp(false, this.nr+' '+this.main) },
+  click:	function() { $('learn').value = this.u },
+
+  img:	function(ctx, u)
     {
       if (!ctx.current)
         return;
-      IMG(i => { i.nr = ++ctx.nr; i.main = ctx.f+'/'+u; ctx.loading(i); return subdir(i.main)+'#'+ ++Assets.generation})
+      IMG(i => { i.nr = ++ctx.nr; i.u = strCut(u, '.png'); i.main = ctx.f+'/'+u; ctx.loading(i); return subdir(i.main)+'#'+ ++Assets.generation })
       .then(i =>
         {
           LOG('asset', ctx.name, i.nr, i.src);
@@ -1033,9 +1037,9 @@ var Assets =
 
           placeChild(ctx.o, i);
 
-          i.onmouseover	= function () { this.style.opacity=0.5; show.tmp(true,  this); out.tmp(true,  i.nr+' '+i.main) }
-          i.onmouseout	= function () { this.style.opacity=1;   show.tmp(false, this); out.tmp(false, i.nr+' '+i.main) }
-          i.onclick	= function () { $('learn').value = strCut(u, '.png') }
+          i.onmouseover	= this.mouseover;
+          i.onmouseout	= this.mouseout;
+          i.onclick	= this.click;
         });
     },
 
@@ -1147,15 +1151,15 @@ function reload(ev)
   var ctx = new CTX(clear('cit'), a, {f:f});
 
   ctx.load('exec.php', 'r=dir&d='+a)
-  .then(t =>
-    {
-      var s = t.split('\n');
-      s.sort();
-      for (var u of s)
-        if (validfile(u))
-          Assets[a](ctx, u);
-    }
-  );
+   .then(t =>
+     {
+       var s = t.split('\n');
+       s.sort();
+       for (var u of s)
+         if (validfile(u))
+           Assets[a](ctx, u);
+     }
+   );
 
   return req.P('layout.json?')
    .then(j => JSON.parse(j))
@@ -1170,7 +1174,7 @@ function reload(ev)
 }
 
 class Layout
-  {
+{
   constructor(layout)
     {
       this.layout	= layout;
@@ -1178,41 +1182,85 @@ class Layout
       this.e		= $('layout_'+layout);
     }
 
-  clear(o) { clear(this.b); clear(this.e); this.add(o) }
+  globals()
+    {
+      return req.P(['','globals.json'])
+       .then(j => JSON.parse(j))
+       .then(o => new Globals(o))
+       .catch(e => { emit.emit('err','globals', e, e.stack) })
+    }
+
+  clear(o) { clear(this.b); clear(this.e); this.add(o); this.globals() }
 
   add(o)
-  {
-    for (var a of o)
-      {
-        var t = a[0];
-        this.b.appendChild(BUTTON(t, runs.click('sel '+this.layout+' '+t), {['data-xsel-'+this.layout]: t, title:a[1]}));
-        var f = 'l_'+a[2];
-        if (! f in this)
-          throw 'Layout '+f+' is missing';
-        this.e.appendChild(DIV(this[f](a.slice(3)), {['data-sel-'+this.layout]:t}));
-      }
-  }
+    {
+      for (var a of o)
+        {
+          var t = a[0];
+          this.b.appendChild(BUTTON(t, runs.click('sel '+this.layout+' '+t), {['data-xsel-'+this.layout]: t, title:a[1]}));
+          var f = 'l_'+a[2];
+          if (! f in this)
+            throw 'Layout '+f+' is missing';
+          this.e.appendChild(DIV(this[f](a.slice(3)), {['data-sel-'+this.layout]:t}));
+        }
+    }
 
   l_table(o)
-  {
-    var rows = [];
-    for (var row of o)
-      {
-        var cols = [];
-        for (var col of row)
-          {
-            var attr = void 0;
-            if (typeof col!='string')
-              {
-                attr = {'data-var-v': col['v'], 'data-var': col['m']};
-                col='?';
-              }
-            cols.push(DOMe('td', col));
-          }
-        rows.push(DOMe('tr', cols));
-      }
-    return DOMe('table', rows);
-  }
+    {
+      var rows = [];
+      for (var row of o)
+        {
+          var cols = [];
+          for (var col of row)
+            {
+              var attr = void 0;
+              if (typeof col!='string')
+                {
+                  attr = {'data-var':col['v'], 'data-var-m':col['m']};
+                  if ('s' in col) attr['data-var-s'] = col['s'];
+                  col='?';
+                }
+              cols.push(DOMe('td', col, attr));
+            }
+          rows.push(DOMe('tr', cols));
+        }
+      return DOMe('table', rows, {'class':'b1'});
+    }
+}
+
+class Globals
+{
+  constructor(g)
+    {
+      this.g	= g;
+      for (var d of DOMs('[data-var]'))
+        {
+          var v = g['global.'+d.getAttribute('data-var')];
+          var m = 'v_'+d.getAttribute('data-var-m');
+          if (!m)
+            d.innerText = v;
+          else if (m in this)
+            this[m](d, v);
+          else
+            throw 'Globals handling '+f+' is missing';
+        }
+    }
+
+  v_if(d, v)
+    {
+      if (v)
+        {
+          d.innerText = v;
+          d.parentElement.classList.remove('hide');
+        }
+      else
+        d.parentElement.classList.add('hide');
+    }
+
+  v_pm(d, v)
+    {
+      d.innerText = v;
+    }
 }
 
 function validfile(u)
