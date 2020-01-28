@@ -448,8 +448,8 @@ var Dom =
           m[i].classList.remove('sel');
       }
 
-    emit.emit('sel', tag, current, togo, sel, ...args);
-    emit.emit('sel-'+tag, current, togo, sel, ...args);
+    emit.emit('sel', tag, sel, current, togo, ...args);
+    emit.emit('sel-'+tag, sel, current, togo, ...args);
 
     return m[current].getAttribute(att);
   }
@@ -783,7 +783,7 @@ var macro =
     this.sel	= {};
     this.args	= {};
     this.mode	= null;
-    emit.register('sel-m', (x,y,s) => this.setup(s));
+    emit.register('sel-m', s => this.setup(s));
     this.setup('run');	// assumed, perhaps later we can fix this
   }
 , reload:	function ()
@@ -975,11 +975,12 @@ function init()
   show.init('show');
 
   emit.init();
-  emit.register('quick',	function (v)   { $$$('qrun', v) });
+  emit.register('quick',	function (v)	{ $$$('qrun', v) });
   emit.register('done',		function (r,t,s) { out((s==200 ? 'done' : 'fail'+s)+': '+r.r+' '+t) });
-  emit.register('act',		function (r)   { if (!r.cb) show.grey(); out('do: '+r.r) });
-  emit.register('wait',		function (w)   { $$$('wait', w) });
+  emit.register('act',		function (r)	{ if (!r.cb) show.grey(); out('do: '+r.r) });
+  emit.register('wait',		function (w)	{ $$$('wait', w) });
   emit.register('err',		function (e,...a){ xLOG('err',e,e.stack,...a); out('err: '+e+' '+a); out('stack: '+e.stack); alert(e+' '+a+'\n'+e.stack) });
+  emit.register('sel-b',	function (t)	{ if (t=='t') globals(); });
 
   req.init();
   runs.init();
@@ -1165,9 +1166,9 @@ function reload(ev)
    .then(j => JSON.parse(j))
    .then(o =>
      {
-       var was = Dom.sel('b', 'x');
+//       var was = Dom.sel('b', 'x');
        new Layout('b').clear(o);
-       Dom.sel('b', was);
+//       Dom.sel('b', was);
      }
    )
    .catch(e => { emit.emit('err','layout', e, e.stack) })
@@ -1182,15 +1183,7 @@ class Layout
       this.e		= $('layout_'+layout);
     }
 
-  globals()
-    {
-      return req.P(['','globals.json'])
-       .then(j => JSON.parse(j))
-       .then(o => new Globals(o))
-       .catch(e => { emit.emit('err','globals', e, e.stack) })
-    }
-
-  clear(o) { clear(this.b); clear(this.e); this.add(o); this.globals() }
+  clear(o) { clear(this.b); clear(this.e); this.add(o); globals() }
 
   add(o)
     {
@@ -1222,10 +1215,21 @@ class Layout
                 }
               cols.push(DOMe('td', col, attr));
             }
-          rows.push(DOMe('tr', cols));
+          rows.push(DOMe('tr', cols, {'class':'hi'}));
         }
       return DOMe('table', rows, {'class':'b1'});
     }
+}
+
+function globals()
+{
+  return req.P(['','globals.json'])
+    .then(j => JSON.parse(j))
+    .then(o => new Globals(o))
+    .then(o => emit.emit('globals', o))
+    .then(o => 'ok')
+    .catch(e => { emit.emit('err','globals', e, e.stack); return 'err' })
+    .then(o => xLOG('globals loaded', o))
 }
 
 class Globals
