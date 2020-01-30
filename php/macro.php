@@ -1,6 +1,12 @@
 <?php
 # Macro management
 #
+# GET	macro.php/{V}/{M}	run {M}
+# POST	macro.php/{V}/{M}	run {M} {POSTDATA}
+#
+# {V} is the VNC number
+# {POSTDATA} must not contain special (nonprinting) characters
+#
 # This Works is placed under the terms of the Copyright Less License,
 # see file COPYRIGHT.CLL.  USE AT OWN RISK, ABSOLUTELY NO WARRANTY.
 
