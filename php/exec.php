@@ -1,6 +1,12 @@
 <?php
 # Directory and file management
 #
+# GET	exec.php/${V}?d=${D}&r=dir		return contents of ${dirs[$D]}
+# GET	exec.php/${V}?d=${D}&r=kick&f=${N}	kick ${dirs[$D]}/${N}.${exts[$D]}
+# POST	exec.php/${V}?d=${D}&r=save&f=${N}	save ${dirs[$D]}/${N}.${exts[$D]} from POST data
+#
+# ${V} is the VNC number
+#
 # This Works is placed under the terms of the Copyright Less License,
 # see file COPYRIGHT.CLL.  USE AT OWN RISK, ABSOLUTELY NO WARRANTY.
 
