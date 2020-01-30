@@ -2,6 +2,14 @@
 # Send a PING (or some easy commands) to the backend,
 # should output PONG (or the command output).
 #
+# GET	ping.php/${V}		send "ping", expects "pong"
+# GET	ping.php/${V}/		send "ping", expects "pong"
+# GET	ping.php/${V}/ping	send "ping", expects "pong"
+# GET	ping.php/${V}/stop	send "stop", expects "pong"
+# GET	ping.php/${V}/${other}	currently: "ping"
+#
+# ${V} is the VNC number
+#
 # default:	Checks backend alive.
 # c=exit:	Lets backend exit (it comes back) for resynchronization
 #
