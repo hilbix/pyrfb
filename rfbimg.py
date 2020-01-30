@@ -3147,23 +3147,40 @@ class RfbCommander(object):
 		# return the real position
 		yield Return((x,y))
 
+	def cmd_screen(self,to):
+		"""
+		screen NAME: save screen to s/NAME.png without backup
+		"""
+		return self.screen(STATEDIR, to, False)
+
 	def cmd_learn(self,to):
 		"""
-		learn NAME: save screen to l/NAME.png
+		learn NAME: save screen to l/NAME.png with backup
 		"""
+		return self.screen(LEARNDIR, to, True)
+
+	def screen(self, outdir, to, backup):
 		if not self.valid_filename.match(to):
 			return self.fail()
+
 		tmp = 'learn.png'
 		try:
 			os.unlink(tmp)
 		except Exception,e:
 			pass
+
 		self.rfb.img.convert('RGBA').save(tmp)
-		out = LEARNDIR+to
+
+		out = outdir+to
 		if os.path.exists(out+IMGEXT):
-			rename_away(out, IMGEXT)
+			if backup:
+				rename_away(out, IMGEXT)
+			else:
+				os.unlink(out+IMGEXT)
+
 		self.log("tmp", tmp, "out", out)
 		os.rename(tmp, out+IMGEXT)
+
 		return self.ok()
 
 	def cmd_key(self,*args):
