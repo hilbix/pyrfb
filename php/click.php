@@ -3,15 +3,23 @@
 # THIS IS INHERENTLY INSECURE IF EXPOSED TO THE WORLD.
 # So protect it with BasicAuth and HTTPS, you have been warned.
 #
+# GET	click.php/{V}?c={C}		send numeric charcode {C}
+# GET	click.php/{V}?k={K}		send alphanumeric key {K}
+# GET	click.php/{V}?t={K}		send {K} as keys (k=) plus key Return
+# GET	click.php/{V}?X={X}		mouse {X} 100	(move)
+# GET	click.php/{V}?x={X}&y={Y}	mouse {X} {Y}	(move)
+# GET	click.php/{V}?x={X}&y={Y}&b={B}	mouse {X} {Y} {B&0xffff}	{B&0x10000} then drag, else click
+# GET	click.php/{V}?l={N}		save picture l/{N}.png
+#
+# BUGS:
+#	- t= Uppercase does not work
+#	- t= Special characts (like Linefeed) do not work
+#	- l={N} uses only the first line of {N} as picture name and ignores the other lines
+#
+# {V} is the VNC number
+#
 # This Works is placed under the terms of the Copyright Less License,
 # see file COPYRIGHT.CLL.  USE AT OWN RISK, ABSOLUTELY NO WARRANTY.
-#
-# send charcode:	c=charcode
-# send text:		t=lines-of-text
-# move mouse:		x=xcoord&y=ycoord
-# mouse click:		x=xcoord&y=ycoord&b=mousebuttons
-# mouse drag:		x=xcoord&y=ycoord&b=$[mousebuttons+65536]
-# learn (save) image:	l=name
 #
 # mousebuttons are a bitmask of pressed buttons
 # if name is empty on learn, a default name (screen-TIMESTAMP) us used
