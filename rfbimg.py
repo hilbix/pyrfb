@@ -3550,8 +3550,54 @@ class RfbCommander(object):
 		"""
 		{first args..}:	returns just the first arg
 		- returns nothing if there is no first arg
+		see also: shift
 		"""
 		return args[0] if args else ''
+
+	def get_center(self, *args):
+		"""
+		{center width string}: center string in the give width
+		see also: pad, sanitize, trim
+		"""
+		if len(args)<1:		return ''
+		n	= intVal(args[0])
+		w	= abs(n)
+		if len(args)==1:	return ' '*w
+		s	= ' '.join(args[1:])
+		w	= w-len(s)
+		if w<=0:		return s
+		l	= w/2
+		r	= w-l
+		if n<0:
+			l,r = r,l
+		return (' '*l) +s+ (' '*r)
+
+	def get_pad(self, *args):
+		"""
+		{pad width string}: pads args with spaces to the right
+		{pad -width string}: pads args with spaces to the left
+		see also: center, sanitize, trim
+		"""
+		if len(args)<1:		return ''
+		n	= intVal(args[0])
+		if len(args)==1:	return ' '*abs(n)
+		s	= ' '.join(args[1:])
+		return s if n==0 else s.ljust(n) if n>0 else s.rjust(-n)
+
+	def get_trim(self, *args):
+		"""
+		{trim string}: remove leading and trailing spaces
+		see also: center, pad, sanitize
+		"""
+		return ' '.join(args).strip()
+
+	re_sanitize	= re.compile(r'   *')
+	def get_sanitize(self, *args):
+		"""
+		{sanitize string}: sanitize multiple spaces into single spaces
+		see also: center, pad, trim
+		"""
+		return self.re_sanitize.sub(' ', ' '.join(args))
 
 	def template(self, name, prefix=''):
 		"""
