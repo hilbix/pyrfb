@@ -1237,6 +1237,7 @@ class RfbCommander(object):
 		self.clear()
 		self.scheduler()
 
+	# reset some cached values
 	def clear(self):
 		self.time	= None
 		self.gmtime	= None
@@ -1629,25 +1630,33 @@ class RfbCommander(object):
 	def GET(self, k, d):
 		return ' '.join([str(k) for k in d])   if k is None else   d.get(k, lambda self: None)(self)
 
-	def GETdatetime(self, k, d):
-		if self.time   is None: self.time   = int(time.time())
-		if self.gmtime is None: self.gmtime = time.gmtime(self.time)
-		return self.GET(k, d)
+	def GETdatetime(self, k, d, stamp):
+		if stamp is None:
+			if self.time   is None: self.time   = int(time.time())
+			if self.gmtime is None: self.gmtime = time.gmtime(self.time)
+			return self.GET(k, d)
+		old		= self.time
+		self.time	= int(stamp)
+		self.gmtime	= time.gmtime(self.time)
+		ret		= self.GET(k, d)
+		self.time	= old
+		self.gmtime	= None
+		return ret
 
-	def get_time(self, k):
+	def get_time(self, k, stamp=None):
 		"""
 		{time start}:	seconds since epoch when the main program was started
-		{time sec}:	seconds since epoch
-		{time min}:	minutes since epoch
-		{time hour}:	hours since epoch
-		{time day}:	days since epoch
-		{time week}:	weeks since epoch
-		{time h}:	UTC hour 0-23
-		{time hh}:	UTC hour 00-23
-		{time m}:	UTC minute 0-59
-		{time mm}:	UTC minute 00-59
-		{time s}:	UTC second 0-60 (60 is leap second if supported)
-		{time ss}:	UTC minute 00-60
+		{time sec [stamp]}:	seconds since epoch
+		{time min [stamp]}:	minutes since epoch
+		{time hour [stamp]}:	hours since epoch
+		{time day [stamp]}:	days since epoch
+		{time week [stamp]}:	weeks since epoch
+		{time h [stamp]}:	UTC hour 0-23
+		{time hh [stamp]}:	UTC hour 00-23
+		{time m [stamp]}:	UTC minute 0-59
+		{time mm [stamp]}:	UTC minute 00-59
+		{time s [stamp]}:	UTC second 0-60 (60 is leap second if supported)
+		{time ss [stamp]}:	UTC minute 00-60
 		"""
 		return self.GETdatetime(k,
 			{
@@ -1663,18 +1672,18 @@ class RfbCommander(object):
 			'mm':	lambda self:	str(self.gmtime.tm_min).zfill(2),	# 00-59
 			's':	lambda self:	str(self.gmtime.tm_sec),		# 0-60	60 for leap second (can this happen?)
 			'ss':	lambda self:	str(self.gmtime.tm_sec).zfill(2),	# 00-60	60 for leap second (can this happen?)
-			})
+			}, stamp)
 
-	def get_date(self, k):
+	def get_date(self, k, stamp=None):
 		"""
-		{date y}:	UTC year
-		{date m}:	UTC month 1-12
-		{date mm}:	UTC month 01-12
-		{date d}:	UTC day 1-31
-		{date dd}:	UTC day 01-12
-		{date wd}:	UTC week day 1-7 where 7=sun
-		{date yd}:	UTC year day 1-366
-		{date ydd}:	UTC year day 001-366
+		{date y [stamp]}:	UTC year
+		{date m [stamp]}:	UTC month 1-12
+		{date mm [stamp]}:	UTC month 01-12
+		{date d [stamp]}:	UTC day 1-31
+		{date dd [stamp]}:	UTC day 01-12
+		{date wd [stamp]}:	UTC week day 1-7 where 7=sun
+		{date yd [stamp]}:	UTC year day 1-366
+		{date ydd [stamp]}:	UTC year day 001-366
 		"""
 		return self.GETdatetime(k,
 			{
@@ -1688,7 +1697,7 @@ class RfbCommander(object):
 			'wd':	lambda self:	str(self.gmtimetm_wday+1),		# 1-7 where 7=sun
 			'yd':	lambda self:	str(self.gmtimetm_yday),		# 1-366
 			'ydd':	lambda self:	str(self.gmtimem_yday).zfill(3),	# 001-366
-			})
+			}, stamp)
 
 	def get_rnd(self, a, b=None):
 		"""
@@ -2150,10 +2159,11 @@ class RfbCommander(object):
 	def get_nat(self, *args):
 		"""
 		{nat args..}:	'ok' if all vars are natural numbers, 'fail' else
-		if {nat args..}
-		then echo all natural number
-		if {nat {sub {higher} {lower}}}
-		then echo {higher} is higher than {lower}
+		- if {nat args..}
+		  then echo all natural number
+		- if {nat {sub {higher} {lower}}}
+		  then echo {higher} is higher than {lower}
+		see also: and, nand, or, nor, equal, empty, cmp, nat, set
 		"""
 		def check(x):
 			try:
@@ -2168,6 +2178,7 @@ class RfbCommander(object):
 		- errors if any var is unset or no var is given
 		- fails if any var is not the given value
 		- succeeds if all vars are the given value
+		see also: and, nand, or, nor, equal, empty, cmp, nat, set
 		"""
 		def cmp(x,y):
 			k	= self.var(y)
@@ -2182,17 +2193,19 @@ class RfbCommander(object):
 		- A single arg is compered to the empty string, so {cmp } is 'ok' while {cmp x} is 'fail'
 		- Beware of blanks in expansions {a} can be "a a" so {cmp {a}} is 'ok'
 		- Use 'equal' to compare variables directly without sideeffects
-		if {cmp x y}
-		then echo same
+		- if {cmp x y}
+		  then echo same
 		- If you want to compare two numbers, try:
-		if {nat {sub {higher} {lower}}}
-		then echo {higher} is higher than {lower}
+		  if {nat {sub {higher} {lower}}}
+		  then echo {higher} is higher than {lower}
+		see also: and, nand, or, nor, equal, empty, cmp, nat, set
 		"""
 		return 'ok' if not args and v=='' else self.getBool(lambda x: x==v, args)
 
 	def cmd_equal(self, v, *args):
 		"""
 		equal var..: success if all variables exist and are all equal
+		see also: and, nand, or, nor, equal, empty, cmp, nat, set
 		"""
 		if not args:
 			return self.err()
@@ -2208,9 +2221,10 @@ class RfbCommander(object):
 		"""
 		{equal var..}:	'ok' if all vars exist and are equal, 'fail' else
 		- a single variable is just checked for existence
-		if {equal a b}
-		then echo {a}=={b}
-		else echo {a}!={b}
+		- if {equal a b}
+		  then echo {a}=={b}
+		  else echo {a}!={b}
+		see also: and, nand, or, nor, equal, empty, cmp, nat, set
 		"""
 		v	= self.var(v)
 		return 'fail' if v is None else 'ok' if not args else self.getBool(lambda x: self.var(x)==v, args)
@@ -2221,7 +2235,6 @@ class RfbCommander(object):
 		- fails if a variable is nonempty
 		- errors if no arguments
 		- else success (all variables are empty or do not exist)
-		This works in sequence
 		"""
 		if not args:
 			return self.err()
@@ -2236,6 +2249,7 @@ class RfbCommander(object):
 		{empty args..}:	'ok' if there is only the empty arg, 'fail' else
 		- only '{empty }' succeeeds, '{empty}' does not work and '{empty  }' fails
 		- 'if {empty {a}}' fails if 'a' does not exist, as then this expands to '{a}'
+		see also: and, nand, or, nor, equal, empty, cmp, nat, set
 		"""
 		return 'ok' if len(args)==1 and args[0]=='' else 'fail'
 
@@ -2252,7 +2266,7 @@ class RfbCommander(object):
 		"""
 		local var: checks if variable is locally known
 		local var val: set variable locally to given value
-		same as 'set var val', but uses local store
+		- same as 'set var val', but uses local store
 		"""
 		if not args:
 			return self.args.get(var) is not None
@@ -2321,6 +2335,7 @@ class RfbCommander(object):
 		{set var..}:	'ok' if all vars exists, 'fail' else
 		if {set a}
 		then echo a carries a value
+		see also: and, nand, or, nor, equal, empty, cmp, nat, set
 		"""
 		return self.getBool(lambda x: self.var(x) is not None, args)
 
@@ -2329,6 +2344,7 @@ class RfbCommander(object):
 		{get var [replacement]}:	replace by variable if defined, else with replacement, '' by default
 		- echo {get 1 (arg 1 is not set)}
 		- do {run}{when 1 .}{get 1}
+		see also: append, get, when
 		"""
 		v	= self.var(v)
 		return v if v is not None else ' '.join(args) if args else ''
@@ -2337,6 +2353,7 @@ class RfbCommander(object):
 		"""
 		{when var [replacement]}:	'' if var is empty, else replacement
 		- do {run}{when 1 .}{get 1}
+		see also: append, get, when
 		"""
 		v	= self.var(v)
 		return '' if v is Null or v=='' else ' '.join(args)
@@ -2347,6 +2364,7 @@ class RfbCommander(object):
 		{append var args..}:	"{var} args.." if var is known, else "args.."
 		- local y {:}{append x}
 		- local x {append x {:}}
+		see also: append, get, when
 		"""
 		v	= self.var(v)
 		if v is None:
@@ -2950,6 +2968,7 @@ class RfbCommander(object):
 		{and args..}: all 'ok'
 		- 'ok' if all args are 'ok', 'fail' else
 		- fails for no arguments
+		see also: and, nand, or, nor, equal, empty, cmp, nat, set
 		"""
 		return self.getBool(lambda x: x=='ok', args)
 
@@ -2958,6 +2977,7 @@ class RfbCommander(object):
 		{nand args..}: not all are 'fail'
 		- 'ok' if any of the args is 'fail', 'fail' else
 		- fails for no arguments
+		see also: and, nand, or, nor, equal, empty, cmp, nat, set
 		"""
 		return self.getBool(lambda x: x!='fail', args, True)
 
@@ -2966,6 +2986,7 @@ class RfbCommander(object):
 		{or args..}: any 'ok'
 		- 'ok' if any arg is 'ok', 'fail' else
 		- fails for no arguments
+		see also: and, nand, or, nor, equal, empty, cmp, nat, set
 		"""
 		return self.getBool(lambda x: x!='ok', args, True)
 
@@ -2974,6 +2995,7 @@ class RfbCommander(object):
 		{nor args..}: none 'ok'
 		- 'fails' if any arg is 'ok', 'ok' else
 		- fails for no arguments
+		see also: and, nand, or, nor, equal, empty, cmp, nat, set
 		"""
 		return self.getBool(lambda x: x!='ok', args)
 
@@ -3554,50 +3576,98 @@ class RfbCommander(object):
 		"""
 		return args[0] if args else ''
 
-	def get_center(self, *args):
+	def doargs(self, s, fn, *args):
+		if not s: s = ('')
+		return fn(' '.join(s), *args)
+
+	def dovars(self, n, fn, *args):
+		for k in n:
+			v	= self.var(k)
+			if v is None:	return self.fail()
+			v	= fn(v, *args)
+			if v is None:	return self.err()
+			self.set(k, v)
+		return self.ok()
+
+	def cmd_center(self, width, *args):
 		"""
-		{center width string}: center string in the give width
+		center width var..: center variables in the given width
 		see also: pad, sanitize, trim
 		"""
-		if len(args)<1:		return ''
-		n	= intVal(args[0])
+		return self.dovars(args, self.do_center, width)
+
+	def get_center(self, width, *args):
+		"""
+		{center width string}: center string in the given width
+		see also: pad, sanitize, trim
+		"""
+		return self.doargs(args, self.do_center, width)
+
+	def do_center(self, s, width):
+		n	= intVal(width)
 		w	= abs(n)
-		if len(args)==1:	return ' '*w
-		s	= ' '.join(args[1:])
 		w	= w-len(s)
-		if w<=0:		return s
+		if w<=0:
+			return s
 		l	= w/2
 		r	= w-l
 		if n<0:
 			l,r = r,l
 		return (' '*l) +s+ (' '*r)
 
-	def get_pad(self, *args):
+	def cmd_pad(self, width, *args):
+		"""
+		pad width var..: pads variables with spaces to the right
+		{pad -width string}: pads variables with spaces to the left
+		see also: center, sanitize, trim
+		"""
+		return self.dovars(args, self.do_pad, width)
+
+	def get_pad(self, width, *args):
 		"""
 		{pad width string}: pads args with spaces to the right
 		{pad -width string}: pads args with spaces to the left
 		see also: center, sanitize, trim
 		"""
-		if len(args)<1:		return ''
-		n	= intVal(args[0])
-		if len(args)==1:	return ' '*abs(n)
-		s	= ' '.join(args[1:])
+		return self.doargs(args, self.do_pad, width)
+
+	def do_pad(self, s, width):
+		n	= intVal(width)
 		return s if n==0 else s.ljust(n) if n>0 else s.rjust(-n)
+
+	def cmd_trim(self, *args):
+		"""
+		trim var..: remove leading and trailing spaces from variable
+		see also: center, pad, sanitize
+		"""
+		return self.dovars(args, self.do_strip)
 
 	def get_trim(self, *args):
 		"""
-		{trim string}: remove leading and trailing spaces
+		{trim string}: remove leading and trailing spaces from string
 		see also: center, pad, sanitize
 		"""
-		return ' '.join(args).strip()
+		return self.doargs(args, self.do_strip)
 
-	re_sanitize	= re.compile(r'   *')
+	def do_strip(self, s):
+		return s.strip()
+
+	def cmd_sanitize(self, *args):
+		"""
+		{sanitize string}: sanitize multiple spaces into single spaces
+		see also: center, pad, trim
+		"""
+		return self.dovars(args, self.do_sanitize)
 	def get_sanitize(self, *args):
 		"""
 		{sanitize string}: sanitize multiple spaces into single spaces
 		see also: center, pad, trim
 		"""
-		return self.re_sanitize.sub(' ', ' '.join(args))
+		return self.doargs(args, self.do_sanitize)
+
+	re_sanitize	= re.compile(r'   *')
+	def do_sanitize(self, s):
+		return self.re_sanitize.sub(' ', s)
 
 	def template(self, name, prefix=''):
 		"""
