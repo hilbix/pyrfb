@@ -1536,9 +1536,11 @@ class RfbCommander(object):
 						z	= None
 						z	= yield self.get(sep[0])
 						z	= yield z(*sep[1:])
-						r.append(z)
+						if z is None:
+							raise RuntimeError('yield None?')
+						r.append(str(z))
 					except Exception, e:
-						self.log_err(e, 'expanding '+v+' via '+str(z))
+						self.log_err(e, 'expanding {'+v+'} via '+str(z))
 						r.append('{'+v+'}')
 					continue
 
@@ -1630,11 +1632,12 @@ class RfbCommander(object):
 	def GET(self, k, d):
 		return ' '.join([str(k) for k in d])   if k is None else   d.get(k, lambda self: None)(self)
 
-	def GETdatetime(self, k, d, stamp):
+	def GETdatetime(self, stamp, k, d):
 		if stamp is None:
 			if self.time   is None: self.time   = int(time.time())
 			if self.gmtime is None: self.gmtime = time.gmtime(self.time)
 			return self.GET(k, d)
+
 		old		= self.time
 		self.time	= int(stamp)
 		self.gmtime	= time.gmtime(self.time)
@@ -1658,7 +1661,7 @@ class RfbCommander(object):
 		{time s [stamp]}:	UTC second 0-60 (60 is leap second if supported)
 		{time ss [stamp]}:	UTC minute 00-60
 		"""
-		return self.GETdatetime(k,
+		return self.GETdatetime(stamp, k,
 			{
 			'start':lambda self:	str(int(self.rfb.inittime)),		# seconds since epoch when app was started
 			'sec':	lambda self:	str(self.time),				# seconds since epoch
@@ -1672,7 +1675,7 @@ class RfbCommander(object):
 			'mm':	lambda self:	str(self.gmtime.tm_min).zfill(2),	# 00-59
 			's':	lambda self:	str(self.gmtime.tm_sec),		# 0-60	60 for leap second (can this happen?)
 			'ss':	lambda self:	str(self.gmtime.tm_sec).zfill(2),	# 00-60	60 for leap second (can this happen?)
-			}, stamp)
+			})
 
 	def get_date(self, k, stamp=None):
 		"""
@@ -1685,19 +1688,19 @@ class RfbCommander(object):
 		{date yd [stamp]}:	UTC year day 1-366
 		{date ydd [stamp]}:	UTC year day 001-366
 		"""
-		return self.GETdatetime(k,
+		return self.GETdatetime(stamp, k,
 			{
 			'y':	lambda self:	str(self.gmtime.tm_year),		# year
 			'm':	lambda self:	str(self.gmtime.tm_mon),		# 1-12
-			'mm':	lambda self:	str(self.gmtimetm_mon).zfill(2),	# 01-12
+			'mm':	lambda self:	str(self.gmtime.tm_mon).zfill(2),	# 01-12
 			'd':	lambda self:	str(self.gmtime.tm_mday),		# 1-31
-			'dd':	lambda self:	str(self.gmtimetm_mday).zfill(2),	# 01-31
+			'dd':	lambda self:	str(self.gmtime.tm_mday).zfill(2),	# 01-31
 #			'w':	lambda self:	str(self.gmtime.tm_week),		# 1-52
-#			'ww':	lambda self:	str(self.gmtimetm_week).zfill(2),	# 01-52
-			'wd':	lambda self:	str(self.gmtimetm_wday+1),		# 1-7 where 7=sun
-			'yd':	lambda self:	str(self.gmtimetm_yday),		# 1-366
-			'ydd':	lambda self:	str(self.gmtimem_yday).zfill(3),	# 001-366
-			}, stamp)
+#			'ww':	lambda self:	str(self.gmtime.tm_week).zfill(2),	# 01-52
+			'wd':	lambda self:	str(self.gmtime.tm_wday+1),		# 1-7 where 7=sun
+			'yd':	lambda self:	str(self.gmtime.tm_yday),		# 1-366
+			'ydd':	lambda self:	str(self.gmtime.tm_yday).zfill(3),	# 001-366
+			})
 
 	def get_rnd(self, a, b=None):
 		"""
