@@ -1859,10 +1859,9 @@ class RfbCommander(object):
 	def cmd_prompt(self,*args):
 		"""
 		prompt: set prompt and do not terminate on errors (can no more switched off)
-		.
-		This also makes {var}s usable, see: set
-		And it fundamentally changes how "unknown" commands are processed.
-		Without prompt they set exit state, while with prompt they don't and just fail.
+		- This also makes {var}s usable, see: set
+		- And it fundamentally changes how "unknown" commands are processed.
+		- Without prompt unknowns set exit state, while with prompt they don't and just fail.
 		"""
 #		self.io.disable_gc()
 		self._prompt = ' '.join(args) if args else '{?}> '
@@ -1952,8 +1951,7 @@ class RfbCommander(object):
 	def cmd_fail(self,*arg):
 		"""
 		fail: dummy command, ignores args, always fails
-		.
-		Also used as "unknown command"
+		- Also used as "unknown command"
 		"""
 		return self.fail()
 
@@ -1973,9 +1971,8 @@ class RfbCommander(object):
 		"""
 		help: list known commands
 		help command: show help of command
-		.
-		Note that this application is single threaded,
-		hence lengthy calculations block other things.
+		- This application is single threaded,
+		  hence lengthy calculations block other things.
 		"""
 		if cmd is None:
 			self.help_list('commands:', 'cmd_')
@@ -1993,12 +1990,13 @@ class RfbCommander(object):
 				all.append(a[l:])
 		self.send(what, ', '.join(all))
 
+	help_strip	= re.compile(r'\t\t*')
 	def help_doc(self, what, name):
 		fn	= getattr(self, name, None)
 		if fn is None:
 			return False
 		for a in fn.__doc__.split('\n'):
-			a	= a.strip()
+			a	= self.help_strip.sub('', a)
 			if len(a):
 				if a=='.': a=''
 				self.writeLine(what+'\t'+a)
@@ -2072,7 +2070,6 @@ class RfbCommander(object):
 		- fails if var is 0 afterwards
 		- else succeeds
 		- undef/empty/nonnumeric variables are silently changed to 0 first
-		.
 		let var:	makes var 0 if it is undefined, empty or nonnumeric
 		let var a:	as before, but errors
 		let var 0:	makes var 0 and fails
@@ -2285,22 +2282,17 @@ class RfbCommander(object):
 		set: list all known {var}s
 		set var: check if {var} is known
 		set var val: set {var} to val.
-		.
-		Replacements only work in macros or when prompt is active.
-		.
-		Use "local" to override macro parameters like {0}, {:3}, {3:}, {:} or {#} etc.
-		"set" does not override "local" variables, it stores it into the global ones.
-		To see all variables, do "prompt" followed by "load" followed by "set"
-		.
-		There is a subtle detail:
-		'set a ' <- note: trailing blank -- sets {a} to the empty string
-		'set a' <- note: no blank        -- checks if {a} is known
-		'set  b' <- note: two blanks     -- sets {} to b
-		.
+		- Replacements only work in macros or when prompt is active.
+		- Use "local" to override macro parameters like {0}, {:3}, {3:}, {:} or {#} etc.
+		- "set" does not override "local" variables, it stores it into the global ones.
+		  To see all variables, do "prompt" followed by "load" followed by "set"
+		- There is a subtle detail:
+		  'set a ' <- note: trailing blank -- sets {a} to the empty string
+		  'set a' <- note: no blank        -- checks if {a} is known
+		  'set  b' <- note: two blanks     -- sets {} to b
 		Example:
-		.
-		if set myvar
-		else set myvar default
+		  if set myvar
+		  else set myvar default
 		"""
 		if var is None:
 			flag	= False
@@ -2380,18 +2372,16 @@ class RfbCommander(object):
 		- this fails for the first {var} missing
 		- locals cannot be unset.  To unset, run another macro.
 		To unset a global, you must do something like following:
-		.
-		load
-		# create an empty variable, to override the global and thereby saving it empty:
-		set global.x {}
-		# "save" would do, too, as this writes changes of all globals to the store
-		save global.x
-		# unset the variable, as a set variable would override the global on save (again)
-		unset global.x
-		# Now global is empty and no overriding variable is present.
-		# This allows to remove the empty global by explicitly saving it:
-		save global.x
-		.
+		  load
+		  # create an empty variable, to override the global and thereby saving it empty:
+		  set global.x {}
+		  # "save" would do, too, as this writes changes of all globals to the store
+		  save global.x
+		  # unset the variable, as a set variable would override the global on save (again)
+		  unset global.x
+		  # Now global is empty and no overriding variable is present.
+		  # This allows to remove the empty global by explicitly saving it:
+		  save global.x
 		This fails if the global changes while you do this.
 		"""
 		for var in args:
@@ -2563,11 +2553,9 @@ class RfbCommander(object):
 		"""
 		load:		loads all globals
 		load var..:	load the given gobals (again)
-		.
-		Automatic globals always have 'global.' as prefix.
-		if you just load 'x' instead of 'global.x',
-		then 'x' is not considered by 'save'
-		.
+		- Automatic globals always have 'global.' as prefix.
+		- if you just load 'x' instead of 'global.x',
+		  then 'x' is not considered by 'save'
 		This does not work with variables declared by "local"
 		"""
 		try:
@@ -2595,13 +2583,10 @@ class RfbCommander(object):
 		"""
 		save:		save all automatic globals which are overridden by 'set'
 		save var..:	save the given globals only.  You must 'set' them first.
-		.
-		'save' automatically considers variables which start with 'global.'
-		To save variable '{x}' as global, use 'save x' which 'load's it as 'global.x' then
-		.
-		An empty global which is saved and unset in variables is removed from globals:
-		'set global.x ' <- note the space, then 'save' then 'unset global.x' then 'save global.x'
-		.
+		- 'save' automatically considers variables which start with 'global.'
+		- To save variable '{x}' as global, use 'save x' which 'load's it as 'global.x' then
+		- An empty global which is saved and unset in variables is removed from globals:
+		  'set global.x ' <- note the space, then 'save' then 'unset global.x' then 'save global.x'
 		This does not work with variables declared by "local", it all must be done with "set".
 		"""
 		# calculate the globals which have changes
@@ -2825,9 +2810,8 @@ class RfbCommander(object):
 		- returns fail on EOF (possibly truncated file)
 		- returns failure on the first failing command
 		- returns error on error (which sets termination)
-		.
-		if do macro:    does not terminate on fails or errors
-		.
+		Example:
+		  if do macro:    does not terminate on fails or errors
 		The macro can contain replacement sequences:
 		- {N} is replaced by arg N, {*} with all args
 		- {mouse.x} {mouse.y} {mouse.b} last mouse x y button
@@ -2959,7 +2943,6 @@ class RfbCommander(object):
 		not cmd args..: fails on success, else succeeds (even on error)
 		- resets exit state (like 'if' does, too)
 		- does not record the STATE (use 'if' for this)
-		.
 		not return:	returns the inverse STATE (error/fail become success)
 		"""
 		st		= yield self.getBye((yield self.processArgs(args)))
@@ -2980,6 +2963,7 @@ class RfbCommander(object):
 		{nand args..}: not all are 'fail'
 		- 'ok' if any of the args is 'fail', 'fail' else
 		- fails for no arguments
+		- can be used as a 'not' where fail->ok else ->fail
 		see also: and, nand, or, nor, equal, empty, cmp, nat, set
 		"""
 		return self.getBool(lambda x: x!='fail', args, True)
@@ -2998,6 +2982,7 @@ class RfbCommander(object):
 		{nor args..}: none 'ok'
 		- 'fails' if any arg is 'ok', 'ok' else
 		- fails for no arguments
+		- can be used as a 'not' where ok->fail else ->ok
 		see also: and, nand, or, nor, equal, empty, cmp, nat, set
 		"""
 		return self.getBool(lambda x: x!='ok', args)
@@ -3009,7 +2994,6 @@ class RfbCommander(object):
 		- record success/failure of command as STATE
 		- returns failure on error (this usually terminates a macro and let it return failure)
 		- else returns success
-		.
 		if cmd args..:		fails on error of command, allows then/else, but stops macro on error
 		if return cmd args..:	never fails, allows then/else/err
 		if exit:		just success (the "exit" has no effect here besides returning success)
@@ -3084,15 +3068,13 @@ class RfbCommander(object):
 		mouse template N [buttons]: move mouse in N steps to first region of e/template.tpl and performs action
 		mouse template.# N [buttons]: use region n, n=1 is first
 		mouse template.#.E N [buttons]: as before but use the given edge of region: 0=none(random) 1=nw 2=sw 3=ne 4=se
-		.
-		To release all buttons, you must give 0 as buttons!
-		buttons are 1(left) 2(middle) 4(right) 8 and so on for further buttons.
-		To press multiple buttons add their numbers.
-		.
+		- To release all buttons, you must give 0 as buttons!
+		- Buttons are 1(left) 2(middle) 4(right) 8 and so on for further buttons.
+		- To press multiple buttons add their numbers.
 		Template based mouse movement should set the button before execution like:
-		mouse {} {} 0
-		mouse template 5 1
-		mouse {} {} 0
+		  mouse {} {} 0
+		  mouse template 5 1
+		  mouse {} {} 0
 		"""
 		if click is not None:
 			click = int(click)
@@ -3244,9 +3226,7 @@ class RfbCommander(object):
 	def cmd_next(self):
 		"""
 		next: Wait for next picture flushed out
-		.
-		It delays reception of next command until the next image is written out.
-		.
+		- It delays reception of next command until the next image is written out.
 		Usually followed by: exit
 		"""
 		cb	= Callback()
@@ -3257,9 +3237,7 @@ class RfbCommander(object):
 	def cmd_flush(self):
 		"""
 		flush: Force next picture to be flushed
-
-		This is asynchronous, so in MACROs it probably does NOT do what what you expect.
-
+		- This is asynchronous, so in MACROs it probably does NOT do what what you expect.
 		Usually followed by: next
 		"""
 		self.rfb.force_flush()
@@ -3289,9 +3267,7 @@ class RfbCommander(object):
 	def cmd_wait(self,timeout,*templates):
 		"""
 		wait count template..: wait count screen updates or 0.1s for one of the given templates to show up
-		.
-		If count is negative, it saves state picture (like 'state' command)
-		.
+		- If count is negative, it saves state picture (like 'state' command)
 		Note: The wait count is 0.1s plus frames
 		"""
 		if not templates:
@@ -3687,22 +3663,18 @@ class RfbCommander(object):
 	def cmd_extract(self, name, *img):
 		"""
 		extract template images..:
-		.
-		Extract all the regions of each state image given
-		and save it as the state image of the first parameter.
-		.
-		The template used is 'extract' followed by name up to the first underscore.
-		.
-		A 0 with/heigth region (just a short line)
-		defines the placement of the following regions
-		within the same picture.
-		This line then is moved along the other axis
-		by the difference parameter if given, if it is 0
-		according to widht/height of the placed region.
-		.
-		If more such lines follow, they are used for the
-		placement of following pictures accordingly.
-		This way you can create multiple column layouts.
+		- Extract all the regions of each state image given
+		  and save it as the state image of the first parameter.
+		- The template used is 'extract' followed by name up to the first underscore.
+		- A 0 with/heigth region (just a short line)
+		  defines the placement of the following regions
+		  within the same picture.
+		  This line then is moved along the other axis
+		  by the difference parameter if given, if it is 0
+		  according to widht/height of the placed region.
+		- If more such lines follow, they are used for the
+		  placement of following pictures accordingly.
+		  This way you can create multiple column layouts.
 		"""
 		tpl	= self.template(name, 'extract')
 		if not tpl:
