@@ -2471,6 +2471,78 @@ class RfbCommander(object):
 			if len(args) <= i+2:
 				return self.ok()
 
+	def get_map(self, n, *args):
+		"""
+		{map n arg..}	select nth arg (0 is the first arg), '' if n out of bounds
+		{map {bool fail} false true nope}	gives 'false'
+		{map {bool ok} false true nope}		gives 'true'
+		{map {bool sth} false true nope}	gives 'nope'
+		see also: bool
+		"""
+		n	= int(n)
+		return '' if n<0 or n>=len(args) else args[n]
+
+	def get_bool(self, *args):
+		"""
+		{bool args..}:
+		- selects the first arg which is 'ok' or 'fail'
+		- returns '0' for 'fail'
+		- returns '1' for 'ok'
+		- returns '2' is neither 'ok' nor 'fail' is found
+		see also: map
+		"""
+		for a in args:
+			if a == 'fail':	return '0'
+			if a == 'ok':	return '1'
+		return '2'
+
+	def get_len(self, *args):
+		"""
+		{len args..}:	return length of args..
+		see also: len, left, mid, right
+		"""
+		return len(' '.join(args))
+
+	def get_left(self, n, *args):
+		"""
+		{left n args..}:	return left n characters of args..
+		see also: len, left, mid, right
+		"""
+		n	= int(n)
+		return (' '.join(args))[:n]
+
+	def get_right(self, n, *args):
+		"""
+		{right n args..}:	return right n characters of args..
+		see also: len, left, mid, right
+		"""
+		n	= int(n)
+		return (' '.join(args))[-n:] if n else ''
+
+	def get_mid(self, n, m, *args):
+		"""
+		{mid n m args..}:	return m characters after the nth character of args..
+		- characters are counted from 0, so n=0 is the first character
+		see also: len, left, mid, right
+		"""
+		n	= int(n)
+		m	= int(n)
+		return (' '.join(args))[n:(n+m)]
+
+	def get_code(self, *args):
+		"""
+		{code args..}:	get character code
+		see also: chr
+		"""
+		return ord(' '.join(args))
+
+	def get_chr(self, *args):
+		"""
+		{chr args..}:	create character sequence of args
+		see also: code
+		"""
+		return ''.join([chr(int(c)) for c in args if c!=''])
+
 	def cmd_clear(self, *args):
 		"""
 		clear:		unsets all variables
