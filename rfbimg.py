@@ -3388,6 +3388,12 @@ class RfbCommander(object):
 		self.rfb.stop()
 		return self.ok()
 
+	def get_list(self, *args):
+		"""
+		{list chan..}	return the length of the given channels
+		"""
+		return ' '.join([(n if c is None else str(len(c))) for n,c in [(n, Channel.list(n)) for n in args]])
+
 	@Docstring(LISTFILE, MACROEXT)
 	def cmd_list(self, c=None, n=None):
 		"""
@@ -3872,8 +3878,7 @@ class Channel():
 		if c is None:
 			return dump(sorted(klass.chan))
 
-		c	= klass.chan.get(c)
-		return None if c is None else dump(c)
+		return klass.chan.get(c)
 
 	def __init__(self, name):
 		self.c	= self.__class__.chan.get(name)
