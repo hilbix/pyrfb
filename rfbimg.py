@@ -2083,6 +2083,9 @@ class RfbCommander(object):
 		"""
 		add var N..:	add all the N to var
 		- the return value is the same as in "let"
+		  errors if some N is non-numeric
+		  fails if var is 0 afterwards
+		  else succeeds
 		"""
 		return self.let(v, lambda x,y: x+y, args)
 
@@ -2096,6 +2099,10 @@ class RfbCommander(object):
 	def cmd_sub(self, v, *args):
 		"""
 		sub var N..:	like add, but subtracs
+		- the return value is the same as in "let"
+		  errors if some N is non-numeric
+		  fails if var is 0 afterwards
+		  else succeeds
 		"""
 		return self.let(v, lambda x,y: x-y, args)
 
