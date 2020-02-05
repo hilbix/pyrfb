@@ -3500,9 +3500,10 @@ class RfbCommander(object):
 		self.set(k, v)
 		yield Return(self.ok())
 
-	def cmd_peek(self, channel, k=None):
+	def cmd_peek(self, channel, k=None, n=None):
 		"""
 		peek channel var: peek data from channel, nonwaiting
+		peek channel var N: peek nth data from channel, nonwaiting (N=0: first)
 		- Fails if there is no data on the channel
 		- Data receipt is in-sequence
 		- if var is not given, varname is channel
@@ -3510,7 +3511,8 @@ class RfbCommander(object):
 		"""
 		if k is None: k=channel
 		c	= Channel(channel)
-		v	= c.peek()
+		n	= None if n is None else int(n)
+		v	= c.peek(n)
 		if v is None:
 			return self.fail()
 		self.set(k, v)
@@ -3890,13 +3892,23 @@ class Channel():
 
 	def put(self, data, cb=None):	return self.c._put(data, cb)
 	def get(self, cb=None):		return self.c._get(cb)
-	def peek(self):			return self.c._peek()
+	def peek(self, i=None):		return self.c._peek(i)
+	def __len__(self):		return self.c._cnt()
 
-	def _peek(self):
+	def _peek(self, i=None):
 		for r,p in self.p:
 			if r is not None:
-				return r
+				if not i:
+					return r
+				i	-= 1
 		return None
+
+	def _cnt(self):
+		i = 0
+		for r,p in self.p:
+			if r is not None:
+				i += 1
+		return i
 
 	def _get(self, cb):
 		while self.p:
