@@ -24,6 +24,9 @@ for ($i=1; ++$i<$cnt; )
     $t .= " $f";
   }
 
+#if (isset($_GET['refresh']))
+#  header("Refresh: ".min(20, intVal($_GET['refresh'])));
+
 # fetch arguments from POST data
 $r = get_POST_data();
 if (ctype_print($r))
