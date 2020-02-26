@@ -2154,6 +2154,30 @@ class RfbCommander(object):
 		"""
 		return self.expr(lambda x,y: x%y, args)
 
+	def cmd_min(self, v, *args):
+		"""
+		max var N..:	set var to the numeric minimum (including current var value)
+		"""
+		return self.let(v, lambda x,y: min(x, y), args)
+
+	def get_min(self, *args):
+		"""
+		{max args..}:	numeric minimum of all args
+		"""
+		return self.expr(lambda x,y: min(x, y), args)
+
+	def cmd_max(self, v, *args):
+		"""
+		max var N..:	set var to the numeric maximum (including current var value)
+		"""
+		return self.let(v, lambda x,y: max(x, y), args)
+
+	def get_max(self, *args):
+		"""
+		{max args..}:	numeric maximum of all args
+		"""
+		return self.expr(lambda x,y: max(x, y), args)
+
 	def cmd_nat(self, *args):
 		"""
 		nat var..:	return true if all vars are natural numbers
