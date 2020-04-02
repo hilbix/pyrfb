@@ -56,7 +56,7 @@ import PIL.ImageDraw
 import PIL.ImageStat
 import PIL.ImageChops
 
-def Docstring(*a, **kw):
+def DocFormat(*a, **kw):
 	def decorator(o):
 		o.__doc__	= o.__doc__.format(*a, **kw)
 		return o
@@ -432,6 +432,24 @@ class Template:
 		self.parsed	= True
 		return self
 
+	def normalize(self, img):
+		"""
+		normalize the image after it was .match()ed
+
+		returns an image which only contains the rectangle parts in their 0 position
+		"""
+		out	= PIL.Image.new('RGB',img.size)
+		lf	= list(self.lf)
+		for p in self.p:
+			# p is { n=0++, x=dx, y=dy, c=dcnt, n=len(p), p:r }
+			# p.r is [{ n=cnt, p=p.n, x, y, w=x+w, h=y+h, px=w*h, i=img_to_cmp, d=fuzz }]
+			offset	= lf.pop(0)
+			for r in p['p']:
+				dx	= p['x']*offset
+				dy	= p['y']*offset
+				out.paste(img.crop((r['x']+dx, r['y']+dy, r['w']+dx, r['h']+dy)), (r['x'],r['y']))
+		return out
+
 	def match(self, img, debug=False, verbose=False):
 		"""
 		check if img matches this template
@@ -460,7 +478,7 @@ class Template:
 
 		returns found offset (integer) or None if none
 		"""
-		# p is { 'x':dx, 'y':dy, 'c':cnt+1, 'p':part }
+		# p is { n=0++, x=dx, y=dy, c=dcnt, n=len(p), p:r }
 		dx	= p['x']
 		dy	= p['y']
 		x	= 0
@@ -468,7 +486,7 @@ class Template:
 		if debug: debug(Template=self.name, _part=p['n'], r=p['p'][0], c=p['c'])
 		for i in range(p['c']):
 			r	= p['p']
-			# r is [{ 'x':x, 'y', 'w', 'h', 'i':img, 'm':abs(r[0]), 'px':r[3]*r[4] }]
+			# r is [{ n=cnt, p=p.n, x, y, w=x+w, h=y+h, px=w*h, i=img_to_cmp, d=fuzz }]
 			if self.check(r[0], x, y, img, verbose and debug):
 				# We got a match, check the remaining rects
 				if debug: debug(Template=self.name, _part=p['n'], x=x, y=y)
@@ -493,7 +511,7 @@ class Template:
 		if r['d']<0:
 			return True
 
-		# r is { 'x':x, 'y', 'w', 'h', 'i':img, 'm':abs(r[0]), 'px':r[3]*r[4] }
+		# r is [{ n=cnt, p=p.n, x, y, w=x+w, h=y+h, px=w*h, i=img_to_cmp, d=fuzz }]
 		# IC.difference apparently does not work on RGBX, so we have to convert to RGB first
 		rect	= (r['x']+dx, r['y']+dy, r['w']+dx, r['h']+dy)
 		di	= PIL.ImageChops.difference(r['i'], img.crop(rect).convert('RGB'))
@@ -979,6 +997,12 @@ class rfbImg(easyrfb.client):
 				return None
 		return tpls
 
+	def check_img_normalize(self, waiter):
+		if waiter['img'] == 'norm':
+			return waiter['match'][0]['t'].normalize(self.img)
+		else:
+			return self.img
+
 	def check_waiter(self,waiter,debug=False,verbose=False):
 		""" check a single waiter (templates) """
 		try:
@@ -999,8 +1023,8 @@ class rfbImg(easyrfb.client):
 			f	= t['t'].match(self.img, debug, verbose)
 			if (f is None) == (not t['cond']):
 				waiter['match'] = (t, f)
-				if 'img' in waiter:
-					waiter['img'] = self.img.convert('RGB')
+				if waiter.get('img'):
+					waiter['img'] = self.check_img_normalize(waiter).convert('RGB')
 				return True
 		return False
 
@@ -3361,11 +3385,19 @@ class RfbCommander(object):
 		"""
 		return self.checker(t=templates)
 
+	@DocFormat(STATEDIR,IMGEXT)
 	def cmd_state(self,*templates):
 		"""
-		state template..: like check, but writes the state (picture) to s/TEMPLATE.img
+		state template..: like check, but writes the state (picture) to {0}TEMPLATE{1}
 		"""
-		return self.checker(t=templates, img=1)
+		return self.checker(t=templates, img=True)
+
+	@DocFormat(STATEDIR,IMGEXT)
+	def cmd_img(self,img,*templates):
+		"""
+		img name template..: like state, but writes only the normalized template contents to {0}IMG{1}
+		"""
+		return self.checker(t=templates, img='norm', out=img)
 
 	def cmd_wait(self,timeout,*templates):
 		"""
@@ -3400,8 +3432,11 @@ class RfbCommander(object):
 			self.send('found %s %s' % (t.getName(), str(f)))
 		else:
 			self.send('spare %s' % (t.getName()))
-		if 'img' in waiter:
-			waiter['img'].save(STATEDIR+t.getName()+IMGEXT)
+		if waiter.get('img'):
+			out	= waiter.get('out', t.getName())
+			if not self.valid_filename.match(out):
+				return self.fail()
+			waiter['img'].save(STATEDIR+out+IMGEXT)
 		return self.ok()
 
 	def cmd_ping(self):
@@ -3425,7 +3460,7 @@ class RfbCommander(object):
 		"""
 		return ' '.join([(n if c is None else str(len(c))) for n,c in [(n, Channel.list(n)) for n in args]])
 
-	@Docstring(LISTFILE, MACROEXT)
+	@DocFormat(LISTFILE, MACROEXT)
 	def cmd_list(self, c=None, n=None):
 		"""
 		list:		list nonempty or waiting channels
