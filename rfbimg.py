@@ -1728,9 +1728,9 @@ class RfbCommander(object):
 
 	def get_rnd(self, a, b=None):
 		"""
-		{rnd }: some often very long positive integer value
-		{rnd x}: 0..x
-		{rnd x y}: x..y
+		{rnd }:	some often very long positive integer value
+		{rnd x}:	0..x
+		{rnd x y}:	x..y
 		"""
 		if self.random is None:	self.random = positiveHash(repr(self.repl))
 		if b is None: a,b = 0,a
@@ -1882,7 +1882,7 @@ class RfbCommander(object):
 
 	def cmd_prompt(self,*args):
 		"""
-		prompt: set prompt and do not terminate on errors (can no more switched off)
+		prompt:	 set prompt and do not terminate on errors (can no more switched off)
 		- This also makes {var}s usable, see: set
 		- And it fundamentally changes how "unknown" commands are processed.
 		- Without prompt unknowns set exit state, while with prompt they don't and just fail.
@@ -1895,24 +1895,24 @@ class RfbCommander(object):
 
 	def cmd_success(self,*args):
 		"""
-		success string: set or suppresses the success string.  Default suppressed
+		success string:	 set or suppresses the success string.  Default suppressed
 		"""
 		self.success = args and ' '.join(args) or None
 		return self.ok()
 
 	def cmd_quiet(self,*args):
 		"""
-		Suppress normal output of cmd
-		Commandline see 'verbose'.  'verbose' and 'quiet' are independent.
+		quiet cmd args..:	Suppress normal output of cmd
+		Full commandline see 'verbose'.  'verbose' and 'quiet' are independent.
 		"""
 		return self.onoff('quiet', *args)
 
 	def cmd_verbose(self,*args):
 		"""
-		verbose: returns current status of verbose
-		verbose on: enable verbose, returns previous status of verbose
-		verbose off: disable verbose, returns previous status of verbose
-		verbose cmd args..: verbose output of cmd (see: dump)
+		verbose:	returns current status of verbose
+		verbose on:	enable verbose, returns previous status of verbose
+		verbose off:	disable verbose, returns previous status of verbose
+		verbose cmd args..:	verbose output of cmd (see: dump)
 		See also: quiet, debug, trace
 		Note:
 		There is no shortcut to disable verbose for a single command,
@@ -1923,8 +1923,8 @@ class RfbCommander(object):
 
 	def cmd_debug(self, *args):
 		"""
-		Enable debugging output.
-		Commandline see 'verbose'.  'verbose' and 'debug' are independent.
+		debug cmd args..:	Enable debugging output.
+		Full commandline see 'verbose'.  'verbose' and 'debug' are independent.
 		"""
 		return self.onoff('debugging', *args)
 
@@ -1961,20 +1961,20 @@ class RfbCommander(object):
 
 	def cmd_failure(self,*args):
 		"""
-		failure string: set or suppresses the failure string.  Default: ko
+		failure string:	set or suppresses the failure string.  Default: ko
 		"""
 		self.failure = args and ' '.join(args) or None
 		return self.ok()
 
 	def cmd_ok(self,*args):
 		"""
-		ok: dummy command, ignores args, always succeeds
+		ok:	dummy command, ignores args, always succeeds
 		"""
 		return self.ok()
 
 	def cmd_fail(self,*arg):
 		"""
-		fail: dummy command, ignores args, always fails
+		fail:	dummy command, ignores args, always fails
 		- Also used as "unknown command"
 		"""
 		return self.fail()
@@ -1987,14 +1987,14 @@ class RfbCommander(object):
 
 	def cmd_bug(self,*arg):
 		"""
-		bug: dummy command, ignores args, always errors
+		bug:	dummy command, ignores args, always errors
 		"""
 		return self.err()
 
 	def cmd_help(self, cmd=None):
 		"""
-		help: list known commands
-		help command: show help of command
+		help:	list known commands
+		help command:	show help of command
 		- This application is single threaded,
 		  hence lengthy calculations block other things.
 		"""
@@ -2014,7 +2014,7 @@ class RfbCommander(object):
 				all.append(a[l:])
 		self.send(what, ', '.join(all))
 
-	help_strip	= re.compile(r'\t\t*')
+	help_strip	= re.compile(r'^\t\t*')
 	def help_doc(self, what, name):
 		fn	= getattr(self, name, None)
 		if fn is None:
@@ -2229,7 +2229,7 @@ class RfbCommander(object):
 
 	def cmd_cmp(self, v, *args):
 		"""
-		cmp val var..: compare the given variables against the given val
+		cmp val var..:	compare the given variables against the given val
 		- errors if any var is unset or no var is given
 		- fails if any var is not the given value
 		- succeeds if all vars are the given value
@@ -2259,7 +2259,7 @@ class RfbCommander(object):
 
 	def cmd_equal(self, v, *args):
 		"""
-		equal var..: success if all variables exist and are all equal
+		equal var..:	success if all variables exist and are all equal
 		see also: and, nand, or, nor, equal, empty, cmp, nat, set
 		"""
 		if not args:
@@ -2286,7 +2286,7 @@ class RfbCommander(object):
 
 	def cmd_empty(self, *args):
 		"""
-		empty var..: checks variables for emptieness
+		empty var..:	checks variables for emptieness
 		- fails if a variable is nonempty
 		- errors if no arguments
 		- else success (all variables are empty or do not exist)
@@ -2319,8 +2319,8 @@ class RfbCommander(object):
 
 	def cmd_local(self, var, *args):
 		"""
-		local var: checks if variable is locally known
-		local var val: set variable locally to given value
+		local var:	checks if variable is locally known
+		local var val:	set variable locally to given value
 		- same as 'set var val', but uses local store
 		"""
 		if not args:
@@ -2334,9 +2334,9 @@ class RfbCommander(object):
 
 	def cmd_set(self, var=None, *args):
 		"""
-		set: list all known {var}s
-		set var: check if {var} is known
-		set var val: set {var} to val.
+		set:	list all known {var}s
+		set var:	check if {var} is known
+		set var val:	set {var} to val.
 		- Replacements only work in macros or when prompt is active.
 		- Use "local" to override macro parameters like {0}, {:3}, {3:}, {:} or {#} etc.
 		- "set" does not override "local" variables, it stores it into the global ones.
@@ -2454,7 +2454,7 @@ class RfbCommander(object):
 		map s1 v1 s2 v2:	maps v1 to v2 with s1, v2 to v1 with s2
 		map s1 v1 s2 v2 s3:	extended forward mapping using s1/s2 and backward mapping using s3/s2
 		map s1 v1 s2 v2 s3 v3:	creates v1/v2 mapping with s1/s2/s3 and v2/v3 mapping with s2/s3
-		map s1 v1 s2 v2 s3 v3 s4: creates v1/v2 mapping with s1/s2/s3 and v2/v3 mapping with s2/s3/s4
+		map s1 v1 s2 v2 s3 v3 s4:	creates v1/v2 mapping with s1/s2/s3 and v2/v3 mapping with s2/s3/s4
 		- mapping are bi-directional, so you can map back and forth
 		- multiple same values are joined into the values
 		Example:
@@ -2908,7 +2908,7 @@ class RfbCommander(object):
 
 	def cmd_mode(self, mode):
 		"""
-		mode MODE: set command/argument mode
+		mode MODE:	set command/argument mode
 		Macros always start with SPC.
 		Modes:
 		SPC	a single space
@@ -2924,7 +2924,7 @@ class RfbCommander(object):
 
 	def cmd_sleep(self, sec):
 		"""
-		sleep sec: sleep the given seconds
+		sleep sec:	sleep the given seconds
 		"""
 		yield self.sleep(float(sec))
 		yield Return(self.ok())
@@ -3045,7 +3045,7 @@ class RfbCommander(object):
 
 	def cmd_run(self, *args):
 		"""
-		run MACRO args..: same as "if do MACRO", but followed by "return"
+		run MACRO args..:	same as "if do MACRO", but followed by "return"
 		"""
 		return Bye(self.run_do(*args))
 
@@ -3057,8 +3057,8 @@ class RfbCommander(object):
 
 	def cmd_goto(self, nr=0):
 		"""
-		goto NR: jump to the given line number of macro
-		goto: jump to the start of the macro
+		goto NR:	jump to the given line number of macro
+		goto:	jump to the start of the macro
 		- local label1 {.}: saves the next line into variable label1
 		- goto {label1}: jumps to the saved line
 		- Has no effect outside of a macro
@@ -3067,7 +3067,7 @@ class RfbCommander(object):
 
 	def cmd_not(self, *args):
 		"""
-		not cmd args..: fails on success, else succeeds (even on error)
+		not cmd args..:	fails on success, else succeeds (even on error)
 		- resets exit state (like 'if' does, too)
 		- does not record the STATE (use 'if' for this)
 		not return:	returns the inverse STATE (error/fail become success)
@@ -3078,7 +3078,7 @@ class RfbCommander(object):
 
 	def get_and(self, *args):
 		"""
-		{and args..}: all 'ok'
+		{and args..}:	all 'ok'
 		- 'ok' if all args are 'ok', 'fail' else
 		- fails for no arguments
 		see also: and, nand, or, nor, equal, empty, cmp, nat, set
@@ -3087,7 +3087,7 @@ class RfbCommander(object):
 
 	def get_nand(self, *args):
 		"""
-		{nand args..}: not all are 'fail'
+		{nand args..}:	not all are 'fail'
 		- 'ok' if any of the args is 'fail', 'fail' else
 		- fails for no arguments
 		- can be used as a 'not' where fail->ok else ->fail
@@ -3097,7 +3097,7 @@ class RfbCommander(object):
 
 	def get_or(self, *args):
 		"""
-		{or args..}: any 'ok'
+		{or args..}:	any 'ok'
 		- 'ok' if any arg is 'ok', 'fail' else
 		- fails for no arguments
 		see also: and, nand, or, nor, equal, empty, cmp, nat, set
@@ -3106,7 +3106,7 @@ class RfbCommander(object):
 
 	def get_nor(self, *args):
 		"""
-		{nor args..}: none 'ok'
+		{nor args..}:	none 'ok'
 		- 'fails' if any arg is 'ok', 'ok' else
 		- fails for no arguments
 		- can be used as a 'not' where ok->fail else ->ok
@@ -3146,35 +3146,35 @@ class RfbCommander(object):
 
 	def cmd_then(self, *args):
 		"""
-		then command args..: run command only when STATE (see: if) is success
+		then command args..:	run command only when STATE (see: if) is success
 		- returns state of command, succeeds when no command is executed
 		"""
 		return self.processArgs(args) if self.state else self.ok()
 
 	def cmd_else(self, *args):
 		"""
-		else command args..: run command only when STATE (see: if) is failure
+		else command args..:	run command only when STATE (see: if) is failure
 		- returns state of command, succeeds when no command is executed
 		"""
 		return self.processArgs(args) if (self.state == False) else self.ok()
 
 	def cmd_err(self, *args):
 		"""
-		err command args..: run command only when STATE (see: if) is error
+		err command args..:	run command only when STATE (see: if) is error
 		- returns state of command, succeeds when no command is executed
 		"""
 		return self.processArgs(args) if (self.state is None) else self.ok()
 
 	def cmd_echo(self, *args):
 		"""
-		echo args..: echo the given args with a linefeed.  Always succeeds.
+		echo args..:	echo the given args with a linefeed.  Always succeeds.
 		"""
 		self.writeLine(' '.join(args) if args else '')
 		return self.ok()
 
 	def cmd_print(self, *args):
 		"""
-		print args..: like echo, but outputs no linefeed.  Always succeeds.
+		print args..:	like echo, but outputs no linefeed.  Always succeeds.
 		"""
 		if args:
 			self.write(' '.join(args))
@@ -3182,19 +3182,19 @@ class RfbCommander(object):
 
 	def cmd_dump(self, *args):
 		"""
-		dump args..: print python repr of args
+		dump args..:	print python repr of args
 		- needs "verbose" like in: verbose dump something
 		"""
 		return self.diag(args=args)
 
 	def cmd_mouse(self, x, y=None, click=None):
 		"""
-		mouse {} {} b: just set the button (0=release) without moving the mouse
-		mouse x y: jump mouse to the coordinates with the current button setting (dragging etc.)
-		mouse x y buttons: release if all released, jump mouse, then apply buttons
-		mouse template N [buttons]: move mouse in N steps to first region of e/template.tpl and performs action
-		mouse template.# N [buttons]: use region n, n=1 is first
-		mouse template.#.E N [buttons]: as before but use the given edge of region: 0=none(random) 1=nw 2=sw 3=ne 4=se
+		mouse {} {} b:	just set the button (0=release) without moving the mouse
+		mouse x y:	jump mouse to the coordinates with the current button setting (dragging etc.)
+		mouse x y buttons:	release if all released, jump mouse, then apply buttons
+		mouse template N [buttons]:	move mouse in N steps to first region of e/template.tpl and performs action
+		mouse template.# N [buttons]:	use region n, n=1 is first
+		mouse template.#.E N [buttons]:	as before but use the given edge of region: 0=none(random) 1=nw 2=sw 3=ne 4=se
 		- To release all buttons, you must give 0 as buttons!
 		- Buttons are 1(left) 2(middle) 4(right) 8 and so on for further buttons.
 		- To press multiple buttons add their numbers.
@@ -3283,13 +3283,13 @@ class RfbCommander(object):
 
 	def cmd_screen(self,to):
 		"""
-		screen NAME: save screen to s/NAME.png without backup
+		screen NAME:	save screen to s/NAME.png without backup
 		"""
 		return self.screen(STATEDIR, to, False)
 
 	def cmd_learn(self,to):
 		"""
-		learn NAME: save screen to l/NAME.png with backup
+		learn NAME:	save screen to l/NAME.png with backup
 		"""
 		return self.screen(LEARNDIR, to, True)
 
@@ -3319,7 +3319,7 @@ class RfbCommander(object):
 
 	def cmd_key(self,*args):
 		"""
-		key string: Type the given string
+		key string:	Type the given string
 		Note: This is buggy with characters which use Shift or Control
 		"""
 		for k in " ".join(args):
@@ -3328,7 +3328,7 @@ class RfbCommander(object):
 
 	def cmd_code(self,*args):
 		"""
-		code code code..: Send keykodes, code can be numbers or names
+		code code code..:	Send keykodes, code can be numbers or names
 		"""
 		for k in args:
 			v	= easyrfb.getKey(k)
@@ -3339,20 +3339,20 @@ class RfbCommander(object):
 
 	def cmd_exit(self):
 		"""
-		exit: end conversation / return from macro
+		exit:	end conversation / return from macro
 		"""
 		return Bye(self.ok())
 
 	def cmd_return(self, *args):
 		"""
-		return: like 'exit', but returns the current if-STATE (not always success)
-		return cmd [args..]: unlike `if cmd args..` followed by `return`
+		return:	like 'exit', but returns the current if-STATE (not always success)
+		return cmd [args..]:	unlike `if cmd args..` followed by `return`
 		"""
 		return Bye(self.processArgs(args) if len(args) else self.state)
 
 	def cmd_next(self):
 		"""
-		next: Wait for next picture flushed out
+		next:	Wait for next picture flushed out
 		- It delays reception of next command until the next image is written out.
 		Usually followed by: exit
 		"""
@@ -3363,7 +3363,7 @@ class RfbCommander(object):
 
 	def cmd_flush(self):
 		"""
-		flush: Force next picture to be flushed
+		flush:	Force next picture to be flushed
 		- This is asynchronous, so in MACROs it probably does NOT do what what you expect.
 		Usually followed by: next
 		"""
@@ -3388,20 +3388,20 @@ class RfbCommander(object):
 	@DocFormat(STATEDIR,IMGEXT)
 	def cmd_state(self,*templates):
 		"""
-		state template..: like check, but writes the state (picture) to {0}TEMPLATE{1}
+		state template..:	like check, but writes the state (picture) to {0}TEMPLATE{1}
 		"""
 		return self.checker(t=templates, img=True)
 
 	@DocFormat(STATEDIR,IMGEXT)
 	def cmd_img(self,img,*templates):
 		"""
-		img name template..: like state, but writes only the normalized template contents to {0}IMG{1}
+		img name template..:	like state, but writes only the normalized template contents to {0}IMG{1}
 		"""
 		return self.checker(t=templates, img='norm', out=img)
 
 	def cmd_wait(self,timeout,*templates):
 		"""
-		wait count template..: wait count screen updates or 0.1s for one of the given templates to show up
+		wait count template..:	wait count screen updates or 0.1s for one of the given templates to show up
 		- If count is negative, it saves state picture (like 'state' command)
 		Note: The wait count is 0.1s plus frames
 		"""
@@ -3441,14 +3441,14 @@ class RfbCommander(object):
 
 	def cmd_ping(self):
 		"""
-		ping: Outputs "pong"
+		ping:	Outputs "pong"
 		"""
 		self.send("pong");
 		return self.ok()
 
 	def cmd_stop(self):
 		"""
-		stop: Terminate rfbimg.  Use sparingly!
+		stop:	Terminate rfbimg.  Use sparingly!
 		"""
 		self.send("stopping");
 		self.rfb.stop()
@@ -3517,7 +3517,7 @@ class RfbCommander(object):
 
 	def cmd_send(self, channel, *args):
 		"""
-		send channel data..: send to channel, waiting
+		send channel data..:	send to channel, waiting
 		- This waits until somebody has read the data
 		- Data delivery is in-sequence
 		see also: send/recv, req/rep, push/pull
@@ -3532,7 +3532,7 @@ class RfbCommander(object):
 
 	def cmd_push(self, channel, *args):
 		"""
-		push channel data..: append data to channel, nonwaiting
+		push channel data..:	append data to channel, nonwaiting
 		- This appends data to a channel, not waiting for delivery
 		- Data delivery is in-sequence
 		see also: send/recv, req/rep, push/pull
@@ -3543,7 +3543,7 @@ class RfbCommander(object):
 
 	def cmd_rep(self, channel, *args):
 		"""
-		rep channel data..: send data to a channel, nonwaiting and exclusively
+		rep channel data..:	send data to a channel, nonwaiting and exclusively
 		- This succeeds if data is delivered
 		- This fails if nobody waiting on the channel
 		- This errors if channel is not empty (somebody other does send/push)
@@ -3557,7 +3557,7 @@ class RfbCommander(object):
 
 	def cmd_recv(self, channel, k=None):
 		"""
-		recv channel var: receive data from channel, waiting
+		recv channel var:	receive data from channel, waiting
 		- This waits until somebody sends data
 		- Data receipt is in-sequence
 		- if var is not given, varname is channel
@@ -3574,8 +3574,8 @@ class RfbCommander(object):
 
 	def cmd_peek(self, channel, k=None, n=None):
 		"""
-		peek channel var: peek data from channel, nonwaiting
-		peek channel var N: peek nth data from channel, nonwaiting (N=0: first)
+		peek channel var:	peek data from channel, nonwaiting
+		peek channel var N:	peek nth data from channel, nonwaiting (N=0: first)
 		- Fails if there is no data on the channel
 		- Data receipt is in-sequence
 		- if var is not given, varname is channel
@@ -3592,7 +3592,7 @@ class RfbCommander(object):
 
 	def cmd_pull(self, channel, k=None):
 		"""
-		pull channel var: receive data from channel, nonwaiting
+		pull channel var:	receive data from channel, nonwaiting
 		- Fails if there is no data on the channel
 		- Data receipt is in-sequence
 		- if var is not given, varname is channel
@@ -3608,7 +3608,7 @@ class RfbCommander(object):
 
 	def cmd_req(self, channel, k=None):
 		"""
-		req channel [var]: receive data from channel, exclusively
+		req channel [var]:	receive data from channel, exclusively
 		- This fails if somebody else is waiting for data, too
 		- Else this waits until somebody sends data
 		- if var is not given, varname is channel
@@ -3716,14 +3716,14 @@ class RfbCommander(object):
 
 	def cmd_center(self, width, *args):
 		"""
-		center width var..: center variables in the given width
+		center width var..:	center variables in the given width
 		see also: pad, sanitize, trim
 		"""
 		return self.dovars(args, self.do_center, width)
 
 	def get_center(self, width, *args):
 		"""
-		{center width string}: center string in the given width
+		{center width string}:	center string in the given width
 		see also: pad, sanitize, trim
 		"""
 		return self.doargs(args, self.do_center, width)
@@ -3742,16 +3742,16 @@ class RfbCommander(object):
 
 	def cmd_pad(self, width, *args):
 		"""
-		pad width var..: pads variables with spaces to the right
-		{pad -width string}: pads variables with spaces to the left
+		pad width var..:	pads variables with spaces to the right
+		{pad -width string}:	pads variables with spaces to the left
 		see also: center, sanitize, trim
 		"""
 		return self.dovars(args, self.do_pad, width)
 
 	def get_pad(self, width, *args):
 		"""
-		{pad width string}: pads args with spaces to the right
-		{pad -width string}: pads args with spaces to the left
+		{pad width string}:	pads args with spaces to the right
+		{pad -width string}:	pads args with spaces to the left
 		see also: center, sanitize, trim
 		"""
 		return self.doargs(args, self.do_pad, width)
@@ -3762,14 +3762,14 @@ class RfbCommander(object):
 
 	def cmd_trim(self, *args):
 		"""
-		trim var..: remove leading and trailing spaces from variable
+		trim var..:	remove leading and trailing spaces from variable
 		see also: center, pad, sanitize
 		"""
 		return self.dovars(args, self.do_strip)
 
 	def get_trim(self, *args):
 		"""
-		{trim string}: remove leading and trailing spaces from string
+		{trim string}:	remove leading and trailing spaces from string
 		see also: center, pad, sanitize
 		"""
 		return self.doargs(args, self.do_strip)
@@ -3779,13 +3779,13 @@ class RfbCommander(object):
 
 	def cmd_sanitize(self, *args):
 		"""
-		{sanitize string}: sanitize multiple spaces into single spaces
+		{sanitize string}:	sanitize multiple spaces into single spaces
 		see also: center, pad, trim
 		"""
 		return self.dovars(args, self.do_sanitize)
 	def get_sanitize(self, *args):
 		"""
-		{sanitize string}: sanitize multiple spaces into single spaces
+		{sanitize string}:	sanitize multiple spaces into single spaces
 		see also: center, pad, trim
 		"""
 		return self.doargs(args, self.do_sanitize)
