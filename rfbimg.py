@@ -3814,6 +3814,7 @@ class RfbCommander(object):
 		{sort args..}:	sort the given args
 		see also: rev, sort
 		"""
+		args	= list(args)
 		args.sort()
 		return ' '.join(args)
 
@@ -3822,6 +3823,7 @@ class RfbCommander(object):
 		{rev args..}:	reverse the given args
 		see also: rev, sort
 		"""
+		args	= list(args)
 		args.reverse()
 		return ' '.join(args)
 
