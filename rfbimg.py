@@ -3811,7 +3811,7 @@ class RfbCommander(object):
 
 		r	= ' '.join([v for k,v in sorted(zip(o,l))])
 		self.set(args[0], r)
-		D(args[0], r, o, l)
+#		D(args[0], r, o, l)
 		return self.ok()
 
 	def get_sort(self, *args):
