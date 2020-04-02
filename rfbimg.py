@@ -3794,6 +3794,37 @@ class RfbCommander(object):
 	def do_sanitize(self, s):
 		return self.re_sanitize.sub(' ', s)
 
+	def cmd_sort(self, *args):
+		"""
+		NOT YET IMPLEMENTED
+
+		{sort var args..}:	sort variable according to given args
+		- if arg is missing, var is sorted based on the contents
+		see also: rev, sort
+
+		NOT YET IMPLEMENTED
+		"""
+		v	= self.var(args[0])
+		if v is None:	return self.fail()
+		pass
+		return self.ok()
+
+	def get_sort(self, *args):
+		"""
+		{sort args..}:	sort the given args
+		see also: rev, sort
+		"""
+		args.sort()
+		return ' '.join(args)
+
+	def get_rev(self, *args):
+		"""
+		{rev args..}:	reverse the given args
+		see also: rev, sort
+		"""
+		args.reverse()
+		return ' '.join(args)
+
 	def template(self, name, prefix=''):
 		"""
 		load and returns the template named after
