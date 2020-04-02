@@ -3796,17 +3796,22 @@ class RfbCommander(object):
 
 	def cmd_sort(self, *args):
 		"""
-		NOT YET IMPLEMENTED
-
 		{sort var args..}:	sort variable according to given args
-		- if arg is missing, var is sorted based on the contents
+		- for missing arg the value of var is used
 		see also: rev, sort
-
-		NOT YET IMPLEMENTED
 		"""
 		v	= self.var(args[0])
 		if v is None:	return self.fail()
-		pass
+
+		l	= v.split(' ')
+
+		o	= list(args[1:])
+		o.extend(l[len(o):])
+		del o[len(l):]
+
+		r	= ' '.join([v for k,v in sorted(zip(o,l))])
+		self.set(args[0], r)
+		D(args[0], r, o, l)
 		return self.ok()
 
 	def get_sort(self, *args):
