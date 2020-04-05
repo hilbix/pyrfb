@@ -305,13 +305,16 @@ var emit =
 //
 // Backend-Calls
 //
-
 // url = [ prefix, path, path ];
+//
+// req.P(url, query)		Promise for req.get, resolves when got
+// req.P(url, query, postdata)	Promise for req.get, resolves when got
+//
 // req.get(url, query-string, callback, callback-args)
 //	runs callback(response, callback-args)
 //	failure: response is undefined
-// req.ext(url, path, query-string, callback, callback-args)
-//	same as req.get but extended.  path does not need first slash
+// req.post(url, query-string, postdata, callback, callback-args)
+//	same as req.get but uses POST
 //
 // req.send(element-id, type)	click.php type=element-contents, type defaults to "t"
 // req.code(charcode)		click.php character-code
@@ -806,7 +809,7 @@ var macro =
               var b	= BUTTON(k[1]+k[2], SELFCALLwithTHIS(this, 'macroclick'), {title:u});
               b.realurl = u;
               this.macros[u] = b;
-              ctx.o.appendChild(b);
+              ctx.add(b);
             }
 
         this.select();
@@ -996,19 +999,6 @@ function init()
   out('ok');
 }
 
-// chi.nr must be present.
-// It is sorted according to that
-function placeChild(ob, chi)
-{
-  for (var n of ob.children)
-    if (!('nr' in n) || chi.nr<n.nr)
-      {
-         ob.insertBefore(chi, n);
-         return;
-      }
-  ob.appendChild(chi);
-}
-
 var Assets =
 {
   generation: 0,
@@ -1017,18 +1007,19 @@ var Assets =
   stat:  (...a) => Assets.img(...a),
   ed:    (...a) => Assets.template(...a),
 
-  mouseover:	function() { this.style.opacity=0.5; show.tmp(true,  this); out.tmp(true,  this.nr+' '+this.main) },
-  mouseout:	function() { this.style.opacity=1;   show.tmp(false, this); out.tmp(false, this.nr+' '+this.main) },
+  mouseover:	function() { this.style.opacity=0.5; show.tmp(true,  this); out.tmp(true,  this.main) },
+  mouseout:	function() { this.style.opacity=1;   show.tmp(false, this); out.tmp(false, this.main) },
   click:	function() { $('learn').value = this.u },
 
   img:	function(ctx, u)
     {
       if (!ctx.current)
         return;
-      IMG(i => { i.nr = ++ctx.nr; i.u = strCut(u, '.png'); i.main = ctx.f+'/'+u; ctx.loading(i); return subdir(i.main)+'#'+ ++Assets.generation })
+      var nr = ctx.nr;
+      IMG(i => { i.u = strCut(u, '.png'); i.main = ctx.f+'/'+u; ctx.loading(i); return subdir(i.main)+'#'+ ++Assets.generation })
       .then(i =>
         {
-          LOG('asset', ctx.name, i.nr, i.src);
+          LOG('asset', ctx.name, nr, i.src);
           ctx.loaded();
           if (!ctx.current)
             return;
@@ -1036,7 +1027,7 @@ var Assets =
           i.style.border	= "1px dotted white";
           i.style.width		= "100px";
 
-          placeChild(ctx.o, i);
+          ctx.add(i, nr);
 
           i.onmouseover	= this.mouseover;
           i.onmouseout	= this.mouseout;
@@ -1057,26 +1048,34 @@ var Assets =
 
       function upd(quiet)
         {
-          req.get(['state.php', u], '', t =>
-            {
-              t = strCut(t, '\n');
-              if (!quiet)
-                OUT(t);
-              t = strTail(t, '\n');
-              b.setAttribute('class', t=='ok' ? 'ok' : 'ko');
-            });
+          b.setAttribute('class', '');
+          ctx.P(['state.php', u], '')
+            .then(t =>
+              {
+                t = strCut(t, '\n');
+                if (!quiet)
+                  OUT(t);
+                t = strTail(t, '\n');
+                b.setAttribute('class', t=='ok' ? 'ok' : 'ko');
+              });
         };
 
-      ctx.o.appendChild(b);
+      ctx.add(b)
       upd(1);
     },
 };
 
+/* CTX is a container class for asynchorinously updating ressources
+ *
+ * ctx = CTX(dom, name, userobject);
+ * ctx.load(...args-of-req.P)
+ *    .then(result => { ctx.add(assets) }
+ */
 class CTX
   {
   constructor(o, name, props)
     {
-      this.nr	= 0;
+      this._nr	= 0;
       this.o	= o;
       this.gen	= new Date();
       this._l	= 0;
@@ -1091,6 +1090,22 @@ class CTX
     }
 
   get current() { return this.gen === this.o.gen }
+  get nr() { return ++this._nr }
+
+  // Child is sorted on nr
+  add:		function(chi, nr)
+    {
+      if (nr === void 0)
+        nr	= this.nr;
+      if ('nr' in chi)
+        for (var n of this.o.children)
+          if (!('nr' in n) || chi.nr < n.nr)
+            {
+               this.o.insertBefore(chi, n);
+               return;
+            }
+      this.o.appendChild(chi);
+    }
 
   loading()
     {
@@ -1116,6 +1131,40 @@ class CTX
     }
   }
 
+function next_in(is, o)
+{
+  var def;
+
+  def	= null;
+  for (var x in o)
+    {
+      if (!def)
+        def	= x;	// preset first into f
+      if (is == x)
+        is	= null;	// trigger set of next (or return first)
+      else if (is === null)
+        return x;
+    }
+  return def;
+}
+
+function next_of(is, a)
+{
+  var def;
+
+  def	= null;
+  for (var x of a)
+    {
+      if (!def)
+        def	= x;	// preset first into f
+      if (is == x)
+        is	= null;	// trigger set of next (or return first)
+      else if (is === null)
+        return x;
+    }
+  return def;
+}
+
 var $showdel;
 
 function reload(ev)
@@ -1127,28 +1176,11 @@ function reload(ev)
 
   var f = $$('reload');
   if (ev=='next')
-    {
-      var t = f;
-      f = null;
-      for (var x in assets)
-        {
-          if (t==x)
-            {
-              t	= null;
-              continue;	// trigger set next
-            }
-          if (!t)
-            {
-              f	= x;	// set next into f (or initalize it)
-              break;
-            }
-          if (!f)
-            f	= x;	// preset first into f
-        }
-      $$$('reload', f);
-    }
+    f = next_in(f, assets);
+  $$$('reload', f);
 
   var a = assets[f];
+
   var ctx = new CTX(clear('cit'), a, {f:f});
 
   ctx.load('exec.php', 'r=dir&d='+a)
@@ -1167,10 +1199,10 @@ function reload(ev)
    .then(o =>
      {
 //       var was = Dom.sel('b', 'x');
+       // XXX TODO SMELL
        new Layout('b').clear(o);
 //       Dom.sel('b', was);
-     }
-   )
+     })
    .catch(e => { emit.emit('err','layout', e, e.stack) })
 }
 
@@ -1183,6 +1215,7 @@ class Layout
       this.e		= $('layout_'+layout);
     }
 
+  // XXX TODO SMELL
   clear(o) { clear(this.b); clear(this.e); this.add(o); globals() }
 
   add(o)
