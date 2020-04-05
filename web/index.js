@@ -16,12 +16,12 @@ function clicks(e, click) { e=$(e); e.onclick=click; return e }
 function DOMs(sel)	{ return document.querySelectorAll(sel) }
 function DOMe(e, child, attr)
 {
-  var	e = document.createElement(e)
+  e = document.createElement(e);
   if (child)
-    for (var x of mkArray(child))
+    for (let x of mkArray(child))
       e.appendChild(typeof x=='string' ? document.createTextNode(x) : x);
   if (attr)
-    for (var x in attr)
+    for (let x in attr)
       e.setAttribute(x, attr[x]);
   return help(e);
 }
@@ -46,20 +46,20 @@ function quote(s)
 
 function dumpstring(s)
 {
-  var t;
+  let t;
 
   try { t=JSON.stringify(s); } catch (e) {}
   s = String(s);
   if (s==t || t===undefined)
     return s;
-  var g = quote(s);
-  var q = '"'+g+'"';
+  const g = quote(s);
+  const q = '"'+g+'"';
   if (q==t)
     return g==s ? s : t;
   return g==t ? s : s+t;
 }
 
-var DEBUG =
+const DEBUG =
 { el:		'debug'
 , hist:		[]
 , timing:	30000
@@ -94,16 +94,16 @@ function xLOG(...args)
 
 function later(fn, ...a) { setTimeout(() => fn(...a)) }
 
-function strCut(s, at) { var n = s.length-at.length; return n>=0 && s.substr(n)==at ? s.substring(0,n) : s }	// remove last
-function strCutAt(s, at) { var n = s.indexOf(at); return n>=0 ? s.substring(0,n) : s }				// remove upto first
-function strTail(s, at) { var n = s.lastIndexOf(at); return n>=0 ? s.substring(n+1) : s }			// remove until last
+function strCut(s, at) { const n = s.length-at.length; return n>=0 && s.substr(n)==at ? s.substring(0,n) : s }	// remove last
+function strCutAt(s, at) { const n = s.indexOf(at); return n>=0 ? s.substring(0,n) : s }			// remove upto first
+function strTail(s, at) { const n = s.lastIndexOf(at); return n>=0 ? s.substring(n+1) : s }			// remove until last
 
-function BUG(x) { var f=function () { alert(x); return false; }; f(); return f }
+function BUG(x) { const f=function () { alert(x); return false; }; f(); return f }
 
 function dump(x)
 {
-  var s="";
-  for (var n in x) { var v=x[n]; if (typeof(v)=="function") continue; s+=n+"="+x[n]+"\n"; }
+  let s="";
+  for (let n in x) { const v=x[n]; if (typeof(v)=="function") continue; s+=n+"="+x[n]+"\n"; }
   return s;
 }
 
@@ -128,52 +128,62 @@ function clear(e,c)
   return e;
 }
 
-// IMG: Promise to create an image
-// IMG(img).then(img => { success }, img => { fail }).then(...)
-// imgs can be image, URL(string), function img => URL
-// Why not something like bfred-it/image-promise?  Because it cannot do function ..
-// See also: https://github.com/bfred-it/image-promise/blob/master/index.js
+// IMG(URL): create image from URL
+// If URL is a function it is called and the return is taken as URL
+// If URL is a string, this is set as the IMG.src
+// Else the URL is taken as is (it must be an IMG)
 function IMG(url)
 {
-  var img	= DOMe('img');
+  const img = DOMe('img');
 
   if (typeof url == 'function')
     url	= url(img);
+
   if (typeof url == 'string')
     {
       LOG('img', url);
       img.src	= url;
+      return img;
     }
-  else
-    img		= url;
 
-  if (!img || img.tagName !== 'IMG') return Promise.reject();
+  return url.tagName == 'IMG' ? url : void 0;
+}
 
-  var ret = new Promise((res,rej) =>
+// IMGp: Create a Promise which resolves when the image is loaded
+// IMGp(img).then(img => { success }, img => { fail }).then(...)
+// Why not something like bfred-it/image-promise?  Because it cannot do functions ..
+// See: https://github.com/bfred-it/image-promise/blob/master/index.js
+function IMGp(url)
+{
+  const img	= IMG(url);
+
+  if (!img) return Promise.reject();
+
+  const ret = new Promise((ok,ko) =>
     {
-      var ok = () =>
+      const done = () =>
         {
-          img.removeEventListener('load', ok);
-          img.removeEventListener('error', ok);
-          if (img.naturalWidth) { LOG('img ok',img.src); res(img) } else { LOG('img err', img.src); rej(img) }
+          img.removeEventListener('load', done);
+          img.removeEventListener('error', done);
+          if (img.naturalWidth) { LOG('img ok',img.src); ok(img) } else { LOG('img err', img.src); ko(img) }
         };
 
-      img.addEventListener('load', ok);
-      img.addEventListener('error', ok);
+      img.addEventListener('load', done);
+      img.addEventListener('error', done);
       if (img.complete)
-        ok();
+        done();
     });
 
   ret.img	= img;
   return ret;
 }
 
-function clone(i)
+function clone(e)
 {
-  var o = i.cloneNode(true);
+  const o = e.cloneNode(true);
 
-  o.onload	= i.onload;
-  o.onerror	= i.onerror;
+  o.onload	= e.onload;
+  o.onerror	= e.onerror;
   return o;
 }
 
@@ -200,14 +210,14 @@ function SELFCALLwithTHIS(self, name, ...a)
 // Register passive Event
 function EVP(e, ons, fn)
 {
-  for (var l of mkArray(ons))
+  for (let l of mkArray(ons))
     $(e).addEventListener(l, CLOSURE(fn, l), {passive:true, capture:true});
 }
 
 // Register active Event
 function EVT(e, ons, fn)
 {
-  for (var l of mkArray(ons))
+  for (let l of mkArray(ons))
     $(e).addEventListener(l, CLOSURE(fn, l), {passive:false, capture:false});
 }
 
@@ -231,7 +241,7 @@ function help(e)
 function ArrayToggle(arr, val)
 {
   xLOG("toggle", val, arr);
-  for (var i=arr.length; --i>=0; )
+  for (let i=arr.length; --i>=0; )
     if (arr[i]==val)
       {
         xLOG("del");
@@ -250,7 +260,7 @@ function ArrayToggle(arr, val)
 if (!document.location.search && document.referrer && document.referrer.startsWith(document.location.href))
   document.location.replace(document.location.href+'?'+parseInt(document.referrer.substr(document.location.href.length)));
 
-var conf = {}
+const conf = {}
 
 conf.n		= parseInt(window.location.search.substr(1));
 conf.quick	= 100;		// count
@@ -275,7 +285,7 @@ function subdir(s) { return conf.dir+s }
 //
 // currently only used for displaying things.
 
-var emit =
+const emit =
 { STOP:	['STOP']
 , init:		function ()
   {
@@ -284,7 +294,7 @@ var emit =
 , emit:		function (what, ...a)
   {
     if (what in this.emits)
-      for (var f of this.emits[what])
+      for (let f of this.emits[what])
         f(...a);
     return this;
   }
@@ -295,7 +305,7 @@ var emit =
   {
     if (!(what in this.emits))
       this.emits[what]	= [];
-    var f = (...b) => { if (cb(...a,...b)===this.STOP) this.emits[what].remove(f) };
+    const f = (...b) => { if (cb(...a,...b)===this.STOP) this.emits[what].remove(f) };
     this.emits[what].push(f);
     return this;
   }
@@ -323,7 +333,7 @@ var emit =
 // req.idle(query)		click.php query when idle (last one wins).  This is just before emit(fin)
 // req.next()			(internal) process next request if no other is active
 // req.done()			(internal) process finished request (even on error)
-var req =
+const req =
 { url:		'click.php'
 , init:		function ()
   {
@@ -341,11 +351,10 @@ var req =
 , post:		function (u,r,p,cb,...a) { this.reqs.push({u:mkArray(u), r:r, cb:cb, a:a, post:p}); return this.next() }
 , next:		function ()
   {
-    var r;
-
     if (this.active)
       return this;
 
+    let r;
     do
       {
         if (this.reqs.length)
@@ -368,8 +377,8 @@ var req =
     emit.emit('act', r);
     // ajax callback is: text, XMLHttpRequest-object, status, last-modified-header
 
-    var q	= ['nocache='+stamp()];
-    var u	= Array.from(r.u);
+    const q	= ['nocache='+stamp()];
+    const u	= Array.from(r.u);
     if (u[0]=='')
       u[0]	= conf.targ;
     else if (u[0].slice(-1) != '?')
@@ -378,13 +387,14 @@ var req =
     if (r.r)
       q.push.apply(q, mkArray(r.r));
 
-    u	= u.join('/');
+    let p	= u.join('/');
     if (q)
-      u += '?'+q.join('&');
+      p += '?'+q.join('&');
+
     if (r.post)
-      ajax.push(u, (t,x,s) => this.done(r, t, s), r.post);
+      ajax.push(p, (t,x,s) => this.done(r, t, s), r.post);
     else
-      ajax.get(u, (t,x,s) => this.done(r, t, s));
+      ajax.get(p, (t,x,s) => this.done(r, t, s));
     return this;
   }
 , done:		function (r, t, s)
@@ -397,7 +407,7 @@ var req =
   }
 , P:		function (u, r, post) { return new Promise((ok,ko) =>
   {
-    var cb=(t,s,o) => { if (s==200) ok(o); else ko(o) };
+    const cb=(t,s,o) => { if (s==200) ok(o); else ko(o) };
     if (post)
       this.post(u,r,post,cb);
     else
@@ -408,7 +418,9 @@ var req =
 //
 // Dom helper
 //
-var Dom =
+// XXX TODO SMELL: var refactoring
+//
+const Dom =
 { dummy: 1
 , sel:	function (tag, sel, ...args)
   {
@@ -418,7 +430,7 @@ var Dom =
     var m = DOMs('['+att+']');
     var current = 0, togo=-1;
 
-    for (var i=m.length; --i>=0; )
+    for (let i=m.length; --i>=0; )
       {
         if (!m[i].classList.contains('hide'))
           current	= i;
@@ -438,12 +450,12 @@ var Dom =
       togo	= 0;
     m[togo].classList.remove('hide');
 
-    var sel = m[togo].getAttribute(att);
+    sel = m[togo].getAttribute(att);
 //    xLOG('dom.sel3', tag, current, togo, sel, args);
 
     var att = 'data-xsel-'+tag;
     var m = DOMs('['+att+']');
-    for (var i=m.length; --i>=0; )
+    for (let i=m.length; --i>=0; )
       {
         if (m[i].getAttribute(att) == sel)
           m[i].classList.add('sel');
@@ -462,22 +474,25 @@ var Dom =
 // DOM click handling
 //
 
-var runs =
+const runs =
 { attribute:	'runs'
 , init:		function (attrib)
   {
     if (!attrib) attrib = this.attribute;
-    for (var e of DOMs('['+attrib+']'))
+    for (let e of DOMs('['+attrib+']'))
       e.onclick = this.click(e.getAttribute(attrib));
   }
 , click:	function (str)
   {
-    var w = (''+str).split(' ');
-    var i = 'run_'+w.shift();
+    const w = (''+str).split(' ');
+    {
+    const i = 'run_'+w.shift();
     if (i in this)	return CLOSURE_(this[i], [w]);
-
-    i	= parseInt(str);
+    }
+    {
+    const i	= parseInt(str);
     if (i>0)	return () => { req.code(i); return false };
+    }
     if (str.substr(0,1)=='K') return () => { req.key(str.substr(1)); return false };
     if ($(str))	return () => { req.send(str); return false };
 
@@ -501,7 +516,7 @@ var runs =
 // This polls for image updates,
 // with some linear backoff.
 
-var poller =
+const poller =
 { init:		function (ms)
   {
     this.name	= 'test.jpg';
@@ -601,7 +616,7 @@ var poller =
   }
 , check:	function (txt, r, stat, l_m)
   {
-    var etag = r.getResponseHeader('etag');
+    const etag = r.getResponseHeader('etag');
     $$$("check", this.cnt.check + '_');
     if (stat==304 && etag == this.state.etag)
       {
@@ -629,8 +644,8 @@ var poller =
 
     $$$('lms', stat);
     $$$('refcnt', ++this.cnt.imgs+'*');
-    var t = this.name+'?'+stamp();
-    IMG(subdir(t)).then(i =>
+    const t = this.name+'?'+stamp();
+    IMGp(subdir(t)).then(i =>
       {
         show.load(i);
         if (this.state.quick > 0)
@@ -647,10 +662,10 @@ var poller =
 // Mouse
 //
 
-var mouse =
+const mouse =
 { xy_from_event:	e =>
   {
-    if (!e) var e = window.event;
+    if (!e) e = window.event;
     if (e.pageX || e.pageY)
       return [ e.pageX, e.pageY ];
     if (e.clientX || e.clientY)
@@ -661,22 +676,22 @@ var mouse =
   }
 , relative:	(o,e) =>
   {
-    var xy = mouse.xy_from_event(e);
+    const xy = mouse.xy_from_event(e);
     return [ xy[0]-o.offsetLeft, xy[1]-o.offsetTop ];
   }
 , move:		function (t, ev)
   {
-    var xy = mouse.relative(this,ev);
+    const xy = mouse.relative(this,ev);
     $$$('pos',xy[0]+" "+xy[1]);
     if ($('ma').checked)
       req.idle("x="+xy[0]+"&y="+xy[1]);
   }
 , click:	function (t, ev)
   {
-    var xy = mouse.relative(this,ev);
-    var mb = document.getElementsByName('mb');
-    var b=0;
-    for (var i=mb.length; --i>=0; )
+    const xy = mouse.relative(this,ev);
+    const mb = document.getElementsByName('mb');
+    let b=0;
+    for (let i=mb.length; --i>=0; )
       if (mb[i].checked)
         b |= parseInt(mb[i].value);
     req.req("x="+xy[0]+"&y="+xy[1]+"&b="+b);
@@ -688,6 +703,7 @@ var mouse =
 // Canvas
 //
 
+// const show .. cannot be used, as "show" already referenced in poller
 var show =
 { init:		function (id)
   {
@@ -701,9 +717,9 @@ var show =
   }
 , load:		function (i)
   {
-    var need = true;
-    var old = this.current;
-    var current = (keep) =>
+    let need = true;
+    let old = this.current;
+    const current = (keep) =>
       {
         if (!need)
           return false;
@@ -719,11 +735,11 @@ var show =
       };
     this.current = current;
 
-    IMG(i).then(img => { if (current(true)) { this.orig_ = img; this.draw() } });
+    IMGp(i).then(img => { if (current(true)) { this.orig_ = img; this.draw() } });
   }
 , draw:		function ()
   {
-    var	i = this.tmp_ || this.orig_;
+    const	i = this.tmp_ || this.orig_;
     this.canvas.width	= i.naturalWidth;
     this.canvas.height	= i.naturalHeight;
     this.canvas.style.opacity = 1;
@@ -755,9 +771,9 @@ function insertTab(ev)
   if (ev.code != 'Tab' || ev.shiftKey || ev.ctrlKey || ev.altKey)
     return true;
 
-  var p	= this.scrollTop;
-  var s	= this.selectionStart;
-  var e	= this.selectionEnd;
+  const p	= this.scrollTop;
+  const s	= this.selectionStart;
+  const e	= this.selectionEnd;
 
   this.value = this.value.substr(0,s)+"\t"+this.value.substr(e);
   this.setSelectionRange(s+1,s+1);
@@ -772,7 +788,7 @@ function insertTab(ev)
 // Macros
 //
 
-var macro =
+const macro =
 { id:		'mac'
 , selclass:	'sel'
 , match:	/^([,A-Za-z0-9_].*)\.macro(.*)$/
@@ -792,24 +808,24 @@ var macro =
 , reload:	function ()
   {
     xLOG('mreload');
-    var ctx	= new CTX(clear(this.id), 'macros');
+    const ctx	= new CTX(clear(this.id), 'macros');
     ctx.load('exec.php', this.query)
     .then(t =>
       {
-        var k;
         this.macros = {};
 
-        var  a = t.split('\n');
+        const	a = t.split('\n');
         xLOG('mreloaded', a.length);
         a.sort();
 
-        for (var u of a)
+        let k;
+        for (let u of a)
           if (validfile(u) && (k = this.match.exec(u)))
             {
-              var b	= BUTTON(k[1]+k[2], SELFCALLwithTHIS(this, 'macroclick'), {title:u});
-              b.realurl = u;
+              const b	= BUTTON(k[1]+k[2], SELFCALLwithTHIS(this, 'macroclick'), {title:u});
+              b.realurl	= u;
               this.macros[u] = b;
-              ctx.add(b);
+              ctx.child(b);
             }
 
         this.select();
@@ -827,11 +843,11 @@ var macro =
   }
 , click_run:	function (m)
   {
-    var old = this.toggle(1, m)[0];
-    var now = this.sel['run'][0];
+    const old = this.toggle(1, m)[0];
+    const now = this.sel['run'][0];
     if (old && now && old!=now)
       {
-        var e = $('mrun');
+        const e = $('mrun');
         this.args[old]	= e.value;
         e.value		= this.args[now] || '';
       }
@@ -842,13 +858,10 @@ var macro =
 , getsel:	function () { return this.mode=='new' ? 'ed' : this.mode; }
 , toggle:	function (radio, id)
   {
-    var	s, old, m=this.getsel();
+    const m	= this.getsel();
+    const old	= this.sel[m];
+    const s	= (radio && old && old[0]!=id) ? [id] : ArrayToggle(old, id);
 
-    old	= this.sel[m];
-    if (radio && old && old[0]!=id)
-      s	= [id];
-    else
-      s	= ArrayToggle(old, id);
     this.sel[m]	= s;
     xLOG('mtoggle', id, s);
     this.select();
@@ -857,16 +870,17 @@ var macro =
 , select:	function ()
   {
     // Remove unknown macros from selection
-    var m = this.getsel();
-    var t = [], s = this.sel[m];
+    const	m = this.getsel();
+    const	s = this.sel[m];
+    const	t = [];
     if (s)
-      for (var u of s)
+      for (let u of s)
         if (u in this.macros)
           t.push(u);
     this.sel[m]	 = t;
 
     // Highlight selection again
-    for (var b=$(this.id).firstChild; b; b=b.nextSibling)
+    for (let b=$(this.id).firstChild; b; b=b.nextSibling)
       b.classList.toggle(this.selclass, t && t.includes(b.realurl));
   }
 , macroclick: function (button, mouse_ev, ...args)
@@ -877,19 +891,19 @@ var macro =
 , load:		function (url)
   {
     xLOG('mload', url);
-    var o = $('mdef');
+    const o = $('mdef');
     return req.P(['','o',url])
-    .then(t =>
-      {
-        if (o.value != t)
-          {
-            if (o.value != this.was && !confirm('overwrite edit?'))
-              return Promise.reject(t);
-            o.value	= t;
-          }
-        return t;
-      })
-    .then(this.saved.bind(this, url))
+      .then(t =>
+        {
+          if (o.value != t)
+            {
+              if (o.value != this.was && !confirm('overwrite edit?'))
+                return Promise.reject(t);
+              o.value	= t;
+            }
+          return t;
+        })
+      .then(this.saved.bind(this, url))
   }
 , saved:	function (url, data, ...args)
   {
@@ -903,13 +917,14 @@ var macro =
       this.was	= data;
     return data;
   }
-, getname:	function (n) { n=n.trim(); var k = this.match.exec(n); return k && k[1] ? k[1] : n; }
+, getname:	function (n) { n=n.trim(); const k = this.match.exec(n); return k && k[1] ? k[1] : n; }
 , save:		function (id)
   {
-    var name = this.getname($(id).value);
+    const name = this.getname($(id).value);
+    const data = $('mdef').value;
 
-    var data = $('mdef').value;
     xLOG('msave', id, name);
+    let	cause;
     if (!name)
       cause	= 'no name';
     else if (!data.trim())
@@ -918,7 +933,7 @@ var macro =
       cause	= 'unchanged';
     else
       return req.P('exec.php', 'r=save&d=oper&f='+escape(name), data)
-      .then(this.saved.bind(this, name+this.ext, data))
+        .then(this.saved.bind(this, name+this.ext, data))
     out('not saved: '+cause+'!');
     return Promise.reject();
   }
@@ -926,7 +941,7 @@ var macro =
 , mnew:		function () { this.save('mname').then(this.reload.bind(this)).then(t => Dom.sel('m', 'ed')) }
 , mrun:		function ()
   {
-    var u	= this.getname(this.sel['run'][0]);
+    const u	= this.getname(this.sel['run'][0]);
     xLOG('run',u);
     return req
       .P(['macro.php', u], '', $('mrun').value)
@@ -936,13 +951,15 @@ var macro =
 , mdel:		function ()
   {
     xLOG('mdel:', this.sel['del']);
-    var p = [];
-    for (var i=this.sel['del'].length; --i>=0; )
+    const p = [];
+    for (let i=this.sel['del'].length; --i>=0; )
       {
-        var nam	= this.sel['del'][i];
-        var k	= this.match.exec(nam);
+        const nam	= this.sel['del'][i];
+        const k		= this.match.exec(nam);
         if (!k[1] || k[2]) continue;
-        var deleted = (k,n) => t => { xLOG('mdel', k, n, t); return t };
+
+        const deleted	= (k,n) => t => { xLOG('mdel', k, n, t); return t };
+
         p[i] = req.P('exec.php', 'r=kick&d=oper&f='+escape(k[1]))
                .then(deleted(k[1], nam));
       }
@@ -962,7 +979,7 @@ function isSlowMobile()
 
 function href(el, dest)
 {
-  var e	= $(el);
+  const e	= $(el);
 
   e.href	= dest;
   e.target	= el+'-'+conf.targ;
@@ -991,7 +1008,7 @@ function init()
   macro.init();
 
   // improve hoverness
-  for (var e of DOMs('[title]'))
+  for (let e of DOMs('[title]'))
     help(e);
 
   reload(false);
@@ -999,7 +1016,7 @@ function init()
   out('ok');
 }
 
-var Assets =
+const Assets =
 {
   generation: 0,
 
@@ -1015,24 +1032,28 @@ var Assets =
     {
       if (!ctx.current)
         return;
-      var nr = ctx.nr;
-      IMG(i => { i.u = strCut(u, '.png'); i.main = ctx.f+'/'+u; ctx.loading(i); return subdir(i.main)+'#'+ ++Assets.generation })
+
+      const nr	= ctx.nr;
+      const l	= ctx.loading(nr);
+
+      // XXX TODO BUG #Asset.generation does not work in Chrome
+      // The idea now is to:
+      // - create the image
+      // - refresh the image using iframe trick https://stackoverflow.com/a/40032192/490291
+      IMGp(i => { i.u = strCut(u, '.png'); i.main = ctx.f+'/'+u; return subdir(i.main)+'#'+ ++Assets.generation })
       .then(i =>
         {
           LOG('asset', ctx.name, nr, i.src);
-          ctx.loaded();
-          if (!ctx.current)
-            return;
 
           i.style.border	= "1px dotted white";
           i.style.width		= "100px";
-
-          ctx.add(i, nr);
-
           i.onmouseover	= this.mouseover;
           i.onmouseout	= this.mouseout;
           i.onclick	= this.click;
-        });
+
+          ctx.child(i, nr);
+        })
+      .finally(i => ctx.loaded(l));
     },
 
   template:	(ctx, u) =>
@@ -1048,8 +1069,8 @@ var Assets =
 
       function upd(quiet)
         {
-          b.setAttribute('class', '');
-          ctx.P(['state.php', u], '')
+          b.setAttribute('class', 'no');
+          ctx.load(['state.php', u])
             .then(t =>
               {
                 t = strCut(t, '\n');
@@ -1060,89 +1081,134 @@ var Assets =
               });
         };
 
-      ctx.add(b)
+      ctx.child(b)
       upd(1);
     },
 };
 
-/* CTX is a container class for asynchorinously updating ressources
+/* CTX: asynchronously update ordered children of elements
  *
- * ctx = CTX(dom, name, userobject);
+ * There can only be one context on an element!
+ * (The most current context takes the element.)
+ *
+ * ctx = CTX(element, name, properties);
+ * ctx.load() triggers "loading"
  * ctx.load(...args-of-req.P)
- *    .then(result => { ctx.add(assets) }
+ *    .then(result => { ctx.child(child(result), ctx.nr) }
+ *
+ * slot = ctx.loading()
+ * do_the_load();
+ * ctx.loaded(slot);
+ *
+ * You can order children based on the number or anything else.
+ * You can do DOM manipulations.
+ *
+ * Also I found something which I think is a bug:
+ * WekMap() does not work with DOM object.
  */
+const $mapkey = '_ctx';
+
 class CTX
   {
   constructor(o, name, props)
     {
       this._nr	= 0;
-      this.o	= o;
-      this.gen	= new Date();
       this._l	= 0;
+      this._o	= o;
+      this._q	= Promise.resolve();
+      this.gen	= new Date();
       this.name	= name;
       this.p	= props;
 
       if (props && !isString(props))
-        for (var p in props)
+        for (let p in props)
           this[p] = props[p];
 
       o.gen	= this.gen;
     }
 
-  get current() { return this.gen === this.o.gen }
+  get current() { return this.gen === this._o.gen }
   get nr() { return ++this._nr }
 
-  // Child is sorted on nr
-  add:		function(chi, nr)
+  // Child is sorted on nr, which can be anything except undefined
+  // IF NR Is left away (undefined), the next ctx.nr is used
+  // ==> nr assigned to the child
+  child(chi, nr)
     {
       if (nr === void 0)
         nr	= this.nr;
-      if ('nr' in chi)
-        for (var n of this.o.children)
-          if (!('nr' in n) || chi.nr < n.nr)
+      chi[$mapkey]	= nr;
+      if (!this.current || this._o.contains(chi))
+        {
+          xLOG('chi-nope', nr)
+          return nr;
+        }
+
+      let last;
+
+      for (let n of this._o.children)
+        {
+          const k = n[$mapkey];
+          if (k === nr)
             {
-               this.o.insertBefore(chi, n);
-               return;
+              this._o.replaceChild(chi, n);
+              return nr;
             }
-      this.o.appendChild(chi);
+          if (k !== void 0 && nr < k)
+            {
+              last = n;
+              break;
+            }
+        }
+
+      LOG('chib', nr, last ? last[$mapkey] : void 0);
+      this._o.insertBefore(chi, last);
+      return nr;
     }
 
-  loading()
+  loading(what)
     {
-      if (this._l++ || !this.current) return;
-      this._o = DIV('load...');
-      this.o.appendChild(this._o);
+      if (this._l++ || !this.current || this._o.contains(this._hint)) return void 0;
+
+      this._hint	= DIV('...loading...');
+      this._o.appendChild(this._hint);
       xLOG('loading', this.name);
+      return 1;
     }
 
-  loaded()
+  loaded(idx)
     {
-      if (--this._l || !this.current) return;
-      this.o.removeChild(this._o);
-      delete this._o;
-      xLOG('loaded', this.name);
+      // idx currently ignored
+      if (--this._l || !this.current) return void 0;
+      later(() =>
+        {
+          if (this._l || !this._hint) return;
+          this._o.removeChild(this._hint);
+          delete this._hint;
+          xLOG('loaded', this.name);
+        });
     }
 
   load(...args)
     {
-      this.loading();
+      const slot	= this.loading();
       return req.P(...args)
-             .then(t => { later(t => this.loaded()); return this.current ? t : Promise.reject('no more current') })
+             .then(t => { this.loaded(slot); return this.current ? t : Promise.reject('no more current') })
     }
   }
 
-function next_in(is, o)
+function next_in(is, a)
 {
-  var def;
+  let def;
 
-  def	= null;
-  for (var x in o)
+  def	= void 0;
+  for (let x in a)
     {
-      if (!def)
-        def	= x;	// preset first into f
-      if (is == x)
-        is	= null;	// trigger set of next (or return first)
-      else if (is === null)
+      if (def === void 0)
+        def	= x;		// preset first into f
+      if (is === x)
+        is	= void 0;	// trigger set of next (or return first)
+      else if (is === void 0)
         return x;
     }
   return def;
@@ -1150,26 +1216,26 @@ function next_in(is, o)
 
 function next_of(is, a)
 {
-  var def;
+  let def;
 
-  def	= null;
-  for (var x of a)
+  def	= void 0;
+  for (let x of a)
     {
-      if (!def)
-        def	= x;	// preset first into f
-      if (is == x)
-        is	= null;	// trigger set of next (or return first)
-      else if (is === null)
+      if (def === void 0)
+        def	= x;		// preset first into f
+      if (is === x)
+        is	= void 0;	// trigger set of next (or return first)
+      else if (is === void 0)
         return x;
     }
   return def;
 }
 
-var $showdel;
+let $showdel;
 
 function reload(ev)
 {
-  var assets = { l:'learn', s:'stat', t:'ed' };
+  const assets = { l:'learn', s:'stat', t:'ed' };
 
   $showdel	= $('showdel');
   macro.reload();
