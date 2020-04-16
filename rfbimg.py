@@ -2208,6 +2208,7 @@ class RfbCommander(object):
 		- errors if some var is undef/empty/nonnumeric
 		- fails if any number is <= 0
 		- success if all vars are numbers and higher than 0
+		see also: equal, empty, cmp, nat, set
 		"""
 		return self.true(True, lambda x,y: int(self.var(y))>0, *args)
 
@@ -2229,18 +2230,14 @@ class RfbCommander(object):
 
 	def cmd_cmp(self, v, *args):
 		"""
-		cmp val var..:	compare the given variables against the given val
-		- errors if any var is unset or no var is given
-		- fails if any var is not the given value
-		- succeeds if all vars are the given value
-		see also: and, nand, or, nor, equal, empty, cmp, nat, set
+		cmp var val:	compare the given variable against the given val
+		- errors if var is unset or no var is given
+		- fails if var is not the given value
+		- succeeds if var is the given value
+		see also: equal, empty, cmp, nat, set
 		"""
-		def cmp(x,y):
-			k	= self.var(y)
-			if k is None:
-				raise KeyError(y)
-			return k == v
-		return self.true(False, cmp, *args)
+		v	= self.var(v)
+		return self.fail() if v is None else self.ok() if v == ' '.join(args) else self.fail()
 
 	def get_cmp(self, v, *args):
 		"""
@@ -2260,7 +2257,7 @@ class RfbCommander(object):
 	def cmd_equal(self, v, *args):
 		"""
 		equal var..:	success if all variables exist and are all equal
-		see also: and, nand, or, nor, equal, empty, cmp, nat, set
+		see also: equal, empty, cmp, nat, set
 		"""
 		if not args:
 			return self.err()
@@ -2290,6 +2287,7 @@ class RfbCommander(object):
 		- fails if a variable is nonempty
 		- errors if no arguments
 		- else success (all variables are empty or do not exist)
+		see also: equal, empty, cmp, nat, set
 		"""
 		if not args:
 			return self.err()
@@ -2348,6 +2346,7 @@ class RfbCommander(object):
 		Example:
 		  if set myvar
 		  else set myvar default
+		see also: equal, empty, cmp, nat, set
 		"""
 		if var is None:
 			flag	= False
