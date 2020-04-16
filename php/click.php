@@ -78,7 +78,8 @@ elseif (isset($_GET["l"]))
 else
   die('wrong request');
 
-fclose(send($o=="" ? $s : $o));
+if ($o=="") $o=$s;
+fclose(send("push wait key $s\n$o"));
 echo $s;
 flush();
 
