@@ -15,6 +15,7 @@ require 'sock.inc';
 plain();
 args(3,3);
 
+$t = '';
 # There is only 1 .. for now
 for ($i=1; ++$i<$cnt; )
   {
