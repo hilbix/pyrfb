@@ -36,19 +36,19 @@ if (isset($_GET["c"]))
     $a = intval($_GET["c"], 0);
     if ($a == 0 && $_GET["c"]!=='0') die("c?");
     $o = sprintf("code %d", $a);
-    $s = sprintf("code 0x%04x\n", $a);
+    $s .= sprintf("code 0x%04x\n", $a);
   }
 else if (isset($_GET["k"]))
   {
     $a = $_GET["k"];
     if (!ctype_graph($a)) die("k?");
     $o = sprintf("code %s", $a);
-    $s = sprintf("key %s\n", $a);
+    $s .= sprintf("key %s\n", $a);
   }
 elseif (isset($_GET["t"]))
   {
     $a = explode("\n",$_GET["t"]);
-#    $s = "key ".$a[count($a)-1];
+#    $s .= "key ".$a[count($a)-1]."\n";
     for ($i=count($a); --$i>=0; ) {
       $s = "key ".$a[$i]."\n$s";
       if ($i)
@@ -58,28 +58,30 @@ elseif (isset($_GET["t"]))
 elseif (isset($_GET["x"]) || isset($_GET["X"]))
   {
     if (isset($_GET["X"]))
-      $s	= sprintf('mouse %s %d', $_GET['X'], (isset($_GET['y']) ? $_GET['y'] : 100));
+      $t	= sprintf('mouse %s %d', $_GET['X'], (isset($_GET['y']) ? $_GET['y'] : 100));
     else
-      $s	= sprintf("mouse %d %d", $_GET["x"], $_GET["y"]);
+      $t	= sprintf('mouse %d %d', $_GET["x"], $_GET["y"]);
+    $s .= "$t\n";
     if (isset($_GET["b"]))
       {
         $b = $_GET["b"];
         if ($b&65536)
-          $o = sprintf("%s %d", $s, $b&65535);			# drag
+          $o = sprintf('%s %d', $t, $b&65535);			# drag
         else
-          $o = sprintf("%s 0\n%s %d\n%s 0", $s, $s, $b, $s);	# click
+          $o = sprintf("%s 0\n%s %d\n%s 0", $t, $t, $b, $t);	# click
       }
   }
 elseif (isset($_GET["l"]))
   {
     $a = explode("\n",$_GET["l"]);
-    $s = "learn ".$a[0];
+    $s .= "learn ".$a[0]."\n";
   }
 else
   die('wrong request');
 
+$s = trim($s);
 if ($o=="") $o=$s;
-fclose(send("push wait key $s\n$o"));
+fclose(send("push wait $s\n$o\n"));
 echo $s;
 flush();
 
