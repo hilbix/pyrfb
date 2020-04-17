@@ -22,12 +22,12 @@ function send($s)
   $fd = fsockopen("unix://$sock");
 #  $pwd	= getcwd();
 #  $err = json_encode(error_get_last(),JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);
-  if (!$sock) die("cannot open $targ");	# ($name) ($pwd) ($err)");
+  if ($fd===FALSE) die("cannot open $targ");	# ($name) ($pwd) ($err)");
 
   socket_set_blocking($fd, 1);
   fwrite($fd,"$s\n");
   fflush($fd);
-  socket_shutdown($fd, 1);
+#  socket_shutdown($fd, 1);	# does not work with fsockopen()
 
   return $fd;
 }
@@ -36,8 +36,13 @@ function send_receive($s)
 {
   $fd	= send($s);
 
-  while (!feof($fd))
-    echo fread($fd,4096);
+  while (!feof($fd) && !ferror($fd))
+    {
+      $s = fread($fd,4096);
+      if ($s === FALSE)
+        die("read error on $targ");
+      echo $s;
+    }
   fclose($fd);
 
   flush();
