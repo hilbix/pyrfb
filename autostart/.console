@@ -9,7 +9,7 @@ ID="${ID##*[^0-9]}"
 ID="${1:-$ID}"
 
 t=1
-while	[ ! -f INHIBIT ] && ! read -t$t t
+while	[ ! -f INHIBIT ] && date +%Y%m%d-%H%M%S && ! read -t$t t
 do
 	mv -f "sub/$ID/web/console.last.txt" "sub/$ID/web/console.old.txt"
 	mv -f "sub/$ID/web/console.txt" "sub/$ID/web/console.last.txt"
