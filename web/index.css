@@ -33,7 +33,7 @@ button	{ min-width:2em }
 .xsmall *	{ padding:0; margin:0; border:1px solid black; line-height:1; vertical-align:middle; font-size:x-small }
 
 .b1	{ border:1px solid #88f; border-collapse:collapse }
-.b1 *	{ border:1px solid #88f; padding:1px 2px }
+.b1 td	{ border:1px solid #88f; padding:1px 2px }
 .l	{ text-align:left }
 .c	{ text-align:center }
 .r	{ text-align:right }
@@ -43,4 +43,5 @@ div#debug	{ position:fixed; bottom:0px; left:0px; background-color:#800; color:#
 div#debug:hover	{ background-color:#000; color:#fff; opacity:1; z-index:99 }
 
 .hi:hover	{ background-color:#008 }
+.hi2:hover	{ background-color:#800 }
 
