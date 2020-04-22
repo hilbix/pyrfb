@@ -2713,7 +2713,9 @@ class RfbCommander(object):
 		- To save variable '{x}' as global, use 'save x' which 'load's it as 'global.x' then
 		- An empty global which is saved and unset in variables is removed from globals:
 		  'set global.x ' <- note the space, then 'save' then 'unset global.x' then 'save global.x'
-		This does not work with variables declared by "local", it all must be done with "set".
+		- This does not work with variables declared by "local", it all must be done with "set".
+		Fails if something went wrong (like global was changed elsewhere and you must use load first)
+		See also: load, set
 		"""
 		# calculate the globals which have changes
 		changes	= {}
