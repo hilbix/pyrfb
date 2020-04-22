@@ -36,7 +36,7 @@ function send_receive($s)
 {
   $fd	= send($s);
 
-  while (!feof($fd) && !ferror($fd))
+  while (!feof($fd))
     {
       $s = fread($fd,4096);
       if ($s === FALSE)
