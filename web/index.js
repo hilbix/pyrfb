@@ -13,13 +13,15 @@
 // These functions should go into a lib
 
 function clicks(e, click) { e=$(e); e.onclick=click; return e }
+function TEXT(x) { return document.createTextNode(x); }
+function TEXTe(x) { return typeof x=='string' ? TEXT(x) : x; }
 function DOMs(sel)	{ return document.querySelectorAll(sel) }
 function DOMe(e, child, attr)
 {
   e = document.createElement(e);
   if (child)
     for (let x of mkArray(child))
-      e.appendChild(typeof x=='string' ? document.createTextNode(x) : x);
+      e.appendChild(TEXTe(x));
   if (attr)
     for (let x in attr)
       e.setAttribute(x, attr[x]);
@@ -208,23 +210,33 @@ function SELFCALLwithTHIS(self, name, ...a)
 }
 
 // Register passive Event
+// capture=true:	Receives event in capture phase
+// passive=true:	Function never calls preventDefault()
 function EVP(e, ons, fn)
 {
+  if (!e) return e;
+  e = $(e);
   for (let l of mkArray(ons))
-    $(e).addEventListener(l, CLOSURE(fn, l), {passive:true, capture:true});
+    e.addEventListener(l, CLOSURE(fn, l), {passive:true, capture:true});
+  return e;
 }
 
 // Register active Event
+// capture=false:	Receives event in bubbling phase
+// passive=false:	Function may call preventDefault()
 function EVT(e, ons, fn)
 {
+  if (!e) return e;
+  e = $(e);
   for (let l of mkArray(ons))
-    $(e).addEventListener(l, CLOSURE(fn, l), {passive:false, capture:false});
+    e.addEventListener(l, CLOSURE(fn, l), {passive:false, capture:false});
+  return e;
 }
 
 function hover(e, t)
 {
-  if (!e)
-    return e;
+  if (!e) return e;
+  e = $(e);
   EVP(e, 'mouseover', CLOSURE(t => out.tmp(true,  t), t));
   EVP(e, 'mouseout',  CLOSURE(t => out.tmp(false, t), t));
   return e;
@@ -1240,21 +1252,20 @@ function reload(ev)
   $showdel	= $('showdel');
   macro.reload();
 
-  var f = $$('reload');
+  let f = $$('reload');
   if (ev=='next')
     f = next_in(f, assets);
   $$$('reload', f);
 
   var a = assets[f];
-
-  var ctx = new CTX(clear('cit'), a, {f:f});
+  var ctx = new CTX(clear('cit'), a, {f});
 
   ctx.load('exec.php', 'r=dir&d='+a)
    .then(t =>
      {
-       var s = t.split('\n');
+       let s = t.split('\n');
        s.sort();
-       for (var u of s)
+       for (let u of s)
          if (validfile(u))
            Assets[a](ctx, u);
      }
@@ -1336,33 +1347,72 @@ class Globals
   constructor(g)
     {
       this.g	= g;
-      for (var d of DOMs('[data-var]'))
+      this.p	= Promise.resolve();
+      for (let d of DOMs('[data-var]'))
         {
-          var v = g['global.'+d.getAttribute('data-var')];
-          var m = 'v_'+d.getAttribute('data-var-m');
-          if (!m)
-            d.innerText = v;
+          const f = d.getAttribute('data-var-m');
+          const n = 'global.'+d.getAttribute('data-var');
+          const v = g[n];
+          const m = `v_${f}`;
+          if (!f)
+            clear(d, hover(DIV(v), n));
           else if (m in this)
-            this[m](d, v);
+            this[m](d, v, n);
           else
             throw 'Globals handling '+f+' is missing';
         }
     }
 
-  v_if(d, v)
+  v_if(d, v, n)
     {
       if (v)
         {
-          d.innerText = v;
+          clear(d, hover(DIV(v), n));
           d.parentElement.classList.remove('hide');
         }
       else
         d.parentElement.classList.add('hide');
     }
 
-  v_pm(d, v)
+  v_pm(d, v, n)
     {
-      d.innerText = v;
+      var self = this;
+
+      clear(d, EVT(hover(DIV(v, {'class':'hi2'}), 'l/m/r=inc/0/dec shift=10'),
+        ['contextmenu', 'mousedown', 'mouseup'],
+        function (m,e)
+          {
+            e.preventDefault();
+            if (m!='mouseup')
+              return;
+
+            xLOG('incdec', e.button, n, this.innerText);
+            self.p = self.p.finally(() =>
+              {
+                var c = parseInt(this.innerText);
+                var [i,k] = this.shiftKey ? [10,10] : [1,c?0:1];
+                switch (e.button)
+                  {
+                  default: return;
+                  case 0:	k = c+i; break;
+                  case 2:	k = c-i; break;
+                  case 1:	break;
+                  }
+                if (k<0) k=0;
+                xLOG('incdec', e.button, n, c, k);
+                return req
+                  .P(['macro.php', 'glob'], '', `${n} ${c} ${k}`)
+                  .then(t =>
+                    {
+                      t = t.trim();
+                      let x = parseInt(t);
+                      if (t != `${x}`) return;
+                      this.innerText = t;
+                      xLOG('incdec', e.button, n, c, k, 'ok', x);
+                    })
+                  .catch(r => xLOG('incdec', e.button, n, c, k, 'error', r))
+              });
+          }));
     }
 }
 
