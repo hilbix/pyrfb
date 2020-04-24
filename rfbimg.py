@@ -591,6 +591,9 @@ class rfbImg(easyrfb.client):
 
 		self.inittime	= time.time()
 
+		self.inupdate	= False
+		self.wrote_next	= False
+
 	# This is really black magic, sorry
 	def timer(self):
 		"""Called each 0.1 seconds when idle"""
@@ -598,7 +601,7 @@ class rfbImg(easyrfb.client):
 		self.tick	+= 1
 
 		# has something changed?
-		if self.dirty:
+		if self.dirty or self.nexting:
 			self.dirt	+= 1		# TICKS how long we are dirty
 			self.sleep	-= 1		# TICKS we have to wait after the last flush
 
@@ -663,6 +666,8 @@ class rfbImg(easyrfb.client):
 		self.dirt	= 0
 		self.skips	= 0
 		self.dirty	= False
+
+		self.wrote_next	= True
 
 	def save_img(self,name, type=None, quality=None):
 		tmp = os.path.splitext(name)
@@ -753,9 +758,11 @@ class rfbImg(easyrfb.client):
 
 	def beginUpdate(self, vnc):
 		self.changed = 0
+		self.inupdate	= True
 
 	def commitUpdate(self, vnc, rectangles=None):
 		#print "commit %d %s %s" % ( self.count, len(rectangles), self.rect )
+		self.inupdate	= False
 
 		# remember the biggest batch
 		if self.changed > self.delta:
@@ -888,9 +895,13 @@ class rfbImg(easyrfb.client):
 			self.delaynext = self.waiting or self.nexting
 			return
 
-		self.check_waiting()
-		if force:
-			self.notify()
+		if not self.inupdate:
+			# if we come here inupdate,
+			# we will be called soon with force again
+			self.check_waiting()
+
+			if self.nexting:
+				self.notify_next()
 
 		self.delaynext = self.waiting or self.nexting
 
@@ -907,7 +918,8 @@ class rfbImg(easyrfb.client):
 	# repeated events:	not removed if callback returns false
 	def event_next(self, force, delaynext):
 		# For now this is just queued+timed event
-		if not self.evting or force:
+		# forced events are not from the timer
+		if force or not self.evting:
 			return delaynext
 
 		cb,args,kw	= self.evting.pop(0)
@@ -929,7 +941,11 @@ class rfbImg(easyrfb.client):
 	def next(self, cb):
 		self.nexting.append(cb)
 
-	def notify(self):
+	def notify_next(self):
+		if not self.wrote_next:
+			return
+		self.wrote_next	= False
+
 		tmp = self.nexting
 		self.nexting = []
 		for cb in tmp:
