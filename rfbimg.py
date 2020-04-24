@@ -1025,7 +1025,7 @@ class rfbImg(easyrfb.client):
 			tpls = waiter['templates']
 		except KeyError:
 			tpls = self.prep_templates(waiter['t'])
-			self.log("templates loaded",waiter['t'])
+			self.log('templates loaded',waiter['t'])
 			waiter['templates'] = tpls
 
 		if not tpls:
@@ -1867,21 +1867,21 @@ class RfbCommander(object):
 	# Line processor
 	#
 
-	def processLine(self, line, expand=False):
+	def processLine(self, line, expand=False, macro=None):
 		if expand:
 			line	= yield self.expand(line)
 #		print('process', line)
-		yield Return(self.processArgs(line.split(self.mode)))
+		yield Return(self.processArgs(line.split(self.mode), macro))
 
-	def processArgs(self, args):
+	def processArgs(self, args, macro=None):
 		"""
 		process an argument array
 		returns True  on success
 		returns False on failure
 		returns None  on error (exception) and set terminaton (bye)
 		"""
-		self.log("cmd",args)
-		self.trace(proc=args)
+		self.log(macro, "cmd",args)
+		self.trace(macro=macro, proc=args)
 		return getattr(self,'cmd_'+args[0], self.unknown)(*args[1:])
 
 	#
@@ -3031,7 +3031,7 @@ class RfbCommander(object):
 				# parse line
 				#self.trace(Macro=macro, l=l, B=self.bye)
 				self.debug(N=nr, _macro=macro, _nr=lnr, line=l, args=self.args)
-				st	= yield self.processLine(l, True)
+				st	= yield self.processLine(l, True, macro=macro+':'+str(lnr))
 				st	= yield self.getBye(st)
 				self.trace(N=nr, _macro=macro, _nr=lnr, line=l, ret=st, bye=self.bye)
 				if not st:
