@@ -56,11 +56,11 @@ Prerequisites:
 
 - Start `Xvnc` or similar:
 
-	Xvnc4 :0 -desktop "`hostname -f`" -localhost -nolisten tcp -rfbwait 30000 -nopn -SecurityTypes None -geometry 1000x1100 :1
+		Xvnc4 :0 -desktop "`hostname -f`" -localhost -nolisten tcp -rfbwait 30000 -nopn -SecurityTypes None -geometry 1000x1100 :1
 
 - Run image grabber and control service (for all parameters see header comment in `rfbimg.py`):
 
-	RFBIMGLOOP=1 RFBIMGVIZ=1 RFBIMGQUAL=18 EASYRFBPORT=5900 nice -99 ./rfbimg.py
+		RFBIMGLOOP=1 RFBIMGVIZ=1 RFBIMGQUAL=18 EASYRFBPORT=5900 nice -99 ./rfbimg.py
 
 Note that this must run permanently.  [See `autostart/` for details](autostart/.readme.md).
 
