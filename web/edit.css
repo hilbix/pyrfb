@@ -1,5 +1,5 @@
 body	{ background:black; color:white; margin:0 }
-div	{ position:relative; vertical-align:top; border:0px solid white }
+div	{ position:relative; vertical-align:top; border:0 }
 span	{ vertical-align:top }
 .left   { float:left }
 .gap	{ padding-left:5px; float:left }
@@ -10,3 +10,6 @@ span	{ vertical-align:top }
 .region	{ position:absolute; border:1px solid black; background:transparent }
 .ok	{ color:white; font-weight:normal }
 .err	{ color:red; font-weight:bold }
+#list	{ overflow:auto; max-height:calc(100vh - 200px); direction:rtl }
+#list * { direction:ltr }
+
