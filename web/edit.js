@@ -345,37 +345,38 @@ return function(t,x,s)
 }
 function saveit()
 {
-if (!edit)
-  return;
-var n=$('filename').value;
-edit.img = currentsel();
-edit.name = $('filename').value;
-ajax.push(config.exec+"?d=ed&r=save&f="+escape(edit.name),saved(edit),JSON.encode(edit));
+  if (!edit)
+    return;
+  var n=$('filename').value;
+  edit.img = currentsel();
+  edit.name = $('filename').value;
+  ajax.push(config.exec+"?d=ed&r=save&f="+escape(edit.name),saved(edit),JSON.encode(edit));
 }
 
 var showel;
 function presentit(e)
 {
-showel=e;
-dispimg(e.loadcache.img);
-out(JSON.encode(e.loadcache));
+  e.style.color = "blue";
+  dispimg(e.loadcache.img);
+  out(JSON.encode(e.loadcache));
 }
 function parse(d)
 {
-var t=JSON.parse(d);
-t.dirt=0;
-return t;
+  var t=JSON.parse(d);
+  t.dirt=0;
+  return t;
 }
 function pullit(e,cb)
 {
-ajax.get(sub('e/')+e.tag+"?decache="+decache,function(d,x,s){if(s!=200)return;e.loadcache=parse(d);cb(e)});
+  ajax.get(sub('e/')+e.tag+"?decache="+decache,function(d,x,s){if(s!=200)return;e.loadcache=parse(d);cb(e)});
 }
 function _showit(e)
 {
-if (e.loadcache)
-  presentit(e);
-else
-  pullit(e,_showit);
+  showel = e;
+  if (e.loadcache)
+    presentit(e);
+  else
+    pullit(e,function(e) { if (showel==e) _showit(e) });
 }
 function _editit(e)
 {
@@ -386,16 +387,16 @@ else
 }
 function showit(e)
 {
-  this.style.color = "blue";
+  this.style.color = "yellow";
   _showit(this);
 }
 function showdef(e)
 {
   this.style.color = "white";
-if (showel!==this)
-  return;
-selimg(e);
-showel = 0;
+  if (showel!==this)
+    return;
+  selimg();
+  showel = void 0;
 }
 function editit(e)
 {
@@ -422,7 +423,7 @@ for (var i=0; i<l.length; i++)
     x.push(__("li",o));
   }
 clear("list",__('ul',x));
-done("templates loaded");
+done(i + ' templates loaded');
 }
 function movesel(n)
 {
@@ -437,35 +438,35 @@ for (var i=e.length; --i>=0; )
 }
 function currentsel()
 {
-var e=$("learns").firstChild;
-return e.options[e.selectedIndex].value;
+  var e=$("learns").firstChild;
+  return e.options[e.selectedIndex].value;
 }
-function selimg(e)
+function selimg()
 {
-dispimg(currentsel());
+  dispimg(currentsel());
 }
 function learns(l)
 {
-imgcache={};
-var tilde = $('tilde').checked;
+  imgcache={};
+  var tilde = $('tilde').checked;
 
-l=l.split("\n");
-l.sort();
-var x=[];
-for (var i=0; i<l.length; i++)
-  if (l[i]!="" && (tilde || l[i].indexOf('~')<0))
-    x.push(__('option',___(l[i])));
-var e = __('select',x);
-e.onchange = selimg;
-e.onkeyup = selimg;
-var was="";
-try {
-  was = currentsel();
-} catch (_e) {}
-clear("learns",e);
-movesel(was);
-selimg();
-done("images loaded");
+  l=l.split("\n");
+  l.sort();
+  var x=[];
+  for (var i=0; i<l.length; i++)
+    if (l[i]!="" && (tilde || l[i].indexOf('~')<0))
+      x.push(__('option',___(l[i])));
+  var e = __('select',x);
+  e.onchange = selimg;
+  e.onkeyup = selimg;
+  var was="";
+  try {
+    was = currentsel();
+  } catch (_e) {}
+  clear("learns",e);
+  movesel(was);
+  selimg();
+  done(i + ' learns loaded');
 }
 function refreshdir()
 {
@@ -533,11 +534,14 @@ function keyboard(e)
 var dispi;
 var imgcache={};
 
-function dispok(e)
+function subl(i)
 {
-  this.haveload	 = 1;
+  return sub('l/')+i+'?decache='+decache;
+}
+
+function difftoggle()
+{
   dispimg(dispi);
-  done(Object.keys(imgcache).length + ' images cached');
 }
 
 function dispimg(i)
@@ -551,15 +555,34 @@ function dispimg(i)
   else
     {
       c			= new Image();
-      c.src		= sub('l/')+i+'?decache='+decache;
-      c.onload		= dispok;
-      c.dispi		= i;
-      c.haveload	= 0;
       imgcache[i]	= c;
+
+      c.haveload	= 0;
+      c.onload		= function() { c.onload=void 0; c.haveload=1; if (i==dispi) dispimg(i); done(Object.keys(imgcache).length + ' images cached') }
+      c.src		= subl(i);
+      c.dispi		= i;
     }
+  if (!c.haveload && c.complete)
+    c.onload();
+  console.log(c.haveload, c.src);
   if (e.src != c.src)
     e.src		= c.src;
   e.style.opacity	= c.haveload ? 1 : 0.5;
+
+  var b = $('img');
+
+  if ($('diff').checked)
+    {
+      var d = subl(currentsel());
+      done(d);
+      b.style.backgroundImage	= "url(\""+d+"\")";
+      e.style.mixBlendMode	= "difference";
+    }
+  else
+    {
+      b.style.backgroundImage="";
+      e.style.mixBlendMode = "normal";
+    }
 }
 
 function setname(name)
@@ -606,8 +629,9 @@ var clickmap =
 , refreshall:	refreshall
 , newit:	newit
 , saveit:	saveit
-, newrect: 	newrect
+, newrect:	newrect
 , killer: 	killer
+, difftoggle: 	difftoggle
 };
 
 function clickproxy(e)
