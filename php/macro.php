@@ -29,8 +29,8 @@ for ($i=1; ++$i<$cnt; )
 #  header("Refresh: ".min(20, intVal($_GET['refresh'])));
 
 # fetch arguments from POST data
-$r = get_POST_data();
-if (ctype_print($r))
+$r = preg_replace('/[\x00-\x1F\x7F]/u', '', get_POST_data());
+if ($r!=='')
   $t .= " $r";
 
 send_receive("run$t");
