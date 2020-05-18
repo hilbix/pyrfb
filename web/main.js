@@ -1258,6 +1258,34 @@ function layout()
    .catch(e => { emit.emit('err','layout', e, e.stack) })
 }
 
+function deep_replace(arr, str, val)
+{
+  function step(arr)
+    {
+      let t = typeof arr;
+
+      if (t == 'string')
+        return arr.split(str).join(val);
+      if (Array.isArray(arr))
+        {
+          t = [];
+          for (let e of arr)
+            t.push(step(e));
+          return t;
+        }
+      if (t !== 'object')
+        return t;
+      else
+        {
+          t = {};
+          for (let e in arr)
+            t[step(e)]=step(arr[e]);
+          return t;
+        }
+    }
+  return step(arr);
+}
+
 class Layout
 {
   constructor(layout)
@@ -1281,28 +1309,42 @@ class Layout
           if (! f in this)
             throw 'Layout '+f+' is missing';
           this.e.appendChild(DIV(this[f](a.slice(3)), {['data-sel-'+this.layout]:t}));
+          if (!this.b)
+            break;
         }
     }
 
   l_table(o)
     {
       var rows = [];
-      for (var row of o)
+      function mkRow(row)
         {
-          var cols = [];
-          for (var col of row)
+          let cols = [];
+          for (let col of row)
             {
-              var attr = void 0;
+              let attr = void 0;
               if (typeof col!='string')
                 {
-                  attr = {'data-var':col['v'], 'data-var-m':col['m']};
-                  if ('s' in col) attr['data-var-s'] = col['s'];
+                  attr = {}
+                  if ('v' in col) attr['data-var'] = String(col['v']);
+                  if ('m' in col) attr['data-var-m'] = String(col['m']);
+                  if ('s' in col) attr['data-var-s'] = String(col['s']);
                   col='?';
                 }
               cols.push(DOMe('td', col, attr));
             }
           rows.push(DOMe('tr', cols, {'class':'hi'}));
         }
+      for (let row of o)
+        if (Array.isArray(row))
+          mkRow(row);
+        else
+          for (let i of row['i'])
+            {
+              const x = deep_replace(row['t'], row['k'], i);
+              //console.log(x);
+              mkRow(x);
+            }
       return DOMe('table', rows, {'class':'b1'});
     }
 }
@@ -1327,15 +1369,24 @@ class Globals
       for (let d of DOMs('[data-var]'))
         {
           const f = d.getAttribute('data-var-m');
-          const n = 'global.'+d.getAttribute('data-var');
-          const v = g[n];
+          const i = d.getAttribute('data-var-i');
+          const s = d.getAttribute('data-var-s');
+          let n = d.getAttribute('data-var');
+          let v = g['global.'+n];
+          if (s)
+            {
+              n = s.replace(/[{][?][}]/g, v);
+              v = g['global.'+n];
+              if (!v)
+                v = '?';
+            }
           const m = `v_${f}`;
           if (!f)
             clear(d, hover(DIV(v), n));
           else if (m in this)
             this[m](d, v, n);
           else
-            throw 'Globals handling '+f+' is missing';
+            throw 'missing globals handling >'+f+'<';
         }
     }
 
@@ -1354,7 +1405,7 @@ class Globals
     {
       var self = this;
 
-      clear(d, EVT(hover(DIV(v, {'class':'hi2'}), 'l/m/r=inc/0/dec shift=10'),
+      clear(d, EVT(hover(DIV(v, {'class':'hi2'}), 'l/m/r=inc/0/dec shift=10 '+n),
         ['contextmenu', 'mousedown', 'mouseup'],
         function (m,e)
           {
@@ -1362,10 +1413,11 @@ class Globals
             if (m!='mouseup')
               return;
 
-            xLOG('incdec', e.button, n, this.innerText);
+//            xLOG('incdec', e.button, n, this.innerText);
             self.p = self.p.finally(() =>
               {
                 var c = parseInt(this.innerText);
+                if (!c) c=0;
                 var [i,k] = this.shiftKey ? [10,10] : [1,c?0:1];
                 switch (e.button)
                   {
@@ -1377,12 +1429,13 @@ class Globals
                 if (k<0) k=0;
                 xLOG('incdec', e.button, n, c, k);
                 return req
-                  .P(['macro.php', 'glob'], '', `${n} ${c} ${k}`)
+                  .P(['macro.php', 'glob'], '', `global.${n} ${c} ${k}`)
                   .then(t =>
                     {
                       t = t.trim();
                       let x = parseInt(t);
-                      if (t != `${x}`) return;
+                      if (t != `${x}`)
+                        throw 'wrong response: '+t;
                       this.innerText = t;
                       xLOG('incdec', e.button, n, c, k, 'ok', x);
                     })

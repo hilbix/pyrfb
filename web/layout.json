@@ -2,96 +2,30 @@
   , "transport"
   , "table"
   , [ "Stadt", "H", "W", "M", "K", "S" ]
-  , [ { "v":"name.00",	"m":"if", "s":"00" }
-    , { "v":"need.00h",	"m":"pm" }
-    , { "v":"need.00w",	"m":"pm" }
-    , { "v":"need.00m",	"m":"pm" }
-    , { "v":"need.00k",	"m":"pm" }
-    , { "v":"need.00s",	"m":"pm" }
-    ]
-  , [ { "v":"name.01",	"m":"if", "s":"01" }
-    , { "v":"need.01h",	"m":"pm" }
-    , { "v":"need.01w",	"m":"pm" }
-    , { "v":"need.01m",	"m":"pm" }
-    , { "v":"need.01k",	"m":"pm" }
-    , { "v":"need.01s",	"m":"pm" }
-    ]
-  , [ { "v":"name.02",	"m":"if", "s":"02" }
-    , { "v":"need.02h",	"m":"pm" }
-    , { "v":"need.02w",	"m":"pm" }
-    , { "v":"need.02m",	"m":"pm" }
-    , { "v":"need.02k",	"m":"pm" }
-    , { "v":"need.02s",	"m":"pm" }
-    ],
-    [ { "v":"name.03",	"m":"if", "s":"03" }
-    , { "v":"need.03h",	"m":"pm" }
-    , { "v":"need.03w",	"m":"pm" }
-    , { "v":"need.03m",	"m":"pm" }
-    , { "v":"need.03k",	"m":"pm" }
-    , { "v":"need.03s",	"m":"pm" }
-    ]
-  , [ { "v":"name.04",	"m":"if", "s":"04" }
-    , { "v":"need.04h",	"m":"pm" }
-    , { "v":"need.04w",	"m":"pm" }
-    , { "v":"need.04m",	"m":"pm" }
-    , { "v":"need.04k",	"m":"pm" }
-    , { "v":"need.04s",	"m":"pm" }
-    ]
-  , [ { "v":"name.05",	"m":"if", "s":"05" }
-    , { "v":"need.05h",	"m":"pm" }
-    , { "v":"need.05w",	"m":"pm" }
-    , { "v":"need.05m",	"m":"pm" }
-    , { "v":"need.05k",	"m":"pm" }
-    , { "v":"need.05s",	"m":"pm" }
-    ]
-  , [ { "v":"name.06",	"m":"if", "s":"06" }
-    , { "v":"need.06h",	"m":"pm" }
-    , { "v":"need.06w",	"m":"pm" }
-    , { "v":"need.06m",	"m":"pm" }
-    , { "v":"need.06k",	"m":"pm" }
-    , { "v":"need.06s",	"m":"pm" }
-    ]
-  , [ { "v":"name.07",	"m":"if", "s":"07" }
-    , { "v":"need.07h",	"m":"pm" }
-    , { "v":"need.07w",	"m":"pm" }
-    , { "v":"need.07m",	"m":"pm" }
-    , { "v":"need.07k",	"m":"pm" }
-    , { "v":"need.07s",	"m":"pm" }
-    ]
-  , [ { "v":"name.08",	"m":"if", "s":"08" }
-    , { "v":"need.08h",	"m":"pm" }
-    , { "v":"need.08w",	"m":"pm" }
-    , { "v":"need.08m",	"m":"pm" }
-    , { "v":"need.08k",	"m":"pm" }
-    , { "v":"need.08s",	"m":"pm" }
-    ]
-  , [ { "v":"name.09",	"m":"if", "s":"09" }
-    , { "v":"need.09h",	"m":"pm" }
-    , { "v":"need.09w",	"m":"pm" }
-    , { "v":"need.09m",	"m":"pm" }
-    , { "v":"need.09k",	"m":"pm" }
-    , { "v":"need.09s",	"m":"pm" }
-    ]
-  , [ { "v":"name.10",	"m":"if", "s":"10" }
-    , { "v":"need.10h",	"m":"pm" }
-    , { "v":"need.10w",	"m":"pm" }
-    , { "v":"need.10m",	"m":"pm" }
-    , { "v":"need.10k",	"m":"pm" }
-    , { "v":"need.10s",	"m":"pm" }
-    ]
-  , [ { "v":"name.11",	"m":"if", "s":"11" }
-    , { "v":"need.11h",	"m":"pm" }
-    , { "v":"need.11w",	"m":"pm" }
-    , { "v":"need.11m",	"m":"pm" }
-    , { "v":"need.11k",	"m":"pm" }
-    , { "v":"need.11s",	"m":"pm" }
-    ]
-  , [ { "v":"name.12",	"m":"if", "s":"12" }
-    , { "v":"need.12h",	"m":"pm" }
-    , { "v":"need.12w",	"m":"pm" }
-    , { "v":"need.12m",	"m":"pm" }
-    , { "v":"need.12k",	"m":"pm" }
-    , { "v":"need.12s",	"m":"pm" }
-    ]
+  , { "t":
+      [ { "v":"name.{i}",	"m":"if" }
+      , { "v":"need.{i}h",	"m":"pm" }
+      , { "v":"need.{i}w",	"m":"pm" }
+      , { "v":"need.{i}m",	"m":"pm" }
+      , { "v":"need.{i}k",	"m":"pm" }
+      , { "v":"need.{i}s",	"m":"pm" }
+      ]
+    , "i": [ "00", "01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12" ]
+    , "k": "{i}"
+    }
+  ]
+, [ "b"
+  , "builds"
+  , "table"
+  , [ "Stadt", "Fo", "Mi" ]
+  , { "t":
+      [ { "v":"name.{i}",	"m":"if" }
+      , { "v":"bau.{i}.fo",	"m":"pm", "s":"bau.{i}.{?}" }
+      , { "v":"bau.{i}.mi",	"m":"pm", "s":"bau.{i}.{?}" }
+      ]
+    , "i": [ "00", "01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12" ]
+    , "k": "{i}"
+    }
   ]
 ]
+
