@@ -1985,6 +1985,7 @@ class RfbCommander(object):
 	def cmd_ok(self,*args):
 		"""
 		ok:	dummy command, ignores args, always succeeds
+		See also: if, iff, then, else, err, not, ok, fail, bug, fatal
 		"""
 		return self.ok()
 
@@ -1992,18 +1993,21 @@ class RfbCommander(object):
 		"""
 		fail:	dummy command, ignores args, always fails
 		- Also used as "unknown command"
+		See also: if, iff, then, else, err, not, ok, fail, bug, fatal
 		"""
 		return self.fail()
 
 	def cmd_fatal(self, *args):
 		"""
 		Raise Python RuntimeError (for debugging purpose only)
+		See also: if, iff, then, else, err, not, ok, fail, bug, fatal
 		"""
 		raise RuntimeError(args and ' '.join(args) or None)
 
 	def cmd_bug(self,*arg):
 		"""
 		bug:	dummy command, ignores args, always errors
+		See also: if, iff, then, else, err, not, ok, fail, bug, fatal
 		"""
 		return self.err()
 
@@ -2224,7 +2228,7 @@ class RfbCommander(object):
 		- errors if some var is undef/empty/nonnumeric
 		- fails if any number is <= 0
 		- success if all vars are numbers and higher than 0
-		see also: equal, empty, cmp, nat, set
+		See also: equal, empty, cmp, nat, set
 		"""
 		return self.true(True, lambda x,y: int(self.var(y))>0, *args)
 
@@ -2235,7 +2239,7 @@ class RfbCommander(object):
 		  then echo all natural number
 		- if {nat {sub {higher} {lower}}}
 		  then echo {higher} is higher than {lower}
-		see also: and, nand, or, nor, equal, empty, cmp, nat, set
+		See also: and, nand, or, nor, equal, empty, cmp, nat, set
 		"""
 		def check(x):
 			try:
@@ -2250,7 +2254,7 @@ class RfbCommander(object):
 		- errors if var is unset or no var is given
 		- fails if var is not the given value
 		- succeeds if var is the given value
-		see also: equal, empty, cmp, nat, set
+		See also: equal, empty, cmp, nat, set
 		"""
 		v	= self.var(v)
 		return self.fail() if v is None else self.ok() if v == ' '.join(args) else self.fail()
@@ -2266,14 +2270,14 @@ class RfbCommander(object):
 		- If you want to compare two numbers, try:
 		  if {nat {sub {higher} {lower}}}
 		  then echo {higher} is higher than {lower}
-		see also: and, nand, or, nor, equal, empty, cmp, nat, set
+		See also: and, nand, or, nor, equal, empty, cmp, nat, set
 		"""
 		return 'ok' if not args and v=='' else self.getBool(lambda x: x==v, args)
 
 	def cmd_equal(self, v, *args):
 		"""
 		equal var..:	success if all variables exist and are all equal
-		see also: equal, empty, cmp, nat, set
+		See also: equal, empty, cmp, nat, set
 		"""
 		if not args:
 			return self.err()
@@ -2292,7 +2296,7 @@ class RfbCommander(object):
 		- if {equal a b}
 		  then echo {a}=={b}
 		  else echo {a}!={b}
-		see also: and, nand, or, nor, equal, empty, cmp, nat, set
+		See also: and, nand, or, nor, equal, empty, cmp, nat, set
 		"""
 		v	= self.var(v)
 		return 'fail' if v is None else 'ok' if not args else self.getBool(lambda x: self.var(x)==v, args)
@@ -2303,7 +2307,7 @@ class RfbCommander(object):
 		- fails if a variable is nonempty
 		- errors if no arguments
 		- else success (all variables are empty or do not exist)
-		see also: equal, empty, cmp, nat, set
+		See also: equal, empty, cmp, nat, set
 		"""
 		if not args:
 			return self.err()
@@ -2318,7 +2322,7 @@ class RfbCommander(object):
 		{empty args..}:	'ok' if there is only the empty arg, 'fail' else
 		- only '{empty }' succeeeds, '{empty}' does not work and '{empty  }' fails
 		- 'if {empty {a}}' fails if 'a' does not exist, as then this expands to '{a}'
-		see also: and, nand, or, nor, equal, empty, cmp, nat, set
+		See also: and, nand, or, nor, equal, empty, cmp, nat, set
 		"""
 		return 'ok' if len(args)==1 and args[0]=='' else 'fail'
 
@@ -2362,7 +2366,7 @@ class RfbCommander(object):
 		Example:
 		  if set myvar
 		  else set myvar default
-		see also: equal, empty, cmp, nat, set
+		See also: equal, empty, cmp, nat, set
 		"""
 		if var is None:
 			flag	= False
@@ -2400,7 +2404,7 @@ class RfbCommander(object):
 		{set var..}:	'ok' if all vars exists, 'fail' else
 		if {set a}
 		then echo a carries a value
-		see also: and, nand, or, nor, equal, empty, cmp, nat, set
+		See also: and, nand, or, nor, equal, empty, cmp, nat, set
 		"""
 		return self.getBool(lambda x: self.var(x) is not None, args)
 
@@ -2409,7 +2413,7 @@ class RfbCommander(object):
 		{get var [replacement]}:	replace by variable if defined, else with replacement, '' by default
 		- echo {get 1 (arg 1 is not set)}
 		- do {run}{when 1 .}{get 1}
-		see also: append, get, when
+		See also: append, get, when
 		"""
 		v	= self.var(v)
 		return v if v is not None else ' '.join(args) if args else ''
@@ -2418,7 +2422,7 @@ class RfbCommander(object):
 		"""
 		{when var [replacement]}:	'' if var is empty, else replacement
 		- do {run}{when 1 .}{get 1}
-		see also: append, get, when
+		See also: append, get, when
 		"""
 		v	= self.var(v)
 		return '' if v is Null or v=='' else ' '.join(args)
@@ -2429,7 +2433,7 @@ class RfbCommander(object):
 		{append var args..}:	"{var} args.." if var is known, else "args.."
 		- local y {:}{append x}
 		- local x {append x {:}}
-		see also: append, get, when
+		See also: append, get, when
 		"""
 		v	= self.var(v)
 		if v is None:
@@ -2547,7 +2551,7 @@ class RfbCommander(object):
 		{map {bool fail} false true nope}	gives 'false'
 		{map {bool ok} false true nope}		gives 'true'
 		{map {bool sth} false true nope}	gives 'nope'
-		see also: bool
+		See also: bool
 		"""
 		n	= int(n)
 		return '' if n<0 or n>=len(args) else args[n]
@@ -2559,7 +2563,7 @@ class RfbCommander(object):
 		- returns '0' for 'fail'
 		- returns '1' for 'ok'
 		- returns '2' is neither 'ok' nor 'fail' is found
-		see also: map
+		See also: map
 		"""
 		for a in args:
 			if a == 'fail':	return '0'
@@ -2569,14 +2573,14 @@ class RfbCommander(object):
 	def get_len(self, *args):
 		"""
 		{len args..}:	return length of args..
-		see also: len, left, mid, right
+		See also: len, left, mid, right
 		"""
 		return len(' '.join(args))
 
 	def get_left(self, n, *args):
 		"""
 		{left n args..}:	return left n characters of args..
-		see also: len, left, mid, right
+		See also: len, left, mid, right
 		"""
 		n	= int(n)
 		return (' '.join(args))[:n]
@@ -2584,7 +2588,7 @@ class RfbCommander(object):
 	def get_right(self, n, *args):
 		"""
 		{right n args..}:	return right n characters of args..
-		see also: len, left, mid, right
+		See also: len, left, mid, right
 		"""
 		n	= int(n)
 		return (' '.join(args))[-n:] if n else ''
@@ -2593,7 +2597,7 @@ class RfbCommander(object):
 		"""
 		{mid n m args..}:	return m characters after the nth character of args..
 		- characters are counted from 0, so n=0 is the first character
-		see also: len, left, mid, right
+		See also: len, left, mid, right
 		"""
 		n	= int(n)
 		m	= int(n)
@@ -2602,14 +2606,14 @@ class RfbCommander(object):
 	def get_code(self, *args):
 		"""
 		{code args..}:	get character code
-		see also: chr
+		See also: chr
 		"""
 		return ord(' '.join(args))
 
 	def get_chr(self, *args):
 		"""
 		{chr args..}:	create character sequence of args
-		see also: code
+		See also: code
 		"""
 		return ''.join([chr(int(c)) for c in args if c!=''])
 
@@ -3088,6 +3092,7 @@ class RfbCommander(object):
 		- resets exit state (like 'if' does, too)
 		- does not record the STATE (use 'if' for this)
 		not return:	returns the inverse STATE (error/fail become success)
+		See also: if, iff, then, else, err, not, ok, fail, bug, fatal
 		"""
 		st		= yield self.getBye((yield self.processArgs(args)))
 		self.bye	= False
@@ -3098,7 +3103,7 @@ class RfbCommander(object):
 		{and args..}:	all 'ok'
 		- 'ok' if all args are 'ok', 'fail' else
 		- fails for no arguments
-		see also: and, nand, or, nor, equal, empty, cmp, nat, set
+		See also: and, nand, or, nor, equal, empty, cmp, nat, set
 		"""
 		return self.getBool(lambda x: x=='ok', args)
 
@@ -3108,7 +3113,7 @@ class RfbCommander(object):
 		- 'ok' if any of the args is 'fail', 'fail' else
 		- fails for no arguments
 		- can be used as a 'not' where fail->ok else ->fail
-		see also: and, nand, or, nor, equal, empty, cmp, nat, set
+		See also: and, nand, or, nor, equal, empty, cmp, nat, set
 		"""
 		return self.getBool(lambda x: x!='fail', args, True)
 
@@ -3117,7 +3122,7 @@ class RfbCommander(object):
 		{or args..}:	any 'ok'
 		- 'ok' if any arg is 'ok', 'fail' else
 		- fails for no arguments
-		see also: and, nand, or, nor, equal, empty, cmp, nat, set
+		See also: and, nand, or, nor, equal, empty, cmp, nat, set
 		"""
 		return self.getBool(lambda x: x!='ok', args, True)
 
@@ -3127,7 +3132,7 @@ class RfbCommander(object):
 		- 'fails' if any arg is 'ok', 'ok' else
 		- fails for no arguments
 		- can be used as a 'not' where ok->fail else ->ok
-		see also: and, nand, or, nor, equal, empty, cmp, nat, set
+		See also: and, nand, or, nor, equal, empty, cmp, nat, set
 		"""
 		return self.getBool(lambda x: x!='ok', args)
 
@@ -3138,7 +3143,8 @@ class RfbCommander(object):
 		- record success/failure of command as STATE
 		- returns failure on error (this usually terminates a macro and let it return failure)
 		- else returns success
-		if cmd args..:		fails on error of command, allows then/else, but stops macro on error
+		- If you want to use 'err' see 'iff'
+		if cmd args..:		fails on error of command, allows then/else, but stops macro or error
 		if return cmd args..:	never fails, allows then/else/err
 		if exit:		just success (the "exit" has no effect here besides returning success)
 		if unknown:		fails (and thus stops macro)
@@ -3149,6 +3155,7 @@ class RfbCommander(object):
 		- "err" will never be executed afterwards
 		if return
 		- puts the last state back into action, this effectively is a NOP (No OPeration)
+		See also: if, iff, then, else, err, not, ok, fail, bug, fatal
 		"""
 		try:
 			st	= yield self.processArgs(args)
@@ -3160,11 +3167,29 @@ class RfbCommander(object):
 		self.bye	= False
 		yield Return(self.fail() if st is None else self.ok())
 
+	def cmd_iff(self, *args):
+		"""
+		iff command args..:
+		- same as 'if' but always returns success, so does not stop on macro or error
+		- "then" executed if command has success
+		- "else" executed if command has failed
+		- "err" executed if command has failed
+		See also: if, iff, then, else, err, not, ok, fail, bug, fatal
+		"""
+		try:
+			st	= yield self.processArgs(args)
+		except Exception, e:
+			st	= None
+		self.prevstate	= self.state
+		self.state	= yield self.getBye(st)
+		self.bye	= False
+		yield Return(self.ok())
 
 	def cmd_then(self, *args):
 		"""
 		then command args..:	run command only when STATE (see: if) is success
 		- returns state of command, succeeds when no command is executed
+		See also: if, iff, then, else, err, not, ok, fail, bug, fatal
 		"""
 		return self.processArgs(args) if self.state else self.ok()
 
@@ -3172,6 +3197,7 @@ class RfbCommander(object):
 		"""
 		else command args..:	run command only when STATE (see: if) is failure
 		- returns state of command, succeeds when no command is executed
+		See also: if, iff, then, else, err, not, ok, fail, bug, fatal
 		"""
 		return self.processArgs(args) if (self.state == False) else self.ok()
 
@@ -3179,6 +3205,7 @@ class RfbCommander(object):
 		"""
 		err command args..:	run command only when STATE (see: if) is error
 		- returns state of command, succeeds when no command is executed
+		See also: if, iff, then, else, err, not, ok, fail, bug, fatal
 		"""
 		return self.processArgs(args) if (self.state is None) else self.ok()
 
@@ -3537,7 +3564,7 @@ class RfbCommander(object):
 		send channel data..:	send to channel, waiting
 		- This waits until somebody has read the data
 		- Data delivery is in-sequence
-		see also: send/recv, req/rep, push/pull
+		See also: send/recv, req/rep, push/pull
 		"""
 		c	= Channel(channel)
 		v	= ' '.join(args)
@@ -3552,7 +3579,7 @@ class RfbCommander(object):
 		push channel data..:	append data to channel, nonwaiting
 		- This appends data to a channel, not waiting for delivery
 		- Data delivery is in-sequence
-		see also: send/recv, req/rep, push/pull
+		See also: send/recv, req/rep, push/pull
 		"""
 		c	= Channel(channel)
 		v	= ' '.join(args)
@@ -3564,7 +3591,7 @@ class RfbCommander(object):
 		- This succeeds if data is delivered
 		- This fails if nobody waiting on the channel
 		- This errors if channel is not empty (somebody other does send/push)
-		see also: send/recv, req/rep, push/pull
+		See also: send/recv, req/rep, push/pull
 		"""
 		c	= Channel(channel)
 		if c.has_put():
@@ -3578,7 +3605,7 @@ class RfbCommander(object):
 		- This waits until somebody sends data
 		- Data receipt is in-sequence
 		- if var is not given, varname is channel
-		see also: send/recv, req/rep, push/pull
+		See also: send/recv, req/rep, push/pull
 		"""
 		if k is None: k=channel
 		c	= Channel(channel)
@@ -3596,7 +3623,7 @@ class RfbCommander(object):
 		- Fails if there is no data on the channel
 		- Data receipt is in-sequence
 		- if var is not given, varname is channel
-		see also: send/recv, req/rep, push/pull
+		See also: send/recv, req/rep, push/pull
 		"""
 		if k is None: k=channel
 		c	= Channel(channel)
@@ -3613,7 +3640,7 @@ class RfbCommander(object):
 		- Fails if there is no data on the channel
 		- Data receipt is in-sequence
 		- if var is not given, varname is channel
-		see also: send/recv, req/rep, push/pull
+		See also: send/recv, req/rep, push/pull
 		"""
 		if k is None: k=channel
 		c	= Channel(channel)
@@ -3630,7 +3657,7 @@ class RfbCommander(object):
 		- Else this waits until somebody sends data
 		- if var is not given, varname is channel
 		this waits for something to arrive on the channel
-		see also: send/recv, req/rep, push/pull
+		See also: send/recv, req/rep, push/pull
 		"""
 		if k is None: k=channel
 		c	= Channel(channel)
@@ -3714,7 +3741,7 @@ class RfbCommander(object):
 		"""
 		{first args..}:	returns just the first arg
 		- returns nothing if there is no first arg
-		see also: shift
+		See also: shift
 		"""
 		return args[0] if args else ''
 
@@ -3734,14 +3761,14 @@ class RfbCommander(object):
 	def cmd_center(self, width, *args):
 		"""
 		center width var..:	center variables in the given width
-		see also: pad, sanitize, trim
+		See also: pad, sanitize, trim
 		"""
 		return self.dovars(args, self.do_center, width)
 
 	def get_center(self, width, *args):
 		"""
 		{center width string}:	center string in the given width
-		see also: pad, sanitize, trim
+		See also: pad, sanitize, trim
 		"""
 		return self.doargs(args, self.do_center, width)
 
@@ -3761,7 +3788,7 @@ class RfbCommander(object):
 		"""
 		pad width var..:	pads variables with spaces to the right
 		{pad -width string}:	pads variables with spaces to the left
-		see also: center, sanitize, trim
+		See also: center, sanitize, trim
 		"""
 		return self.dovars(args, self.do_pad, width)
 
@@ -3769,7 +3796,7 @@ class RfbCommander(object):
 		"""
 		{pad width string}:	pads args with spaces to the right
 		{pad -width string}:	pads args with spaces to the left
-		see also: center, sanitize, trim
+		See also: center, sanitize, trim
 		"""
 		return self.doargs(args, self.do_pad, width)
 
@@ -3780,14 +3807,14 @@ class RfbCommander(object):
 	def cmd_trim(self, *args):
 		"""
 		trim var..:	remove leading and trailing spaces from variable
-		see also: center, pad, sanitize
+		See also: center, pad, sanitize
 		"""
 		return self.dovars(args, self.do_strip)
 
 	def get_trim(self, *args):
 		"""
 		{trim string}:	remove leading and trailing spaces from string
-		see also: center, pad, sanitize
+		See also: center, pad, sanitize
 		"""
 		return self.doargs(args, self.do_strip)
 
@@ -3797,13 +3824,13 @@ class RfbCommander(object):
 	def cmd_sanitize(self, *args):
 		"""
 		{sanitize string}:	sanitize multiple spaces into single spaces
-		see also: center, pad, trim
+		See also: center, pad, trim
 		"""
 		return self.dovars(args, self.do_sanitize)
 	def get_sanitize(self, *args):
 		"""
 		{sanitize string}:	sanitize multiple spaces into single spaces
-		see also: center, pad, trim
+		See also: center, pad, trim
 		"""
 		return self.doargs(args, self.do_sanitize)
 
@@ -3815,7 +3842,7 @@ class RfbCommander(object):
 		"""
 		{sort var args..}:	sort variable according to given args
 		- for missing arg the value of var is used
-		see also: rev, sort
+		See also: rev, sort
 		"""
 		v	= self.var(args[0])
 		if v is None:	return self.fail()
@@ -3834,7 +3861,7 @@ class RfbCommander(object):
 	def get_sort(self, *args):
 		"""
 		{sort args..}:	sort the given args
-		see also: rev, sort
+		See also: rev, sort
 		"""
 		args	= list(args)
 		args.sort()
@@ -3843,7 +3870,7 @@ class RfbCommander(object):
 	def get_rev(self, *args):
 		"""
 		{rev args..}:	reverse the given args
-		see also: rev, sort
+		See also: rev, sort
 		"""
 		args	= list(args)
 		args.reverse()
