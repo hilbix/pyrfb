@@ -1413,12 +1413,12 @@ class Globals
             if (m!='mouseup')
               return;
 
-//            xLOG('incdec', e.button, n, this.innerText);
+//            xLOG('incdec', e.button, n, this.innerText, String(e));
             self.p = self.p.finally(() =>
               {
                 var c = parseInt(this.innerText);
                 if (!c) c=0;
-                var [i,k] = this.shiftKey ? [10,10] : [1,c?0:1];
+                var [i,k] = e.shiftKey ? [10,10] : [1, c ? 0 : 1];
                 switch (e.button)
                   {
                   default: return;
